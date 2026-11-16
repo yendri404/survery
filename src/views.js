@@ -1,5 +1,5 @@
 import { SUPPORTED_LANGUAGES, clientMessages, createI18n, defaultI18n } from './i18n.js';
-import { LIMITS, fieldTypeLabels, formatAnswer, summarize, surveyStatus } from './surveys.js';
+import { LIMITS, daysBetween, fieldTypeLabels, formatAnswer, summarize, surveyStatus } from './surveys.js';
 
 export const APP_NAME = 'Sharevy';
 
@@ -262,9 +262,9 @@ export function surveyEditorPage({ user, csrf, survey, values, errors = [], toda
 <h1>${esc(editing ? t('editor.editHeading') : t('editor.newTitle'))}</h1>
 ${warning}
 ${escapedErrors(errors)}
-<form method="post" action="${action}" class="stack" id="survey-form">
+<form method="post" action="${action}" class="stack editor-form" id="survey-form">
   ${csrfInput(csrf)}
-  <section class="panel stack">
+  <section class="panel stack editor-basics">
     <h2>${esc(t('editor.basics'))}</h2>
     <label>${esc(t('editor.titleLabel'))} <input name="title" value="${esc(values.title)}" required maxlength="${LIMITS.title}" placeholder="${esc(t('editor.titlePlaceholder'))}"></label>
     <label>${esc(t('editor.description'))} <span class="hint">${esc(t('editor.descriptionHint'))}</span>
@@ -272,7 +272,7 @@ ${escapedErrors(errors)}
     <label>${esc(t('editor.closingDate'))} <span class="hint">${esc(t('editor.closingDateHint'))}</span>
       <input type="date" name="closes_on" value="${esc(values.closesOn)}" min="${esc(minDate)}" required></label>
   </section>
-  <section class="stack">
+  <section class="stack editor-questions">
     <h2>${esc(t('editor.questions'))}</h2>
     <input type="hidden" name="fields_json" id="fields_json" value="${esc(values.fieldsJson)}">
     <div id="builder" data-types="${esc(JSON.stringify(fieldTypeLabels(t)))}"></div>
@@ -287,17 +287,80 @@ ${escapedErrors(errors)}
   });
 }
 
+/*
+ * Charts for choice questions: server-rendered SVG, colored through CSS classes (.slice-1…6 use
+ * the --cat-1…6 custom properties, with dark variants in style.css), so the CSP needs no inline
+ * styles. The SVG is decorative (aria-hidden); the legend or bar labels next to it carry every
+ * count and percentage as text, which is also what screen readers read.
+ */
+const MAX_DONUT_SLICES = 6; // categorical colors are never cycled; more options use bars
+const DONUT_GAP = 0.6; // surface gap between slices, in percent of the circle
+const fixed = (n) => Number(n.toFixed(2));
+const percent = (count, answered) => (answered ? Math.round((count / answered) * 100) : 0);
+
+/** Single choice (radio, select): every answer picks one option, so the shares add up to 100%. */
+function donutChart(counts, answered) {
+  const drawn = counts.filter(({ count }) => count > 0).length; // the empty track shows only when nothing was chosen
+  let start = 0;
+  const slices = counts.map(({ option, count }, i) => {
+    const share = answered ? (count / answered) * 100 : 0;
+    const from = start;
+    start += share;
+    if (!count) return '';
+    const length = Math.max(share - (drawn > 1 ? DONUT_GAP : 0), 0.01);
+    // r = 15.9155 makes the circumference 100, so dash lengths are percentages; the offset of 25 starts at 12 o'clock.
+    return `<circle class="donut-slice slice-${i + 1}" cx="21" cy="21" r="15.9155" stroke-dasharray="${fixed(length)} ${fixed(100 - length)}" stroke-dashoffset="${fixed(25 - from)}"><title>${esc(option)}: ${count} (${percent(count, answered)}%)</title></circle>`;
+  }).join('');
+  const legend = counts.map(({ option, count }, i) =>
+    `<li><span class="swatch slice-${i + 1}"></span><span class="legend-label">${esc(option)}</span><span class="legend-value">${count} (${percent(count, answered)}%)</span></li>`).join('');
+  return `<div class="donut-chart"><svg class="donut" viewBox="0 0 42 42" aria-hidden="true" focusable="false">${drawn ? '' : '<circle class="donut-track" cx="21" cy="21" r="15.9155"/>'}${slices}<text class="donut-total" x="21" y="21">${answered}</text></svg><ul class="legend">${legend}</ul></div>`;
+}
+
+/**
+ * Horizontal bars. Multiple choice (checkbox) always uses them, never a pie: one person can pick
+ * several options, so the percentages (of people who answered) add up to more than 100%, and a
+ * pie would wrongly present them as parts of one whole.
+ */
+function barChart(counts, answered) {
+  return `<ul class="hbars">${counts.map(({ option, count }) => {
+    const pct = percent(count, answered);
+    const fill = count ? `<rect class="hbar-fill" width="${fixed(answered ? (count / answered) * 100 : 0)}%" height="12" rx="4"><title>${esc(option)}: ${count} (${pct}%)</title></rect>` : '';
+    return `<li><span class="bar-label">${esc(option)}</span><svg class="hbar" width="100%" height="12" aria-hidden="true" focusable="false"><rect class="hbar-track" width="100%" height="12" rx="4"/>${fill}</svg><span class="bar-value">${count} (${pct}%)</span></li>`;
+  }).join('')}</ul>`;
+}
+
 function summaryHtml(fields, responses, i18n) {
   const items = summarize(fields, responses);
   if (!items.length || !responses.length) return '';
-  return `<h3>${esc(i18n.t('detail.summary'))}</h3>${items.map(({ field, answered, counts }) => `
+  return `<h3>${esc(i18n.t('detail.summary'))}</h3><div class="charts">${items.map(({ field, answered, counts }) => {
+    const multiple = field.type === 'checkbox';
+    const chart = !multiple && counts.length <= MAX_DONUT_SLICES ? donutChart(counts, answered) : barChart(counts, answered);
+    return `
 <section class="panel summary">
   <h4>${esc(field.label)} <span class="muted">${esc(i18n.t('detail.answered', { count: answered }))}</span></h4>
-  <ul class="bars">${counts.map(({ option, count }) => {
-    const pct = answered ? Math.round((count / answered) * 100) : 0;
-    return `<li><span class="bar-label">${esc(option)}</span><meter min="0" max="100" value="${pct}"></meter><span class="bar-value">${count} (${pct}%)</span></li>`;
-  }).join('')}</ul>
-</section>`).join('')}`;
+  ${chart}
+  ${multiple ? `<p class="hint">${esc(i18n.t('detail.chart.multipleNote'))}</p>` : ''}
+</section>`;
+  }).join('')}</div>`;
+}
+
+/** Key figures at the top of the results: they update live with the rest of #responses. */
+function kpiTiles(survey, responses, status, today, i18n) {
+  const { t } = i18n;
+  const named = responses.filter((r) => r.respondentName).length;
+  const newest = responses[0]?.submittedAt; // listResponses is newest first; "YYYY-MM-DD HH:MM:SS" UTC
+  const daysLeft = daysBetween(today, survey.closesOn);
+  const closing = status === 'open'
+    ? (daysLeft > 0 ? i18n.tn('detail.kpi.daysLeft', daysLeft) : t('detail.kpi.lastDay'))
+    : t(STATUS_BADGES[status][1]);
+  const tile = (label, value, sub) =>
+    `<div class="kpi"><dt>${esc(label)}</dt><dd class="kpi-value">${esc(value)}</dd>${sub ? `<dd class="kpi-sub">${esc(sub)}</dd>` : ''}</div>`;
+  return `<dl class="kpis">${[
+    tile(t('detail.kpi.responses'), String(responses.length)),
+    tile(t('detail.kpi.named'), String(named), responses.length ? t('detail.kpi.anonymous', { count: responses.length - named }) : ''),
+    tile(t('detail.kpi.lastResponse'), newest ? i18n.formatDate(newest.slice(0, 10)) : '—', newest ? `${newest.slice(11, 16)} UTC` : ''),
+    tile(t('detail.kpi.closing'), closing, closingText(survey, status, i18n)),
+  ].join('')}</dl>`;
 }
 
 export function surveyDetailPage({ user, csrf, survey, responses, shareUrl, qrSvg, flash, today, i18n = defaultI18n, currentPath }) {
@@ -326,6 +389,8 @@ export function surveyDetailPage({ user, csrf, survey, responses, shareUrl, qrSv
 <p class="meta">${icon('calendar')} ${esc(closingText(survey, status, i18n))}</p>
 ${survey.description ? `<p class="description">${esc(survey.description)}</p>` : ''}
 
+<div class="detail-layout">
+<aside class="detail-side">
 <section class="panel share">
   <h2>${icon('share')} ${esc(t('detail.shareHeading'))}</h2>
   <p>${esc(t('detail.shareText'))}</p>
@@ -362,7 +427,9 @@ ${survey.description ? `<p class="description">${esc(survey.description)}</p>` :
   </div>
   <p class="hint">${esc(t('detail.manageHint'))}</p>
 </section>
+</aside>
 
+<div class="detail-main">
 <section id="responses" data-live="/surveys/${survey.id}/events">
   <div class="page-head">
     <h2>${esc(t('detail.responses', { count: responses.length }))}</h2>
@@ -371,11 +438,14 @@ ${survey.description ? `<p class="description">${esc(survey.description)}</p>` :
       <a class="button secondary" href="/surveys/${survey.id}/export.csv">${icon('download')} ${esc(t('detail.exportCsv'))}</a>
     </div>
   </div>
+  ${kpiTiles(survey, responses, status, today, i18n)}
   ${summaryHtml(survey.fields, responses, i18n)}
   ${responses.length
     ? `<h3>${esc(t('detail.allAnswers'))}</h3><div class="table-wrap"><table class="responsive"><thead><tr><th>#</th><th>${esc(t('detail.columnSent'))}</th><th>${esc(t('detail.columnName'))}</th>${head}<th><span class="visually-hidden">${esc(t('detail.columnActions'))}</span></th></tr></thead><tbody>${rows}</tbody></table></div>`
     : `<div class="empty">${icon('inbox')}<p>${esc(t('detail.noAnswers'))}</p></div>`}
-</section>`,
+</section>
+</div>
+</div>`,
   });
 }
 

@@ -42,6 +42,11 @@ export function addDays(dateString, days) {
   return d.toISOString().slice(0, 10);
 }
 
+/** Whole calendar days from one YYYY-MM-DD date to another ("2026-11-16" -> "2026-11-26" = 10). */
+export function daysBetween(from, to) {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+}
+
 /**
  * 'open' accepts answers; 'closed' was closed by the creator; 'expired' passed its closing date.
  * A survey accepts answers during the whole closing day. YYYY-MM-DD strings compare correctly as text.

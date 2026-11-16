@@ -244,11 +244,10 @@ legend { font-weight: 600; padding: 0; }
 /* ---------- Survey detail ---------- */
 .share h2 .icon { color: var(--brand-text); }
 .share-url { font-size: .95rem; margin-bottom: .75rem; background: var(--brand-soft); border-color: var(--brand-soft); }
-.bars { list-style: none; padding: 0; margin: 0; display: grid; gap: .6rem; }
-.bars li { display: grid; grid-template-columns: 1fr auto; gap: .2rem .75rem; align-items: center; }
-.bar-label { grid-column: 1 / -1; }
-.bars meter { width: 100%; height: 1rem; }
-.bar-value { font-size: .9rem; color: var(--muted); white-space: nowrap; }
+.hbars { list-style: none; padding: 0; margin: 0; display: grid; gap: .6rem; }
+.hbars li { display: grid; grid-template-columns: 1fr auto; gap: .2rem .75rem; align-items: center; }
+.bar-label { grid-column: 1 / -1; overflow-wrap: anywhere; }
+.bar-value { font-size: .9rem; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 table { border-collapse: collapse; width: 100%; background: var(--surface); }
 th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
@@ -280,7 +279,7 @@ th { background: var(--brand-soft); }
   .field-settings > label:not(.choice) { flex: 1; }
   .field-settings .switch { min-height: var(--tap); }
   .cards { grid-template-columns: repeat(2, 1fr); }
-  .bars li { grid-template-columns: minmax(8rem, 30%) 1fr auto; }
+  .hbars li { grid-template-columns: minmax(8rem, 30%) 1fr auto; }
   .bar-label { grid-column: auto; }
   .table-wrap { overflow-x: auto; }
   .hero h1 { font-size: 3rem; }
@@ -336,3 +335,85 @@ th { background: var(--brand-soft); }
 @keyframes live-flash { from { box-shadow: 0 0 0 3px var(--brand-text); } to { box-shadow: 0 0 0 3px transparent; } }
 .live-updated { animation: live-flash 1.2s ease-out; border-radius: var(--radius); }
 @media (prefers-reduced-motion: reduce) { .live-updated { animation: none; } }
+
+/* ---------- Charts and key figures (survey detail) ----------
+   Categorical colors: a validated colorblind-safe order (never cycled; donuts stop at 6 slices).
+   Text never takes a series color: the swatch next to it carries the identity. */
+:root {
+  --cat-1: #2a78d6; --cat-2: #eb6834; --cat-3: #1baf7a; --cat-4: #eda100; --cat-5: #e87ba4; --cat-6: #008300;
+  --bar-fill: #6250d6;
+  --chart-track: #ece9f3;
+}
+:root[data-theme="dark"] {
+  --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; --cat-4: #c98500; --cat-5: #d55181; --cat-6: #0ca30c;
+  --bar-fill: #9085e9;
+  --chart-track: #2e2940;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; --cat-4: #c98500; --cat-5: #d55181; --cat-6: #0ca30c;
+    --bar-fill: #9085e9;
+    --chart-track: #2e2940;
+  }
+}
+.slice-1 { --slice: var(--cat-1); }
+.slice-2 { --slice: var(--cat-2); }
+.slice-3 { --slice: var(--cat-3); }
+.slice-4 { --slice: var(--cat-4); }
+.slice-5 { --slice: var(--cat-5); }
+.slice-6 { --slice: var(--cat-6); }
+
+.charts { display: grid; gap: 1rem; }
+.charts > .panel { margin: 0; }
+.summary > .hint { margin: .75rem 0 0; }
+
+.donut-chart { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 1.5rem; }
+.donut { width: 128px; height: 128px; flex: none; }
+.donut-track, .donut-slice { fill: none; stroke-width: 6; }
+.donut-track { stroke: var(--chart-track); }
+.donut-slice { stroke: var(--slice); }
+.donut-total { fill: var(--text); font-size: 8px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+.legend { list-style: none; margin: 0; padding: 0; display: grid; gap: .45rem; flex: 1 1 11rem; min-width: 0; }
+.legend li { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: .6rem; }
+.swatch { width: 12px; height: 12px; border-radius: 3px; background: var(--slice); }
+.legend-label { overflow-wrap: anywhere; }
+.legend-value { font-size: .9rem; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.hbar { display: block; width: 100%; height: 12px; }
+.hbar-track { fill: var(--chart-track); }
+.hbar-fill { fill: var(--bar-fill); }
+
+.kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; margin: 0 0 1rem; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: .75rem 1rem; min-width: 0; }
+.kpi dt { font-size: .85rem; font-weight: 600; color: var(--muted); }
+.kpi dd { margin: 0; overflow-wrap: anywhere; }
+.kpi-value { font-size: 1.3rem; font-weight: 700; line-height: 1.25; }
+.kpi-sub { font-size: .85rem; color: var(--muted); }
+@media (min-width: 700px) {
+  .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .charts { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+}
+
+/* ---------- Desktop (>= 1100px): wider container and two-column pages ----------
+   Phones and tablets keep the single column above; the respondent form stays narrow on purpose. */
+@media (min-width: 1100px) {
+  main, .topbar-inner { max-width: 1280px; }
+  main { padding: 2rem 2rem 4rem; }
+  .cards { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+
+  /* Survey detail: results on the left, share and manage in a sticky side column. */
+  .detail-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 1.5rem; align-items: start; }
+  .detail-main { grid-column: 1; grid-row: 1; min-width: 0; }
+  .detail-side { grid-column: 2; grid-row: 1; position: sticky; top: 1rem; max-height: calc(100vh - 2rem); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+  .detail-side .button-row > * { flex: 1 1 100%; }
+  .detail-side .button-row > form > button { width: 100%; }
+  .detail-side .qr-block { flex-direction: column; text-align: center; }
+  .detail-side .qr { width: 180px; }
+  .detail-side .qr-help h3 { justify-content: center; }
+
+  /* Editor: questions on the left; basics on the right, with the save button following the scroll. */
+  .editor-form { display: grid; grid-template-columns: minmax(0, 1fr) 360px; grid-template-rows: auto 1fr; gap: 1rem 1.5rem; align-items: start; }
+  .editor-basics { grid-column: 2; grid-row: 1; margin: 0; }
+  .editor-questions { grid-column: 1; grid-row: 1 / span 2; }
+  .editor-form .form-footer { grid-column: 2; grid-row: 2; position: sticky; top: 1rem; flex-direction: column; padding: 0; background: none; }
+}

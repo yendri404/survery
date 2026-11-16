@@ -50,7 +50,8 @@ npm run create-user -- <email> <name> <password>
 - Every survey has a closing date (picked with a calendar; 10 days from creation by default). It accepts answers until the end of that day, server time.
 - Open/close a survey manually at any time.
 - Results update live while you watch: new answers appear without reloading the page.
-- Results table, per-option summary for choice questions, delete individual responses.
+- Results page with key figures (responses, named vs anonymous, last response, days left), charts for choice questions (a donut for single choice, bars for multiple choice), the full results table, and deleting individual responses.
+- Phone-first layout; on wide screens (1100px and up) pages use two columns: results next to a sticky share panel, questions next to the survey settings.
 - Light and dark theme (follows the device setting until changed with the theme button).
 - English and Spanish interface, chosen from the language menu next to the theme button (see [Languages](#languages)).
 - QR code of the share link on every survey, downloadable as PNG to print or send.

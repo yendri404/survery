@@ -428,6 +428,7 @@ The heart of the app. It has no database, no HTTP and no HTML, which is why it c
 | `validateAnswers(fields, form, { t })` | → `{ answers, errors{fieldId: msg} }` | Reads only defined fields (`f_<id>`), so extra keys are ignored. Checks type, required, and that choices are among the options. Checkbox values are returned in option order |
 | `surveyStatus(survey, today)` | → `'open' | 'closed' | 'expired'` | `closed` = switched off by the creator; `expired` = `today` is after `closesOn`. Only `open` accepts answers |
 | `localDateString(date)`, `addDays(date, n)` | → `YYYY-MM-DD` | Server-local calendar date; calendar math without time zones |
+| `daysBetween(from, to)` | → whole days | Days from one `YYYY-MM-DD` to another; the "days left" figure on the results page |
 | `parseRespondentName(value, { t })` | → `{ name, error }` | Optional respondent name: trimmed, max. 100 characters, empty means anonymous |
 | `formatAnswer(value)` | → `string` | Arrays become `"a, b"` |
 | `summarize(fields, responses)` | → per choice field: `answered`, counts per option | Feeds the summary section of the detail page |
@@ -543,7 +544,7 @@ Server-rendered template strings. Every page is plain HTML forms, so it works wi
 | `loginPage`, `registerPage` | Account forms | Keep typed values on error (never the password) |
 | `surveyListPage` | "My surveys" | Status badge + response count |
 | `surveyEditorPage` | New/edit | Hidden `fields_json` + `#builder` container; warns when editing a survey with responses |
-| `surveyDetailPage` | Results | Share link with copy button, open/close/delete actions, CSV links, summary, responses table |
+| `surveyDetailPage` | Results | Share link with copy button, open/close/delete actions, CSV links, key figures, charts, responses table |
 | `publicFormPage` | Respondent form | `renderField` per type; per-field errors; values kept after an error |
 | `thanksPage`, `closedPage` | Respondent states | |
 | `errorPage` | Any error | `respondent: true` hides creator navigation |
@@ -558,7 +559,27 @@ Server-rendered template strings. Every page is plain HTML forms, so it works wi
 
 **Mobile first:** `public/style.css` targets phones by default (44px touch targets, 16px+ inputs, full-width buttons) and enhances layouts from 700px. On phones, the responses table turns into one card per response using each cell's `data-label`.
 
-**Internal helpers:** `layout()` (shared shell; `respondent: true` gives a minimal header), `errorList()`, `csrfInput()`, `renderField()` (maps each field type to its HTML control, uses `required` for native browser validation; the server is still the source of truth), and `summaryHtml()`.
+**Desktop (≥ 1100px):** detected with CSS media queries only (no user-agent checks). The container grows to 1280px and pages get two columns; the HTML order stays the phone order, CSS grid only places the blocks.
+
+| Page | Main column | Side column |
+|------|-------------|-------------|
+| Survey detail | `.detail-main` → `#responses`: key figures, charts, table | `.detail-side`: share link, QR, manage (sticky, scrolls on its own if taller than the window) |
+| Editor | `.editor-questions` | `.editor-basics`, then the save buttons (sticky) |
+| My surveys | Cards in 3–4 columns | — |
+
+The respondent form stays narrow (720px) on purpose: short lines are easier to read.
+
+**Charts (results page):** `summaryHtml()` draws one card per choice question, as server-rendered SVG inside `#responses`, so live updates redraw them.
+
+| Question type | Chart | Why |
+|---------------|-------|-----|
+| `radio`, `select` (up to 6 options) | Donut (`donutChart`) + legend with count and % | One answer per person: the shares add up to 100% |
+| `checkbox` | Horizontal bars (`barChart`) + a note | Several answers per person: the % add up to more than 100%, so a pie would mislead |
+| `radio`, `select` with more than 6 options | Bars | Categorical colors are never repeated |
+
+The SVG is `aria-hidden`; the legend and bar labels carry every number as text. Colors come from classes (`.slice-1`…`.slice-6` → `--cat-1`…`--cat-6`, `--bar-fill`), defined for light and dark in `style.css` from a colorblind-checked palette, so no inline `style` is needed. `kpiTiles()` renders the key figures as a `<dl class="kpis">` above the charts.
+
+**Internal helpers:** `layout()` (shared shell; `respondent: true` gives a minimal header), `errorList()`, `csrfInput()`, `renderField()` (maps each field type to its HTML control, uses `required` for native browser validation; the server is still the source of truth), and `summaryHtml()` / `donutChart()` / `barChart()` / `kpiTiles()`.
 
 **No inline JS or CSS:** the CSP forbids it, so behaviors like "copy link" or "confirm delete" are declared with `data-copy` / `data-confirm` attributes and handled by `public/app.js`.
 

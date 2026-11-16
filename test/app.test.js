@@ -640,6 +640,110 @@ describe('closing date', () => {
   });
 });
 
+describe('results charts and key figures', () => {
+  let app;
+  let now = new Date(2026, 10, 16, 12, 0);
+  before(async () => { app = await startApp({ now: () => now }); });
+  after(() => app.close());
+
+  const CHART_FIELDS = [
+    { label: 'Comment', type: 'text' },
+    { label: 'Department', type: 'radio', options: ['Ops', 'Admin', 'HR'] },
+    { label: 'Days', type: 'checkbox', options: ['Mon', 'Wed', 'Fri'] },
+    { label: 'Food', type: 'select', options: ['Any', 'Veggie'] },
+  ];
+  /** The summary card of one question, from its <h4> to the end of its section. */
+  const card = (html, label) => html.match(new RegExp(`<h4>${label} [\\s\\S]*?</section>`))?.[0] ?? '';
+  const kpi = (html, label) => html.match(new RegExp(`<div class="kpi"><dt>${label}</dt><dd class="kpi-value">([^<]*)</dd>(?:<dd class="kpi-sub">([^<]*)</dd>)?</div>`))?.slice(1);
+
+  async function answered(fields, answers) {
+    const c = new Client(app.base);
+    await c.register(`charts${Math.random()}@corp.local`);
+    const id = await c.createSurvey(fields);
+    const token = await c.shareToken(id);
+    const form = (await new Client(app.base).request(`/s/${token}`)).text;
+    const names = [...new Set([...form.matchAll(/name="(f_[a-z0-9]+)"/g)].map((m) => m[1]))];
+    for (const [respondentName, values] of answers) {
+      const body = [['respondent_name', respondentName], ...values.map(([i, v]) => [names[i], v])];
+      assert.equal((await new Client(app.base).request(`/s/${token}`, { method: 'POST', form: body })).status, 303);
+    }
+    return { c, id };
+  }
+
+  test('single-choice questions get a donut with counts and percentages', async () => {
+    now = new Date(2026, 10, 16, 12, 0);
+    const { c, id } = await answered(CHART_FIELDS, [
+      ['Ana', [[1, 'Ops'], [2, 'Mon'], [2, 'Fri'], [3, 'Any']]],
+      ['', [[1, 'HR'], [2, 'Fri']]],
+      ['', [[1, 'Ops']]],
+    ]);
+    const html = (await c.request(`/surveys/${id}`)).text;
+
+    const radio = card(html, 'Department');
+    assert.match(radio, /<svg class="donut"[^>]*aria-hidden="true"/);
+    const legend = [...radio.matchAll(/<li><span class="swatch slice-(\d)"><\/span><span class="legend-label">([^<]+)<\/span><span class="legend-value">([^<]+)<\/span><\/li>/g)]
+      .map(([, slot, label, value]) => [slot, label, value]);
+    assert.deepEqual(legend, [['1', 'Ops', '2 (67%)'], ['2', 'Admin', '0 (0%)'], ['3', 'HR', '1 (33%)']]);
+    // Zero answers draw no slice; the others get one each, with a hover title.
+    assert.equal([...radio.matchAll(/<circle class="donut-slice slice-\d"/g)].length, 2);
+    assert.match(radio, /<title>Ops: 2 \(67%\)<\/title>/);
+    assert.match(card(html, 'Food'), /<svg class="donut"/);
+
+    // Multiple choice: bars, never a pie, with a note that shares can add up to more than 100%.
+    const checkbox = card(html, 'Days');
+    assert.doesNotMatch(checkbox, /donut/);
+    const bars = [...checkbox.matchAll(/<span class="bar-label">([^<]+)<\/span><svg class="hbar"[^>]*>[\s\S]*?<\/svg><span class="bar-value">([^<]+)<\/span>/g)]
+      .map(([, label, value]) => [label, value]);
+    assert.deepEqual(bars, [['Mon', '1 (50%)'], ['Wed', '0 (0%)'], ['Fri', '2 (100%)']]);
+    assert.match(checkbox, /<rect class="hbar-fill" width="100%"/);
+    assert.match(checkbox, /more than one option/);
+
+    assert.equal(card(html, 'Comment'), '', 'text questions get no chart');
+  });
+
+  test('single-choice questions with more than six options use bars instead of a donut', async () => {
+    const options = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
+    const { c, id } = await answered([{ label: 'Letter', type: 'radio', options }], [['', [[0, 'G']]]]);
+    const letter = card((await c.request(`/surveys/${id}`)).text, 'Letter');
+    assert.doesNotMatch(letter, /donut/);
+    assert.match(letter, /<span class="bar-label">G<\/span><svg class="hbar"[\s\S]*?<span class="bar-value">1 \(100%\)<\/span>/);
+  });
+
+  test('the results show key figures: responses, named and anonymous, last response, days left', async () => {
+    now = new Date(2026, 10, 16, 12, 0);
+    const { c, id } = await answered(CHART_FIELDS, [['Ana', [[1, 'Ops']]], ['', [[1, 'HR']]], ['Luis', []]]);
+    let html = (await c.request(`/surveys/${id}`)).text;
+    const kpis = html.match(/<section id="responses"[\s\S]*?<dl class="kpis">/);
+    assert.ok(kpis, 'key figures live inside the live-updated responses section');
+    assert.deepEqual(kpi(html, 'Responses'), ['3', undefined]);
+    assert.deepEqual(kpi(html, 'With a name'), ['2', '1 anonymous']);
+    const newest = html.match(/<td data-label="Sent \(UTC\)" class="nowrap">(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})/);
+    const [, date, time] = newest;
+    const shown = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(`${date}T00:00:00Z`));
+    assert.deepEqual(kpi(html, 'Last response'), [shown, `${time} UTC`]);
+    assert.deepEqual(kpi(html, 'Closing'), ['10 days left', 'Closes on Nov 26, 2026']);
+
+    now = new Date(2026, 10, 25, 9, 0);
+    assert.deepEqual(kpi((await c.request(`/surveys/${id}`)).text, 'Closing'), ['1 day left', 'Closes on Nov 26, 2026']);
+    now = new Date(2026, 10, 26, 9, 0);
+    assert.deepEqual(kpi((await c.request(`/surveys/${id}`)).text, 'Closing'), ['Last day', 'Closes on Nov 26, 2026']);
+    now = new Date(2026, 10, 27, 9, 0);
+    assert.deepEqual(kpi((await c.request(`/surveys/${id}`)).text, 'Closing'), ['Expired', 'Closed on Nov 26, 2026 (closing date passed)']);
+    now = new Date(2026, 10, 16, 12, 0);
+    const _csrf = await c.csrf();
+    await c.request(`/surveys/${id}/toggle`, { method: 'POST', form: { _csrf } });
+    assert.deepEqual(kpi((await c.request(`/surveys/${id}`)).text, 'Closing'), ['Closed', 'Closes on Nov 26, 2026']);
+
+    const empty = new Client(app.base);
+    await empty.register('kpi-empty@corp.local');
+    const emptyId = await empty.createSurvey([{ label: 'Q', type: 'text' }]);
+    html = (await empty.request(`/surveys/${emptyId}`)).text;
+    assert.deepEqual(kpi(html, 'Responses'), ['0', undefined]);
+    assert.deepEqual(kpi(html, 'Last response'), ['—', undefined]);
+    assert.doesNotMatch(html, /class="donut|class="hbar/);
+  });
+});
+
 describe('registration disabled', () => {
   let app;
   before(async () => { app = await startApp({ allowRegistration: false }); });
