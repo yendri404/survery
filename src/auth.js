@@ -1,10 +1,13 @@
-import { scrypt, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, scrypt, randomBytes, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 
 const scryptAsync = promisify(scrypt);
 const KEY_LENGTH = 64;
 
 export const newToken = (bytes = 32) => randomBytes(bytes).toString('base64url');
+
+/** Sessions are stored by hash so a leaked database does not expose usable cookies. */
+export const hashSessionId = (id) => createHash('sha256').update(String(id)).digest('base64url');
 
 export async function hashPassword(password) {
   const salt = randomBytes(16);

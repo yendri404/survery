@@ -1,6 +1,7 @@
-import { DUMMY_HASH, hashPassword, newToken, verifyPassword } from '../auth.js';
+import { DUMMY_HASH, hashPassword, hashSessionId, newToken, verifyPassword } from '../auth.js';
 import { checkCsrf } from '../guards.js';
 import { HttpError, readForm, redirect, safeNext, sendHtml } from '../http.js';
+import { clientIp, createRateLimiter } from '../rate-limit.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -9,11 +10,14 @@ function sessionCookie(config, id, maxAgeSeconds) {
 }
 
 export function registerAuthRoutes({ route, repo, config, views }) {
+  // Keyed by email+IP so an attacker cannot lock a colleague out from another machine.
+  const loginFailures = createRateLimiter({ limit: config.loginMaxFailures, windowMs: config.loginWindowMs });
+
   function startSession(ctx, userId, next) {
     if (ctx.session) repo.deleteSession(ctx.session.id);
     repo.deleteExpiredSessions();
     const id = newToken();
-    repo.createSession({ id, userId, csrfToken: newToken(), expiresAt: Date.now() + config.sessionTtlMs });
+    repo.createSession({ id: hashSessionId(id), userId, csrfToken: newToken(), expiresAt: Date.now() + config.sessionTtlMs });
     redirect(ctx.res, next, { 'Set-Cookie': sessionCookie(config, id, Math.floor(config.sessionTtlMs / 1000)) });
   }
 
@@ -33,13 +37,26 @@ export function registerAuthRoutes({ route, repo, config, views }) {
     const email = (form.get('email') ?? '').trim();
     const password = form.get('password') ?? '';
     const next = safeNext(form.get('next'));
+    const limitKey = `${email.toLowerCase()}|${clientIp(ctx.req, config.trustProxy)}`;
+
+    if (loginFailures.isLimited(limitKey)) {
+      const retryAfter = loginFailures.retryAfterSeconds(limitKey);
+      ctx.res.setHeader('Retry-After', String(retryAfter));
+      return sendHtml(ctx.res, 429, views.loginPage({
+        next, email, allowRegistration: config.allowRegistration,
+        error: `Too many failed login attempts. Try again in ${Math.ceil(retryAfter / 60)} minute(s).`,
+      }));
+    }
+
     const user = email ? repo.findUserByEmail(email) : undefined;
     const valid = await verifyPassword(password, user?.password_hash ?? DUMMY_HASH);
     if (!user || !valid) {
+      loginFailures.hit(limitKey);
       return sendHtml(ctx.res, 401, views.loginPage({
         next, email, error: 'Invalid email or password.', allowRegistration: config.allowRegistration,
       }));
     }
+    loginFailures.reset(limitKey);
     startSession(ctx, user.id, next);
   });
 

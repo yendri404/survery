@@ -30,6 +30,9 @@ Other people on the same network open the share link shown on the survey page
 | `BASE_URL`           | *(request host)*   | Public URL used to build share links, e.g. `https://surveys.intranet.local`. Set it when running behind a reverse proxy. |
 | `ALLOW_REGISTRATION` | `true`             | Set to `false` to disable self-registration of creators. |
 | `COOKIE_SECURE`      | `false`            | Set to `true` when served over HTTPS. |
+| `TRUST_PROXY`        | `false`            | Set to `true` only behind a reverse proxy you control, to read the client IP from `X-Forwarded-For`. |
+| `LOGIN_MAX_FAILURES` | `10`               | Failed logins allowed per email + IP every 15 minutes before answering 429. |
+| `SUBMISSION_LIMIT`   | `60`               | Responses accepted per survey + IP every 10 minutes (`0` disables). Raise it if many people answer from one shared PC. |
 
 When registration is disabled, create creator accounts from the command line:
 
@@ -47,7 +50,8 @@ npm run create-user -- <email> <name> <password>
 
 ## Security notes
 
-- Passwords hashed with scrypt; sessions in HttpOnly, SameSite=Lax cookies; CSRF tokens on every creator form.
+- Passwords hashed with scrypt; sessions in HttpOnly, SameSite=Lax cookies (stored hashed in the database); CSRF tokens on every creator form.
+- Login attempts and anonymous submissions are rate limited in memory (counters reset on restart).
 - Creators can only access their own surveys.
 - Share links use 144-bit random tokens; anyone holding the link can answer.
 - CSV export neutralizes spreadsheet formula injection.

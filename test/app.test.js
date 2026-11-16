@@ -11,6 +11,7 @@ async function startApp(overrides = {}) {
   const base = `http://127.0.0.1:${server.address().port}`;
   return {
     base,
+    db,
     close: () => new Promise((resolve) => {
       server.closeAllConnections();
       server.close(() => { db.close(); resolve(); });
@@ -257,6 +258,55 @@ describe('survey app', () => {
     const detail = await c.request(`/surveys/${id}`);
     assert.doesNotMatch(detail.text, /<script>alert/);
     assert.match(detail.text, /&lt;b&gt;Title&lt;\/b&gt;/);
+  });
+});
+
+describe('abuse protection', () => {
+  let app;
+  before(async () => { app = await startApp({ loginMaxFailures: 3, submissionLimit: 2 }); });
+  after(() => app.close());
+
+  test('login is blocked after repeated failures for the same email and IP', async () => {
+    const c = new Client(app.base);
+    await c.register('brute@corp.local');
+    const attacker = new Client(app.base);
+    for (let i = 0; i < 3; i++) {
+      const res = await attacker.request('/login', { method: 'POST', form: { email: 'brute@corp.local', password: 'wrong-pass' } });
+      assert.equal(res.status, 401);
+    }
+    const blocked = await attacker.request('/login', { method: 'POST', form: { email: 'brute@corp.local', password: 'secret123' } });
+    assert.equal(blocked.status, 429);
+    assert.match(blocked.text, /Too many failed login attempts/);
+    assert.ok(Number(blocked.headers.get('retry-after')) > 0);
+
+    // Other accounts are not affected by failures against a different email.
+    await new Client(app.base).register('safe@corp.local');
+    const other = await attacker.request('/login', { method: 'POST', form: { email: 'safe@corp.local', password: 'secret123' } });
+    assert.equal(other.status, 303);
+  });
+
+  test('anonymous submissions are rate limited per survey and IP', async () => {
+    const creator = new Client(app.base);
+    await creator.register('flood@corp.local');
+    const id = await creator.createSurvey([{ label: 'Q', type: 'text' }]);
+    const token = await creator.shareToken(id);
+    const r = new Client(app.base);
+    assert.equal((await r.request(`/s/${token}`, { method: 'POST', form: {} })).status, 303);
+    assert.equal((await r.request(`/s/${token}`, { method: 'POST', form: {} })).status, 303);
+    const blocked = await r.request(`/s/${token}`, { method: 'POST', form: {} });
+    assert.equal(blocked.status, 429);
+    assert.match(blocked.text, /Too many responses/);
+    assert.match((await creator.request(`/surveys/${id}`)).text, /Responses \(2\)/);
+  });
+
+  test('session ids are stored hashed, not as the cookie value', async () => {
+    const c = new Client(app.base);
+    await c.register('hash@corp.local');
+    const raw = c.cookie.slice('sid='.length);
+    const ids = app.db.prepare('SELECT id FROM sessions').all().map((s) => s.id);
+    assert.ok(ids.length > 0);
+    assert.ok(!ids.includes(raw));
+    assert.equal((await c.request('/surveys')).status, 200);
   });
 });
 

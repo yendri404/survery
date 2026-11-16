@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
+import { hashSessionId } from './auth.js';
 import { HttpError, parseCookies, sendHtml } from './http.js';
 import { createRepo } from './repo.js';
 import { registerAuthRoutes } from './routes/auth.js';
@@ -47,7 +48,7 @@ export function createApp({ db, config }) {
   function loadSession(ctx) {
     const sid = parseCookies(ctx.req.headers.cookie).sid;
     if (!sid) return;
-    const session = repo.getSession(sid);
+    const session = repo.getSession(hashSessionId(sid));
     if (!session) return;
     const user = repo.findUserById(session.user_id);
     if (!user) return;
