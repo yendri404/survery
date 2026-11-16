@@ -1,0 +1,15 @@
+{
+  "name": "survey-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-hosted survey app: creators have accounts, respondents answer anonymously via a shared link.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/",
+    "create-user": "node scripts/create-user.js"
+  }
+}
