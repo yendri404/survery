@@ -53,7 +53,8 @@ npm run create-user -- <email> <name> <password>
 - Results page with key figures (responses, named vs anonymous, last response, days left), charts for choice questions (a donut for single choice, bars for multiple choice), the full results table, and deleting individual responses.
 - Phone-first layout; on wide screens (1100px and up) pages use two columns: results next to a sticky share panel, questions next to the survey settings.
 - Light and dark theme (follows the device setting until changed with the theme button).
-- Smooth animations (page fades, cards and charts that animate in, a check mark that draws itself after answering); turned off when the device asks for reduced motion.
+- Corporate look: IBM Plex Sans, square corners and a muted slate palette, with WCAG AA text contrast in both themes.
+- Short, sober animations (page fades, a light entrance for cards and charts, a check mark that draws itself after answering); turned off when the device asks for reduced motion.
 - English and Spanish interface, chosen from the language menu next to the theme button (see [Languages](#languages)).
 - QR code of the share link on every survey, downloadable as PNG to print or send.
 - CSV export (comma, or semicolon for Excel with regional settings that use `;`). UTF-8 with BOM.
@@ -71,6 +72,16 @@ The interface is available in **English** and **Spanish**, on creator and respon
 Surveys themselves (titles, questions, options) are shown exactly as their creator wrote them. CSV exports use the creator's current language for the fixed column headers.
 
 Translations live in `locales/en.json` and `locales/es.json`. To add a language, see "How to add a language" in [CODE_GUIDE.md](CODE_GUIDE.md#i18njs--interface-languages).
+
+## Font and license
+
+The interface uses **IBM Plex Sans** (weights 400, 500, 600; latin subset, which covers English and Spanish), served from `public/fonts/`. No request leaves the server, so it works offline in a private network.
+
+| Item | Detail |
+|------|--------|
+| Source | [`@fontsource/ibm-plex-sans`](https://www.npmjs.com/package/@fontsource/ibm-plex-sans) 5.3.0, files copied in (not an npm dependency) |
+| License | SIL Open Font License 1.1, see [`public/fonts/LICENSE-IBM-Plex.txt`](public/fonts/LICENSE-IBM-Plex.txt) |
+| Fallback | `"Segoe UI", system-ui, sans-serif` while the font loads (`font-display: swap`) |
 
 ## Security notes
 
@@ -100,6 +111,7 @@ src/
   i18n.js          interface languages: choosing one, translating, dates
 locales/           en.json, es.json (all interface text)
 public/            builder.js (question editor), app.js, style.css, logo.png, favicon.svg
+  fonts/           IBM Plex Sans (woff2, latin subset) + its license
 assets/           logo-source.png (full-size original of the header logo)
 scripts/           create-user.js
 test/              node:test suites

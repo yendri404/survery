@@ -108,8 +108,9 @@ function layout({ title, body, user, csrf, flash, respondent = false, i18n = def
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#5b3cc4">
+<meta name="theme-color" content="#1e2a3a">
 <title>${esc(pageTitle)}</title>
+<link rel="preload" href="/public/fonts/ibm-plex-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="icon" href="${asset('favicon.svg')}" type="image/svg+xml">
 <link rel="stylesheet" href="${asset('style.css')}">
 <script src="${asset('theme.js')}"></script>
@@ -324,8 +325,8 @@ function donutChart(counts, answered) {
 function barChart(counts, answered) {
   return `<ul class="hbars">${counts.map(({ option, count }) => {
     const pct = percent(count, answered);
-    const fill = count ? `<rect class="hbar-fill" width="${fixed(answered ? (count / answered) * 100 : 0)}%" height="12" rx="4"><title>${esc(option)}: ${count} (${pct}%)</title></rect>` : '';
-    return `<li><span class="bar-label">${esc(option)}</span><svg class="hbar" width="100%" height="12" aria-hidden="true" focusable="false"><rect class="hbar-track" width="100%" height="12" rx="4"/>${fill}</svg><span class="bar-value">${count} (${pct}%)</span></li>`;
+    const fill = count ? `<rect class="hbar-fill" width="${fixed(answered ? (count / answered) * 100 : 0)}%" height="12"><title>${esc(option)}: ${count} (${pct}%)</title></rect>` : '';
+    return `<li><span class="bar-label">${esc(option)}</span><svg class="hbar" width="100%" height="12" aria-hidden="true" focusable="false"><rect class="hbar-track" width="100%" height="12"/>${fill}</svg><span class="bar-value">${count} (${pct}%)</span></li>`;
   }).join('')}</ul>`;
 }
 

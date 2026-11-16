@@ -19,6 +19,10 @@ const ASSET_TYPES = {
   'favicon.svg': 'image/svg+xml',
   'logo.png': 'image/png',
   'theme.js': 'text/javascript; charset=utf-8',
+  // IBM Plex Sans (OFL-1.1, see public/fonts/LICENSE-IBM-Plex.txt): latin subset, self-hosted.
+  'fonts/ibm-plex-sans-latin-400-normal.woff2': 'font/woff2',
+  'fonts/ibm-plex-sans-latin-500-normal.woff2': 'font/woff2',
+  'fonts/ibm-plex-sans-latin-600-normal.woff2': 'font/woff2',
 };
 
 const SECURITY_HEADERS = {
@@ -101,7 +105,10 @@ export function createApp({ db, config }) {
         const asset = assets.get(ctx.url.pathname.slice('/public/'.length));
         if (!asset) throw new HttpError(404, 'error.notFound');
         // Versioned URLs (?v=<hash>) never change content, so browsers may cache them for a year.
-        const cache = ctx.url.searchParams.has('v') ? 'public, max-age=31536000, immutable' : 'public, max-age=300';
+        // Fonts are linked from style.css without a version: a font file never changes (a new
+        // version would get a new file name), so it is cached the same way.
+        const immutable = ctx.url.searchParams.has('v') || asset.type === 'font/woff2';
+        const cache = immutable ?'public, max-age=31536000, immutable' : 'public, max-age=300';
         res.writeHead(200, { 'Content-Type': asset.type, 'Cache-Control': cache });
         return res.end(asset.body);
       }

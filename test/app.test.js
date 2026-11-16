@@ -499,6 +499,23 @@ describe('survey app', () => {
     assert.match(script.headers.get('content-type'), /javascript/);
   });
 
+  test('serves the self-hosted IBM Plex Sans font referenced by the stylesheet', async () => {
+    const css = await (await fetch(`${app.base}/public/style.css`)).text();
+    assert.match(css, /font-family:\s*"IBM Plex Sans"/);
+    const urls = [...css.matchAll(/url\("?(\/public\/fonts\/[^")]+\.woff2)"?\)/g)].map((m) => m[1]);
+    assert.ok(urls.length >= 3, 'style.css declares the 400, 500 and 600 weights');
+    for (const url of urls) {
+      const font = await fetch(`${app.base}${url}`);
+      assert.equal(font.status, 200, url);
+      assert.equal(font.headers.get('content-type'), 'font/woff2');
+      assert.match(font.headers.get('cache-control'), /immutable/);
+      // Every WOFF2 file starts with the "wOF2" signature.
+      assert.equal(Buffer.from(await font.arrayBuffer()).subarray(0, 4).toString('latin1'), 'wOF2');
+    }
+    const home = (await new Client(app.base).request('/')).text;
+    assert.match(home, /<link rel="preload" href="\/public\/fonts\/ibm-plex-sans-latin-400-normal\.woff2" as="font" type="font\/woff2" crossorigin>/);
+  });
+
   test('actions redirect with a confirmation message', async () => {
     const c = new Client(app.base);
     await c.register('flash@corp.local');

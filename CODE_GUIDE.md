@@ -254,8 +254,8 @@ Pass `':memory:'` for a throwaway database (the tests do this).
 | Piece | Detail |
 |-------|--------|
 | `repo` | `createRepo(db)` |
-| Static assets | Reads `public/style.css`, `app.js`, `builder.js`, `theme.js`, `favicon.svg` and `logo.png` into memory. Only these names are served; there is no directory listing or path traversal surface |
-| Asset versions | Hashes each asset (SHA-256, 10 chars) and hands the map to `views.setAssetVersions`. Pages link `/public/style.css?v=<hash>`, which is served with `immutable` caching; when a file changes its URL changes, so browsers never keep a stale stylesheet |
+| Static assets | Reads `public/style.css`, `app.js`, `builder.js`, `theme.js`, `favicon.svg`, `logo.png` and the three `fonts/*.woff2` files into memory. Only these names are served; there is no directory listing or path traversal surface |
+| Asset versions | Hashes each asset (SHA-256, 10 chars) and hands the map to `views.setAssetVersions`. Pages link `/public/style.css?v=<hash>`, which is served with `immutable` caching; when a file changes its URL changes, so browsers never keep a stale stylesheet. Fonts (`font/woff2`) are linked from `style.css` without `?v` and are always `immutable`: a new font version gets a new file name |
 | Routes table | Each `route(method, '/path/:param', handler)` compiles to a regex; `:param` matches one path segment |
 
 **Per request:**
@@ -549,9 +549,32 @@ Server-rendered template strings. Every page is plain HTML forms, so it works wi
 | `thanksPage`, `closedPage` | Respondent states | |
 | `errorPage` | Any error | `respondent: true` hides creator navigation |
 
-**Branding and icons:** `APP_NAME` (`Sharevy`) is used for the header and every `<title>` (`<page> · Sharevy`). The header shows `public/logo.png` (white clipboard, 128px, decorative `alt=""`) left of the name; it is a cropped copy of `assets/logo-source.png`. The favicon (`public/favicon.svg`) draws the same clipboard on the brand purple so it stays visible on light browser tabs. `icon(name)` returns an inline SVG from the `ICONS` map; icon-only buttons always carry an `aria-label` and a `title` so they stay understandable.
+**Branding and icons:** `APP_NAME` (`Sharevy`) is used for the header and every `<title>` (`<page> · Sharevy`). The header shows `public/logo.png` (white clipboard, 128px, decorative `alt=""`) left of the name; it is a cropped copy of `assets/logo-source.png`. The favicon (`public/favicon.svg`) draws the same clipboard on a square slate background (`#1e2a3a`, the top bar color) so it stays visible on light browser tabs. `icon(name)` returns an inline SVG from the `ICONS` map; icon-only buttons always carry an `aria-label` and a `title` so they stay understandable.
 
 **Confirmation messages:** creator actions redirect with `?msg=<key>` (`created`, `saved`, `closed`, `opened`, `deleted`, `response-deleted`). `flashMessage(key, i18n)` maps only known keys to fixed, translated text; the query value is never reflected into the page.
+
+**Design tokens (corporate look):** every color, the font and the corner radius are custom properties at the top of `public/style.css`. Change them there, never in individual rules.
+
+| Token | Light | Dark | Used for |
+|-------|-------|------|----------|
+| `--topbar` | `#1e2a3a` | `#1b2633` | Top bar (the white `logo.png` sits on it) |
+| `--brand` / `--brand-dark` | `#2b4a6f` / `#1f3753` | `#3a5f8a` / `#2f5079` | Primary buttons / their hover; white text on top |
+| `--brand-text` | `#2b4a6f` | `#9fbbdc` | Links, brand-colored text, focus rings |
+| `--brand-soft` | `#e6ecf3` | `#22303f` | Hover and selected tint |
+| `--text` / `--muted` | `#1c232c` / `#56606c` | `#e4e8ee` / `#a0aab6` | Body text / secondary text |
+| `--bg` / `--surface` / `--surface-alt` | `#f3f4f6` / `#fff` / `#f7f8fa` | `#12171e` / `#1a212b` / `#161c24` | Page / panels / table headers and the respondent-name box |
+| `--border` / `--border-strong` | `#d5dae1` / `#7d8794` | `#2f3946` / `#6b7685` | Panel and table rules / form controls (>= 3:1) |
+| `--ok`, `--warn`, `--danger`, `--closed` (+ `-soft`) | muted green, ochre, brick, grey | lighter tints of the same | Status text on its tinted box (>= 4.5:1) |
+| `--radius` | `0` | `0` | Square corners everywhere; only radio buttons and donut charts stay round |
+| `--font` | `"IBM Plex Sans", "Segoe UI", system-ui, sans-serif` | same | All text |
+
+| Rule | Detail |
+|------|--------|
+| Typography | IBM Plex Sans 400/500/600 from `public/fonts/` (`@font-face` at the top of `style.css`, 400 preloaded in `layout()`). Section headings (`h2`, `h3`, KPI and table headers) are small uppercase labels with letter spacing |
+| Lines | 1px rules, a 3px accent on the top or left edge of key boxes (survey intro, KPIs, cards, messages), almost no shadows, no dashed borders |
+| Contrast | Every text pair meets WCAG AA (>= 4.5:1) in both themes; recheck any new color |
+
+**To change the brand color:** edit `--brand`, `--brand-dark`, `--brand-text`, `--brand-soft` and `--topbar` in the three palette blocks of `style.css` (light, `[data-theme="dark"]`, `prefers-color-scheme: dark`; keep the two dark blocks identical), then update `<meta name="theme-color">` in `layout()` and the `fill` of `public/favicon.svg`. Check white text on `--brand` and `--brand-text` on `--surface` still reach 4.5:1.
 
 **Light and dark theme:** every page has a theme button (`themeToggle()`, rendered `hidden` until `public/app.js` activates it). The choice is stored in `localStorage` (`sharevy-theme`); without a choice, the OS setting (`prefers-color-scheme`) decides. `public/theme.js` is loaded in `<head>` so a saved choice applies before the first paint (no flash of the wrong theme). Colors are CSS custom properties in `style.css`; the dark palette redefines them under `[data-theme="dark"]` and in the `prefers-color-scheme: dark` media query. Use `--brand-text` for brand-colored text and `--brand` for brand backgrounds.
 
@@ -577,11 +600,11 @@ The respondent form stays narrow (720px) on purpose: short lines are easier to r
 | `checkbox` | Horizontal bars (`barChart`) + a note | Several answers per person: the % add up to more than 100%, so a pie would mislead |
 | `radio`, `select` with more than 6 options | Bars | Categorical colors are never repeated |
 
-The SVG is `aria-hidden`; the legend and bar labels carry every number as text. Colors come from classes (`.slice-1`…`.slice-6` → `--cat-1`…`--cat-6`, `--bar-fill`), defined for light and dark in `style.css` from a colorblind-checked palette, so no inline `style` is needed. `kpiTiles()` renders the key figures as a `<dl class="kpis">` above the charts.
+The SVG is `aria-hidden`; the legend and bar labels carry every number as text. Colors come from classes (`.slice-1`…`.slice-6` → `--cat-1`…`--cat-6`, `--bar-fill`), defined for light and dark in `style.css` from a muted palette checked with a colorblind validator (lightness band, chroma floor, CVD separation, >= 3:1 against the panel), so no inline `style` is needed. Bars and swatches are square like the rest of the interface. `kpiTiles()` renders the key figures as a `<dl class="kpis">` above the charts.
 
 **Internal helpers:** `layout()` (shared shell; `respondent: true` gives a minimal header), `errorList()`, `csrfInput()`, `renderField()` (maps each field type to its HTML control, uses `required` for native browser validation; the server is still the source of truth), and `summaryHtml()` / `donutChart()` / `barChart()` / `kpiTiles()`.
 
-**Animations:** CSS only, in the "Motion" section at the end of `public/style.css`. Rules that keep them cheap and calm:
+**Animations:** CSS only, in the "Motion" section at the end of `public/style.css`. Short fades and small slides (150–250 ms, one standard easing `--ease`); no spins, bounces or overshoot. Rules that keep them cheap and calm:
 
 | Rule | Detail |
 |------|--------|
