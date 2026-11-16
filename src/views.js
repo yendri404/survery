@@ -27,6 +27,7 @@ const ICONS = {
   check: '<path d="M5 12l5 5 9-10"/>',
   back: '<path d="M15 6l-6 6 6 6"/>',
   alert: '<path d="M12 3l10 18H2L12 3zM12 10v5M12 18h.01"/>',
+  qr: '<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2v2h-2zM14 18h2v2h-2zM18 18h2v2h-2zM16 16h2v2h-2z"/>',
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
   inbox: '<path d="M3 13h5l2 3h4l2-3h5M5 5h14l2 8v6H3v-6l2-8z"/>',
   moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
@@ -251,7 +252,7 @@ function summaryHtml(fields, responses) {
 </section>`).join('')}`;
 }
 
-export function surveyDetailPage({ user, csrf, survey, responses, shareUrl, flash, today }) {
+export function surveyDetailPage({ user, csrf, survey, responses, shareUrl, qrSvg, flash, today }) {
   const status = surveyStatus(survey, today);
   const head = survey.fields.map((f) => `<th>${esc(f.label)}</th>`).join('');
   const rows = responses.map((r) => `<tr>
@@ -283,6 +284,14 @@ ${survey.description ? `<p class="description">${esc(survey.description)}</p>` :
     <button type="button" data-copy="share-url">${icon('copy')} <span>Copy link</span></button>
     <button type="button" class="secondary" data-share="share-url" data-share-title="${esc(survey.title)}" hidden>${icon('share')} Share</button>
     <a class="button secondary" href="${esc(shareUrl)}" target="_blank" rel="noopener">${icon('open')} Open form</a>
+  </div>
+  <div class="qr-block">
+    <div class="qr">${qrSvg}</div>
+    <div class="qr-help">
+      <h3>${icon('qr')} Or scan this QR code</h3>
+      <p>People can point their phone camera at this code to open the survey. Show it on screen, or download it to print or paste it in a message.</p>
+      <a class="button secondary" href="/surveys/${survey.id}/qr.png">${icon('download')} Download QR (PNG)</a>
+    </div>
   </div>
 </section>
 

@@ -11,5 +11,8 @@
     "start": "node src/server.js",
     "test": "node --test test/",
     "create-user": "node scripts/create-user.js"
+  },
+  "dependencies": {
+    "qrcode": "1.5.4"
   }
 }

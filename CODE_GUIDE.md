@@ -2,7 +2,7 @@
 
 A file-by-file tour of the server code: what each module does, what it exports, and why it is built that way.
 
-> **TL;DR** — `server.js` boots the app. `app.js` turns every HTTP request into a `ctx` object and sends it to a route in `routes/`. Routes use `surveys.js` for business rules, `repo.js` for the database, and `views.js` for HTML. There are **zero npm dependencies**: everything uses Node built-ins (`node:http`, `node:sqlite`, `node:crypto`).
+> **TL;DR** — `server.js` boots the app. `app.js` turns every HTTP request into a `ctx` object and sends it to a route in `routes/`. Routes use `surveys.js` for business rules, `repo.js` for the database, and `views.js` for HTML. The only npm dependency is `qrcode` (pinned, used only by `qr.js`); everything else uses Node built-ins (`node:http`, `node:sqlite`, `node:crypto`).
 
 ---
 
@@ -35,6 +35,7 @@ src/
 ├── guards.js          "Must be logged in" and CSRF wrappers for handlers
 ├── auth.js            Password hashing, tokens, session-id hashing
 ├── rate-limit.js      In-memory rate limiter + client IP detection
+├── qr.js              QR code of the share link (SVG for the page, PNG download)
 ├── repo.js            All SQL queries (the only file that talks to the DB)
 ├── surveys.js         Business rules: survey definitions, answers, CSV
 ├── views.js           Server-rendered HTML pages
@@ -59,6 +60,7 @@ src/
 | `repo.js` | 100 | Infrastructure | SQL access |
 | `auth.js` | 35 | Infrastructure | Crypto helpers |
 | `rate-limit.js` | 60 | Infrastructure | Abuse protection |
+| `qr.js` | 20 | Infrastructure | QR codes (wraps the `qrcode` package) |
 | `views.js` | 270 | Presentation | HTML templates |
 
 ---
@@ -348,6 +350,7 @@ All routes are wrapped in `authed` / `authedPost`.
 | POST | `/surveys/:id/delete` | Delete the survey and all its responses |
 | POST | `/surveys/:id/responses/:responseId/delete` | Delete one response |
 | GET | `/surveys/:id/export.csv[?delimiter=semicolon]` | Download CSV (UTF-8 with BOM) |
+| GET | `/surveys/:id/qr.png` | Download the QR code of the share link (600px PNG) |
 
 **Key internals:**
 
@@ -478,6 +481,17 @@ The heart of the app. It has no database, no HTTP and no HTML, which is why it c
 | `maxKeys` cap (10 000) | Memory stays bounded: expired keys are pruned first, then the oldest |
 | `now` injectable | Tests control time without waiting |
 | `X-Forwarded-For` opt-in | Otherwise any client could fake its IP to dodge the limit |
+
+---
+
+#### `qr.js` — QR codes
+
+| Export | What it does |
+|--------|--------------|
+| `qrSvg(text, label)` | Inline SVG for the survey page, with `role="img"` and an accessible name |
+| `qrPng(text)` | 600px PNG buffer for the download route, large enough to print |
+
+Both use medium error correction and a 2-module margin. The SVG is embedded without escaping because the library only emits numeric path data, never the encoded text. The QR always encodes the same URL as the share link (`BASE_URL` or the request host), so set `BASE_URL` when the app sits behind a proxy, or the code will point to the wrong address. Only `qr.js` imports `qrcode`, so replacing the library touches one file.
 
 ---
 

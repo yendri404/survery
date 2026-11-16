@@ -303,3 +303,14 @@ th { background: var(--brand-soft); }
 
 /* Closing date line under survey titles. */
 .meta { display: flex; align-items: center; gap: .4rem; color: var(--muted); font-size: .95rem; }
+
+/* QR code in the share section. The code keeps a white background in both themes so phones can read it. */
+.qr-block { display: flex; flex-direction: column; align-items: center; gap: 1rem; margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid var(--border); text-align: center; }
+.qr { width: min(240px, 70vw); background: #fff; padding: .5rem; border-radius: 8px; border: 1px solid var(--border); line-height: 0; }
+.qr svg { width: 100%; height: auto; }
+.qr-help h3 { margin: 0 0 .5rem; display: flex; align-items: center; justify-content: center; gap: .4rem; }
+@media (min-width: 700px) {
+  .qr-block { flex-direction: row; align-items: center; text-align: left; }
+  .qr { width: 200px; flex: none; }
+  .qr-help h3 { justify-content: flex-start; }
+}

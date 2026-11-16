@@ -1,6 +1,7 @@
 import { newToken } from '../auth.js';
 import { authed, authedPost } from '../guards.js';
 import { HttpError, redirect, sendHtml } from '../http.js';
+import { qrPng, qrSvg } from '../qr.js';
 import { DEFAULT_OPEN_DAYS, addDays, parseSurveyInput, toCsv } from '../surveys.js';
 
 export function registerSurveyRoutes({ route, repo, config, views, today }) {
@@ -49,11 +50,27 @@ export function registerSurveyRoutes({ route, repo, config, views, today }) {
     redirect(ctx.res, `/surveys/${id}?msg=created`);
   }));
 
-  route('GET', '/surveys/:id', authed((ctx) => {
+  route('GET', '/surveys/:id', authed(async (ctx) => {
     const survey = ownedSurvey(ctx);
+    const url = shareUrl(ctx, survey);
     sendHtml(ctx.res, 200, views.surveyDetailPage({
-      ...session(ctx), survey, responses: repo.listResponses(survey.id), shareUrl: shareUrl(ctx, survey),
+      ...session(ctx),
+      survey,
+      responses: repo.listResponses(survey.id),
+      shareUrl: url,
+      qrSvg: await qrSvg(url, 'QR code that opens this survey'),
     }));
+  }));
+
+  route('GET', '/surveys/:id/qr.png', authed(async (ctx) => {
+    const survey = ownedSurvey(ctx);
+    const png = await qrPng(shareUrl(ctx, survey));
+    ctx.res.writeHead(200, {
+      'Content-Type': 'image/png',
+      'Content-Disposition': `attachment; filename="sharevy-survey-${survey.id}-qr.png"`,
+      'Cache-Control': 'no-store',
+    });
+    ctx.res.end(png);
   }));
 
   route('GET', '/surveys/:id/edit', authed((ctx) => {

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
+import QRCode from 'qrcode';
 import { createApp } from '../src/app.js';
 import { loadConfig } from '../src/config.js';
 import { openDatabase } from '../src/db.js';
@@ -202,6 +203,32 @@ describe('survey app', () => {
     assert.match(csv, /Response ID,Submitted at \(UTC\),Name,Q\r\n/);
     assert.match(csv, /,Marta Gómez,x\r\n/);
     assert.match(csv, /,,y\r\n/);
+  });
+
+  test('the share section shows a QR code of the link and offers it as a PNG download', async () => {
+    const c = new Client(app.base);
+    await c.register('qr@corp.local');
+    const id = await c.createSurvey([{ label: 'Q', type: 'text' }]);
+    const detail = (await c.request(`/surveys/${id}`)).text;
+    const shareUrl = detail.match(/id="share-url" class="share-url" value="([^"]+)"/)[1];
+
+    // The inline QR encodes exactly the share link.
+    const expected = (await QRCode.toString(shareUrl, { type: 'svg', errorCorrectionLevel: 'M', margin: 2 }))
+      .trim().replace('<svg ', '<svg role="img" aria-label="QR code that opens this survey" ');
+    assert.ok(detail.includes(expected), 'inline QR must encode the share URL');
+    assert.match(detail, new RegExp(`href="/surveys/${id}/qr\\.png"`));
+
+    const png = await fetch(`${app.base}/surveys/${id}/qr.png`, { headers: { cookie: c.cookie } });
+    assert.equal(png.status, 200);
+    assert.equal(png.headers.get('content-type'), 'image/png');
+    assert.match(png.headers.get('content-disposition'), /attachment; filename="sharevy-survey-\d+-qr\.png"/);
+    const bytes = Buffer.from(await png.arrayBuffer());
+    assert.deepEqual([...bytes.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+    const other = new Client(app.base);
+    await other.register('qr-other@corp.local');
+    assert.equal((await other.request(`/surveys/${id}/qr.png`)).status, 404);
+    assert.equal((await new Client(app.base).request(`/surveys/${id}/qr.png`)).status, 303);
   });
 
   test('closed surveys reject responses until reopened', async () => {

@@ -4,7 +4,7 @@ Self-hosted web app to create surveys and collect responses through a shareable 
 
 - **Creators** have accounts (email + password) and manage their own surveys.
 - **Respondents** answer anonymously through the link — no account, no cookies, no JavaScript required.
-- **Zero external dependencies**: Node.js + its built-in SQLite. Works fully offline inside a private network.
+- **One small dependency** ([`qrcode`](https://www.npmjs.com/package/qrcode), pinned) plus Node.js and its built-in SQLite. After `npm install`, it works fully offline inside a private network.
 
 ## Requirements
 
@@ -13,6 +13,7 @@ Self-hosted web app to create surveys and collect responses through a shareable 
 ## Run
 
 ```bash
+npm install   # once, needs internet (or copy node_modules from another machine)
 npm start
 ```
 
@@ -49,6 +50,7 @@ npm run create-user -- <email> <name> <password>
 - Open/close a survey manually at any time.
 - Results table, per-option summary for choice questions, delete individual responses.
 - Light and dark theme (follows the device setting until changed with the theme button).
+- QR code of the share link on every survey, downloadable as PNG to print or send.
 - CSV export (comma, or semicolon for Excel with regional settings that use `;`). UTF-8 with BOM.
 
 ## Security notes
