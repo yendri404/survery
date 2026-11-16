@@ -1,4 +1,4 @@
-# Code Guide — `src/`
+# Sharevy — Code Guide (`src/`)
 
 A file-by-file tour of the server code: what each module does, what it exports, and why it is built that way.
 
@@ -241,7 +241,8 @@ Pass `':memory:'` for a throwaway database (the tests do this).
 | Piece | Detail |
 |-------|--------|
 | `repo` | `createRepo(db)` |
-| Static assets | Reads `public/style.css`, `app.js` and `builder.js` into memory. Only these three names are served; there is no directory listing or path traversal surface |
+| Static assets | Reads `public/style.css`, `app.js`, `builder.js` and `favicon.svg` into memory. Only these names are served; there is no directory listing or path traversal surface |
+| Asset versions | Hashes each asset (SHA-256, 10 chars) and hands the map to `views.setAssetVersions`. Pages link `/public/style.css?v=<hash>`, which is served with `immutable` caching; when a file changes its URL changes, so browsers never keep a stale stylesheet |
 | Routes table | Each `route(method, '/path/:param', handler)` compiles to a regex; `:param` matches one path segment |
 
 **Per request:**
@@ -492,6 +493,12 @@ Server-rendered template strings. Every page is plain HTML forms, so it works wi
 | `thanksPage`, `closedPage` | Respondent states | |
 | `errorPage` | Any error | `respondent: true` hides creator navigation |
 
+**Branding and icons:** `APP_NAME` (`Sharevy`) is used for the header and every `<title>` (`<page> · Sharevy`). `icon(name)` returns an inline SVG from the `ICONS` map; icon-only buttons always carry an `aria-label` and a `title` so they stay understandable.
+
+**Confirmation messages:** creator actions redirect with `?msg=<key>` (`created`, `saved`, `closed`, `opened`, `deleted`, `response-deleted`). `flashMessage(key)` maps only known keys to fixed text; the query value is never reflected into the page.
+
+**Mobile first:** `public/style.css` targets phones by default (44px touch targets, 16px+ inputs, full-width buttons) and enhances layouts from 700px. On phones, the responses table turns into one card per response using each cell's `data-label`.
+
 **Internal helpers:** `layout()` (shared shell; `respondent: true` gives a minimal header), `errorList()`, `csrfInput()`, `renderField()` (maps each field type to its HTML control, uses `required` for native browser validation; the server is still the source of truth), and `summaryHtml()`.
 
 **No inline JS or CSS:** the CSP forbids it, so behaviors like "copy link" or "confirm delete" are declared with `data-copy` / `data-confirm` attributes and handled by `public/app.js`.
@@ -507,6 +514,7 @@ Server-rendered template strings. Every page is plain HTML forms, so it works wi
 | **Add a column** | `db.js` (schema + an `ALTER TABLE` for existing databases) → `repo.js` (query + hydrate) |
 | **Add a setting** | `config.js` → the consumer → the README configuration table |
 | **Change limits** | `LIMITS` in `surveys.js` (survey content) or `config.js` (rate limits) |
+| **Add an icon** | Add its path to `ICONS` in `views.js` (and in `public/builder.js` if the builder uses it) |
 | **Translate the UI** | Strings live in `views.js`, `public/builder.js`, and the error messages in `surveys.js` and `routes/*.js` |
 
 **Checklist before committing**

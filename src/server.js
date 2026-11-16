@@ -7,7 +7,7 @@ const db = openDatabase(config.dbPath);
 const server = createApp({ db, config });
 
 server.listen(config.port, config.host, () => {
-  console.log(`Survey app listening on http://${config.host}:${config.port} (database: ${config.dbPath})`);
+  console.log(`Sharevy listening on http://${config.host}:${config.port} (database: ${config.dbPath})`);
 });
 
 function shutdown() {

@@ -1,8 +1,8 @@
 {
-  "name": "survey-app",
+  "name": "sharevy",
   "version": "0.1.0",
   "private": true,
-  "description": "Self-hosted survey app: creators have accounts, respondents answer anonymously via a shared link.",
+  "description": "Sharevy — self-hosted survey app: creators have accounts, respondents answer anonymously via a shared link.",
   "type": "module",
   "engines": {
     "node": ">=22.13"

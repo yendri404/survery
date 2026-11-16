@@ -1,4 +1,4 @@
-# Survey App
+# Sharevy
 
 Self-hosted web app to create surveys and collect responses through a shareable link.
 

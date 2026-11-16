@@ -57,7 +57,7 @@ class Client {
       method: 'POST', form: { _csrf, title, description: 'Internal', fields_json: JSON.stringify(fields) },
     });
     assert.equal(res.status, 303, res.text);
-    return Number(res.location.split('/').pop());
+    return Number(res.location.match(/^\/surveys\/(\d+)/)[1]);
   }
 
   async shareToken(surveyId) {
@@ -88,7 +88,9 @@ describe('survey app', () => {
     const reg = await c.register('ana@corp.local', 'Ana');
     assert.equal(reg.status, 303);
     assert.equal(reg.location, '/surveys');
-    assert.match((await c.request('/surveys')).text, /Log out \(Ana\)/);
+    const dashboard = (await c.request('/surveys')).text;
+    assert.match(dashboard, /class="who">Ana</);
+    assert.match(dashboard, /Log out/);
 
     const out = await c.request('/logout', { method: 'POST', form: { _csrf: await c.csrf() } });
     assert.equal(out.status, 303);
@@ -243,6 +245,47 @@ describe('survey app', () => {
     assert.equal(res.status, 422);
     assert.match(res.text, /Title is required/);
     assert.match(res.text, /Add at least one field/);
+  });
+
+  test('pages carry the Sharevy brand and a mobile viewport', async () => {
+    const home = await new Client(app.base).request('/');
+    assert.match(home.text, /<title>Sharevy<\/title>/);
+    assert.match(home.text, /<meta name="viewport" content="width=device-width, initial-scale=1">/);
+
+    // Assets are versioned by content so browsers never keep a stale stylesheet after an update.
+    const css = home.text.match(/href="(\/public\/style\.css\?v=[0-9a-f]{10})"/)[1];
+    const asset = await fetch(app.base + css);
+    assert.equal(asset.status, 200);
+    assert.match(asset.headers.get('cache-control'), /immutable/);
+
+    const c = new Client(app.base);
+    await c.register('brand@corp.local');
+    const id = await c.createSurvey([{ label: 'Q', type: 'text' }], 'Team lunch');
+    assert.match((await c.request(`/surveys/${id}`)).text, /<title>Team lunch · Sharevy<\/title>/);
+    const token = await c.shareToken(id);
+    const form = await new Client(app.base).request(`/s/${token}`);
+    assert.match(form.text, /<title>Team lunch · Sharevy<\/title>/);
+  });
+
+  test('actions redirect with a confirmation message', async () => {
+    const c = new Client(app.base);
+    await c.register('flash@corp.local');
+    const _csrf = await c.csrf('/surveys/new');
+    const created = await c.request('/surveys', {
+      method: 'POST', form: { _csrf, title: 'Flash', fields_json: JSON.stringify([{ label: 'Q', type: 'text' }]) },
+    });
+    assert.match(created.location, /^\/surveys\/\d+\?msg=created$/);
+    const id = Number(created.location.match(/\d+/)[0]);
+    assert.match((await c.request(created.location)).text, /Survey created/);
+
+    const toggled = await c.request(`/surveys/${id}/toggle`, { method: 'POST', form: { _csrf } });
+    assert.equal(toggled.location, `/surveys/${id}?msg=closed`);
+    const deleted = await c.request(`/surveys/${id}/delete`, { method: 'POST', form: { _csrf } });
+    assert.equal(deleted.location, '/surveys?msg=deleted');
+    assert.match((await c.request(deleted.location)).text, /Survey deleted/);
+
+    // Unknown message keys are ignored, never reflected.
+    assert.doesNotMatch((await c.request('/surveys?msg=<script>')).text, /&lt;script&gt;|<script>alert/);
   });
 
   test('unknown share links return 404 without creator navigation', async () => {

@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { hashSessionId } from './auth.js';
 import { HttpError, parseCookies, sendHtml } from './http.js';
@@ -12,6 +13,7 @@ const ASSET_TYPES = {
   'style.css': 'text/css; charset=utf-8',
   'app.js': 'text/javascript; charset=utf-8',
   'builder.js': 'text/javascript; charset=utf-8',
+  'favicon.svg': 'image/svg+xml',
 };
 
 const SECURITY_HEADERS = {
@@ -37,6 +39,10 @@ export function createApp({ db, config }) {
   const assets = new Map(
     Object.entries(ASSET_TYPES).map(([name, type]) => [name, { type, body: readFileSync(new URL(name, publicDir)) }]),
   );
+
+  views.setAssetVersions(Object.fromEntries(
+    [...assets].map(([name, a]) => [name, createHash('sha256').update(a.body).digest('hex').slice(0, 10)]),
+  ));
 
   const routes = [];
   const route = (method, path, handler) => routes.push(compileRoute(method, path, handler));
@@ -82,7 +88,9 @@ export function createApp({ db, config }) {
       if (req.method === 'GET' && ctx.url.pathname.startsWith('/public/')) {
         const asset = assets.get(ctx.url.pathname.slice('/public/'.length));
         if (!asset) throw new HttpError(404, 'Not found.');
-        res.writeHead(200, { 'Content-Type': asset.type, 'Cache-Control': 'public, max-age=300' });
+        // Versioned URLs (?v=<hash>) never change content, so browsers may cache them for a year.
+        const cache = ctx.url.searchParams.has('v') ? 'public, max-age=31536000, immutable' : 'public, max-age=300';
+        res.writeHead(200, { 'Content-Type': asset.type, 'Cache-Control': cache });
         return res.end(asset.body);
       }
       if (req.method === 'GET' && ctx.url.pathname === '/health') {

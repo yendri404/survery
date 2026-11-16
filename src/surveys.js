@@ -1,14 +1,14 @@
 import { randomBytes } from 'node:crypto';
 
 export const FIELD_TYPES = {
-  text: 'Short text',
-  textarea: 'Long text',
+  text: 'Short answer',
+  textarea: 'Paragraph (long answer)',
   number: 'Number',
-  email: 'Email',
+  email: 'Email address',
   date: 'Date',
-  select: 'Dropdown',
-  radio: 'Single choice',
-  checkbox: 'Multiple choice',
+  select: 'Dropdown list',
+  radio: 'Choose one option',
+  checkbox: 'Choose several options',
 };
 
 export const CHOICE_TYPES = new Set(['select', 'radio', 'checkbox']);

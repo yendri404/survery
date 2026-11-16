@@ -4,7 +4,11 @@ import { HttpError, redirect, sendHtml } from '../http.js';
 import { parseSurveyInput, toCsv } from '../surveys.js';
 
 export function registerSurveyRoutes({ route, repo, config, views }) {
-  const session = (ctx) => ({ user: ctx.user, csrf: ctx.session.csrf_token });
+  const session = (ctx) => ({
+    user: ctx.user,
+    csrf: ctx.session.csrf_token,
+    flash: views.flashMessage(ctx.url.searchParams.get('msg')),
+  });
 
   function ownedSurvey(ctx) {
     const id = Number(ctx.params.id);
@@ -39,7 +43,7 @@ export function registerSurveyRoutes({ route, repo, config, views }) {
     const { value, errors } = parseSurveyInput(input);
     if (errors.length) return sendHtml(ctx.res, 422, views.surveyEditorPage({ ...session(ctx), values: input, errors }));
     const id = repo.createSurvey({ ownerId: ctx.user.id, publicToken: newToken(18), ...value });
-    redirect(ctx.res, `/surveys/${id}`);
+    redirect(ctx.res, `/surveys/${id}?msg=created`);
   }));
 
   route('GET', '/surveys/:id', authed((ctx) => {
@@ -64,33 +68,33 @@ export function registerSurveyRoutes({ route, repo, config, views }) {
     const { value, errors } = parseSurveyInput(input);
     if (errors.length) return sendHtml(ctx.res, 422, views.surveyEditorPage({ ...session(ctx), survey, values: input, errors }));
     repo.updateSurvey(survey.id, ctx.user.id, value);
-    redirect(ctx.res, `/surveys/${survey.id}`);
+    redirect(ctx.res, `/surveys/${survey.id}?msg=saved`);
   }));
 
   route('POST', '/surveys/:id/toggle', authedPost((ctx) => {
     const survey = ownedSurvey(ctx);
     repo.setSurveyOpen(survey.id, ctx.user.id, !survey.isOpen);
-    redirect(ctx.res, `/surveys/${survey.id}`);
+    redirect(ctx.res, `/surveys/${survey.id}?msg=${survey.isOpen ? 'closed' : 'opened'}`);
   }));
 
   route('POST', '/surveys/:id/delete', authedPost((ctx) => {
     const survey = ownedSurvey(ctx);
     repo.deleteSurvey(survey.id, ctx.user.id);
-    redirect(ctx.res, '/surveys');
+    redirect(ctx.res, '/surveys?msg=deleted');
   }));
 
   route('POST', '/surveys/:id/responses/:responseId/delete', authedPost((ctx) => {
     const survey = ownedSurvey(ctx);
     const responseId = Number(ctx.params.responseId);
     if (Number.isSafeInteger(responseId)) repo.deleteResponse(survey.id, responseId);
-    redirect(ctx.res, `/surveys/${survey.id}`);
+    redirect(ctx.res, `/surveys/${survey.id}?msg=response-deleted`);
   }));
 
   route('GET', '/surveys/:id/export.csv', authed((ctx) => {
     const survey = ownedSurvey(ctx);
     const delimiter = ctx.url.searchParams.get('delimiter') === 'semicolon' ? ';' : ',';
     const csv = toCsv(survey.fields, repo.listResponses(survey.id), delimiter);
-    const filename = `survey-${survey.id}-responses.csv`;
+    const filename = `sharevy-survey-${survey.id}-responses.csv`;
     ctx.res.writeHead(200, {
       'Content-Type': 'text/csv; charset=utf-8',
       'Content-Disposition': `attachment; filename="${filename}"`,
