@@ -1,7 +1,15 @@
+import { defaultI18n } from './i18n.js';
+
+/**
+ * An error shown to the user as an error page. `key` is a translation key (locales/*.json) rendered
+ * in the request's language; `message` keeps the English text for logs.
+ */
 export class HttpError extends Error {
-  constructor(status, message) {
-    super(message);
+  constructor(status, key, params = {}) {
+    super(defaultI18n.t(key, params));
     this.status = status;
+    this.key = key;
+    this.params = params;
   }
 }
 
@@ -26,13 +34,13 @@ export function parseCookies(header = '') {
 export async function readForm(req, limitBytes = 1_000_000) {
   const type = req.headers['content-type'] ?? '';
   if (!type.startsWith('application/x-www-form-urlencoded')) {
-    throw new HttpError(415, 'Unsupported form encoding.');
+    throw new HttpError(415, 'error.formEncoding');
   }
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > limitBytes) throw new HttpError(413, 'The submitted form is too large.');
+    if (size > limitBytes) throw new HttpError(413, 'error.formTooLarge');
     chunks.push(chunk);
   }
   return new URLSearchParams(Buffer.concat(chunks).toString('utf8'));

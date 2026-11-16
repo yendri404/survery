@@ -1,15 +1,16 @@
 import { randomBytes } from 'node:crypto';
+import { defaultI18n } from './i18n.js';
 
-export const FIELD_TYPES = {
-  text: 'Short answer',
-  textarea: 'Paragraph (long answer)',
-  number: 'Number',
-  email: 'Email address',
-  date: 'Date (calendar)',
-  select: 'Dropdown list',
-  radio: 'Choose one option',
-  checkbox: 'Choose several options',
-};
+// User-facing messages come from a translator `t` passed in by the caller; English by default.
+const englishT = defaultI18n.t;
+
+const FIELD_TYPE_IDS = ['text', 'textarea', 'number', 'email', 'date', 'select', 'radio', 'checkbox'];
+
+/** Field type id -> label shown in the editor, in the translator's language. */
+export const fieldTypeLabels = (t = englishT) => Object.fromEntries(FIELD_TYPE_IDS.map((type) => [type, t(`fieldType.${type}`)]));
+
+/** Field type id -> English label. */
+export const FIELD_TYPES = fieldTypeLabels();
 
 export const CHOICE_TYPES = new Set(['select', 'radio', 'checkbox']);
 
@@ -51,10 +52,10 @@ export function surveyStatus(survey, today) {
 }
 
 /** Optional name a respondent may leave. Empty means anonymous. */
-export function parseRespondentName(value) {
+export function parseRespondentName(value, { t = englishT } = {}) {
   const name = String(value ?? '').trim();
   if (name.length > LIMITS.respondentName) {
-    return { name, error: `Name must be at most ${LIMITS.respondentName} characters.` };
+    return { name, error: t('validation.respondentNameTooLong', { max: LIMITS.respondentName }) };
   }
   return { name, error: undefined };
 }
@@ -76,19 +77,19 @@ function newFieldId(taken) {
  * The closing date defaults to DEFAULT_OPEN_DAYS from `today` when empty. A past date is rejected,
  * except when it is the survey's current date (editing an expired survey without changing it).
  */
-export function parseSurveyInput({ title, description, fieldsJson, closesOn }, { today = localDateString(), currentClosesOn } = {}) {
+export function parseSurveyInput({ title, description, fieldsJson, closesOn }, { today = localDateString(), currentClosesOn, t = englishT } = {}) {
   const errors = [];
   const cleanTitle = String(title ?? '').trim();
   const cleanDescription = String(description ?? '').trim();
   const cleanClosesOn = String(closesOn ?? '').trim() || addDays(today, DEFAULT_OPEN_DAYS);
 
-  if (!cleanTitle) errors.push('Title is required.');
-  else if (cleanTitle.length > LIMITS.title) errors.push(`Title must be at most ${LIMITS.title} characters.`);
+  if (!cleanTitle) errors.push(t('validation.titleRequired'));
+  else if (cleanTitle.length > LIMITS.title) errors.push(t('validation.titleTooLong', { max: LIMITS.title }));
   if (cleanDescription.length > LIMITS.description) {
-    errors.push(`Description must be at most ${LIMITS.description} characters.`);
+    errors.push(t('validation.descriptionTooLong', { max: LIMITS.description }));
   }
-  if (!isValidDate(cleanClosesOn)) errors.push('Choose a valid closing date.');
-  else if (cleanClosesOn < today && cleanClosesOn !== currentClosesOn) errors.push('The closing date cannot be in the past.');
+  if (!isValidDate(cleanClosesOn)) errors.push(t('validation.closingDateInvalid'));
+  else if (cleanClosesOn < today && cleanClosesOn !== currentClosesOn) errors.push(t('validation.closingDatePast'));
 
   let raw;
   try {
@@ -99,24 +100,24 @@ export function parseSurveyInput({ title, description, fieldsJson, closesOn }, {
 
   const fields = [];
   if (!Array.isArray(raw)) {
-    errors.push('Fields data is invalid.');
+    errors.push(t('validation.fieldsInvalid'));
   } else {
-    if (raw.length === 0) errors.push('Add at least one field.');
-    if (raw.length > LIMITS.fields) errors.push(`A survey can have at most ${LIMITS.fields} fields.`);
+    if (raw.length === 0) errors.push(t('validation.fieldsEmpty'));
+    if (raw.length > LIMITS.fields) errors.push(t('validation.fieldsTooMany', { max: LIMITS.fields }));
 
     const ids = new Set();
     raw.slice(0, LIMITS.fields).forEach((input, index) => {
       const n = index + 1;
       if (!input || typeof input !== 'object') {
-        errors.push(`Field ${n} is invalid.`);
+        errors.push(t('validation.fieldInvalid', { n }));
         return;
       }
       const label = String(input.label ?? '').trim();
       const type = String(input.type ?? '');
 
-      if (!label) errors.push(`Field ${n}: question text is required.`);
-      else if (label.length > LIMITS.label) errors.push(`Field ${n}: question text must be at most ${LIMITS.label} characters.`);
-      if (!Object.hasOwn(FIELD_TYPES, type)) errors.push(`Field ${n}: unknown field type.`);
+      if (!label) errors.push(t('validation.labelRequired', { n }));
+      else if (label.length > LIMITS.label) errors.push(t('validation.labelTooLong', { n, max: LIMITS.label }));
+      if (!Object.hasOwn(FIELD_TYPES, type)) errors.push(t('validation.typeUnknown', { n }));
 
       const id = typeof input.id === 'string' && FIELD_ID.test(input.id) && !ids.has(input.id)
         ? input.id
@@ -127,10 +128,10 @@ export function parseSurveyInput({ title, description, fieldsJson, closesOn }, {
       if (CHOICE_TYPES.has(type)) {
         const rawOptions = Array.isArray(input.options) ? input.options : String(input.options ?? '').split('\n');
         options = [...new Set(rawOptions.map((o) => String(o).trim()).filter(Boolean))];
-        if (options.length === 0) errors.push(`Field ${n}: add at least one option.`);
-        if (options.length > LIMITS.options) errors.push(`Field ${n}: at most ${LIMITS.options} options.`);
+        if (options.length === 0) errors.push(t('validation.optionsEmpty', { n }));
+        if (options.length > LIMITS.options) errors.push(t('validation.optionsTooMany', { n, max: LIMITS.options }));
         if (options.some((o) => o.length > LIMITS.option)) {
-          errors.push(`Field ${n}: each option must be at most ${LIMITS.option} characters.`);
+          errors.push(t('validation.optionTooLong', { n, max: LIMITS.option }));
         }
       }
 
@@ -151,7 +152,7 @@ function isValidDate(value) {
  * Validates a respondent submission. Form inputs are named `f_<fieldId>`.
  * Returns the normalized answers and a map of fieldId -> error message.
  */
-export function validateAnswers(fields, form) {
+export function validateAnswers(fields, form, { t = englishT } = {}) {
   const answers = {};
   const errors = {};
 
@@ -160,9 +161,9 @@ export function validateAnswers(fields, form) {
 
     if (field.type === 'checkbox') {
       const selected = form.getAll(name);
-      if (selected.some((v) => !field.options.includes(v))) errors[field.id] = 'Invalid option selected.';
+      if (selected.some((v) => !field.options.includes(v))) errors[field.id] = t('validation.invalidOption');
       const values = field.options.filter((o) => selected.includes(o));
-      if (field.required && values.length === 0 && !errors[field.id]) errors[field.id] = 'This field is required.';
+      if (field.required && values.length === 0 && !errors[field.id]) errors[field.id] = t('validation.required');
       answers[field.id] = values;
       continue;
     }
@@ -170,29 +171,29 @@ export function validateAnswers(fields, form) {
     const value = String(form.get(name) ?? '').trim();
     answers[field.id] = value;
     if (!value) {
-      if (field.required) errors[field.id] = 'This field is required.';
+      if (field.required) errors[field.id] = t('validation.required');
       continue;
     }
 
     switch (field.type) {
       case 'text':
-        if (value.length > LIMITS.text) errors[field.id] = `At most ${LIMITS.text} characters.`;
+        if (value.length > LIMITS.text) errors[field.id] = t('validation.tooLong', { max: LIMITS.text });
         break;
       case 'textarea':
-        if (value.length > LIMITS.textarea) errors[field.id] = `At most ${LIMITS.textarea} characters.`;
+        if (value.length > LIMITS.textarea) errors[field.id] = t('validation.tooLong', { max: LIMITS.textarea });
         break;
       case 'number':
-        if (!Number.isFinite(Number(value))) errors[field.id] = 'Enter a valid number.';
+        if (!Number.isFinite(Number(value))) errors[field.id] = t('validation.number');
         break;
       case 'email':
-        if (value.length > 254 || !EMAIL.test(value)) errors[field.id] = 'Enter a valid email address.';
+        if (value.length > 254 || !EMAIL.test(value)) errors[field.id] = t('validation.email');
         break;
       case 'date':
-        if (!isValidDate(value)) errors[field.id] = 'Enter a valid date (YYYY-MM-DD).';
+        if (!isValidDate(value)) errors[field.id] = t('validation.date');
         break;
       case 'select':
       case 'radio':
-        if (!field.options.includes(value)) errors[field.id] = 'Invalid option selected.';
+        if (!field.options.includes(value)) errors[field.id] = t('validation.invalidOption');
         break;
     }
   }
@@ -230,8 +231,8 @@ export function csvCell(value, delimiter = ',') {
   return s;
 }
 
-export function toCsv(fields, responses, delimiter = ',') {
-  const header = ['Response ID', 'Submitted at (UTC)', 'Name', ...fields.map((f) => f.label)];
+export function toCsv(fields, responses, delimiter = ',', { t = englishT } = {}) {
+  const header = [t('csv.responseId'), t('csv.submittedAt'), t('csv.name'), ...fields.map((f) => f.label)];
   const rows = responses
     .slice()
     .sort((a, b) => a.id - b.id)

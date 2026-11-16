@@ -52,8 +52,23 @@ npm run create-user -- <email> <name> <password>
 - Results update live while you watch: new answers appear without reloading the page.
 - Results table, per-option summary for choice questions, delete individual responses.
 - Light and dark theme (follows the device setting until changed with the theme button).
+- English and Spanish interface, switched with the language button next to the theme button (see [Languages](#languages)).
 - QR code of the share link on every survey, downloadable as PNG to print or send.
 - CSV export (comma, or semicolon for Excel with regional settings that use `;`). UTF-8 with BOM.
+
+## Languages
+
+The interface is available in **English** and **Spanish**, on creator and respondent pages.
+
+| Who decides | How |
+|-------------|-----|
+| 1. The visitor's choice | The language button (`ES` / `EN`) next to the theme button. It works without JavaScript and is remembered for a year in a `sharevy_lang` cookie. |
+| 2. The browser | Otherwise, the first supported language in the browser's `Accept-Language` setting (`es-MX`, `es-ES`… all count as Spanish). |
+| 3. Default | English. |
+
+Surveys themselves (titles, questions, options) are shown exactly as their creator wrote them. CSV exports use the creator's current language for the fixed column headers.
+
+Translations live in `locales/en.json` and `locales/es.json`. To add a language, see "How to add a language" in [CODE_GUIDE.md](CODE_GUIDE.md#i18njs--interface-languages).
 
 ## Security notes
 
@@ -80,6 +95,8 @@ src/
   surveys.js       domain rules: survey definition, answer validation, CSV
   repo.js          SQLite queries
   views.js         server-rendered HTML
+  i18n.js          interface languages: choosing one, translating, dates
+locales/           en.json, es.json (all interface text)
 public/            builder.js (question editor), app.js, style.css
 scripts/           create-user.js
 test/              node:test suites

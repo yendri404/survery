@@ -22,9 +22,11 @@ async function startApp(overrides = {}) {
 
 /** Minimal browser-like client with a cookie jar (session and device cookies). */
 class Client {
-  constructor(base) {
+  /** `language` is sent as Accept-Language; without it, fetch sends "*" (English). */
+  constructor(base, { language } = {}) {
     this.base = base;
     this.jar = new Map();
+    this.language = language;
   }
 
   /** Cookie header value, as a browser would send it. */
@@ -39,6 +41,7 @@ class Client {
   async request(path, { method = 'GET', form } = {}) {
     const headers = {};
     if (this.jar.size) headers.cookie = this.cookie;
+    if (this.language) headers['accept-language'] = this.language;
     let body;
     if (form) {
       headers['content-type'] = 'application/x-www-form-urlencoded';
@@ -629,5 +632,134 @@ describe('registration disabled', () => {
     const c = new Client(app.base);
     assert.equal((await c.request('/register')).status, 404);
     assert.equal((await c.register('x@corp.local')).status, 404);
+  });
+});
+
+describe('language', () => {
+  let app;
+  before(async () => { app = await startApp(); });
+  after(() => app.close());
+
+  const spanish = () => new Client(app.base, { language: 'es-ES' });
+  const selector = (code, label) => new RegExp(
+    `<div class="topbar-actions">.*<a class="button lang-toggle" href="[^"]+" hreflang="${code.toLowerCase()}" lang="${code.toLowerCase()}" aria-label="${label}" title="${label}">${code}</a><button type="button" class="theme-toggle"`,
+    's',
+  );
+  const clientStrings = (html) => JSON.parse(html.match(/<script type="application\/json" id="i18n-client">([\s\S]*?)<\/script>/)[1]);
+
+  async function spanishCreatorWithSurvey(email) {
+    const c = spanish();
+    await c.register(email, 'Ana');
+    const _csrf = await c.csrf('/surveys/new');
+    const created = await c.request('/surveys', {
+      method: 'POST',
+      form: { _csrf, title: 'Almuerzo', closes_on: '2099-11-26', fields_json: JSON.stringify([{ label: 'Comida', type: 'text', required: true }]) },
+    });
+    assert.equal(created.status, 303, created.text);
+    const id = Number(created.location.match(/^\/surveys\/(\d+)/)[1]);
+    return { c, id, token: await c.shareToken(id) };
+  }
+
+  test('Accept-Language: es renders public, creator and respondent pages in Spanish', async () => {
+    const home = (await spanish().request('/')).text;
+    assert.match(home, /<html lang="es">/);
+    assert.match(home, /Crea una encuesta, comparte un enlace y ve las respuestas/);
+    assert.match(home, /<title>Sharevy<\/title>/);
+    const login = (await spanish().request('/login')).text;
+    assert.match(login, /<title>Iniciar sesión · Sharevy<\/title>/);
+    assert.match(login, /Contraseña/);
+
+    const { c, id, token } = await spanishCreatorWithSurvey('es-pages@corp.local');
+    const list = (await c.request('/surveys')).text;
+    assert.match(list, /<h1>Mis encuestas<\/h1>/);
+    assert.match(list, /0 respuestas/);
+    assert.match((await c.request(`/surveys/${id}?msg=created`)).text, /Encuesta creada/);
+    assert.match((await c.request(`/surveys/${id}`)).text, /Cierra el 26 nov 2099/);
+
+    const form = (await spanish().request(`/s/${token}`)).text;
+    assert.match(form, /<html lang="es">/);
+    assert.match(form, /Abierta hasta el 26 nov 2099/);
+    assert.match(form, /Enviar mis respuestas/);
+    assert.doesNotMatch(form, /Mis encuestas/);
+  });
+
+  test('English stays the default for browsers that ask for any or another language', async () => {
+    for (const language of [undefined, 'fr-FR']) {
+      const home = (await new Client(app.base, { language }).request('/')).text;
+      assert.match(home, /<html lang="en">/);
+      assert.match(home, /Create a survey, share a link, and see the answers/);
+    }
+  });
+
+  test('the language link saves the choice in a cookie and returns to the same page', async () => {
+    const c = new Client(app.base);
+    const res = await c.request('/lang/es?next=%2Fsurveys');
+    assert.equal(res.status, 303);
+    assert.equal(res.location, '/surveys');
+    const cookie = res.headers.getSetCookie().find((h) => h.startsWith('sharevy_lang='));
+    assert.match(cookie, /^sharevy_lang=es; Path=\/; HttpOnly; SameSite=Lax; Max-Age=31536000$/);
+
+    // The cookie wins over the browser setting (fetch sends "accept-language: *").
+    assert.match((await c.request('/login')).text, /<html lang="es">[\s\S]*Iniciar sesión/);
+    assert.equal((await c.request('/lang/en?next=%2Flogin')).location, '/login');
+    assert.match((await c.request('/login')).text, /<html lang="en">[\s\S]*Log in/);
+
+    assert.equal((await c.request('/lang/es?next=%2F%2Fevil.example')).location, '/');
+    assert.equal((await c.request('/lang/es')).location, '/');
+    const unknown = await new Client(app.base).request('/lang/fr');
+    assert.equal(unknown.status, 404);
+    assert.equal(unknown.headers.getSetCookie().length, 0);
+  });
+
+  test('the language switch sits next to the theme switch on creator and respondent pages', async () => {
+    const english = new Client(app.base);
+    await english.register('switch@corp.local');
+    const id = await english.createSurvey([{ label: 'Q', type: 'text' }]);
+    const token = await english.shareToken(id);
+
+    const detail = (await english.request(`/surveys/${id}?msg=saved`)).text;
+    assert.match(detail, selector('ES', 'Cambiar a español'));
+    assert.match(detail, new RegExp(`href="/lang/es[?]next=%2Fsurveys%2F${id}%3Fmsg%3Dsaved"`));
+    assert.match((await new Client(app.base).request(`/s/${token}`)).text, selector('ES', 'Cambiar a español'));
+
+    const es = spanish();
+    assert.match((await es.request('/')).text, selector('EN', 'Switch to English'));
+    const respondentPage = (await es.request(`/s/${token}`)).text;
+    assert.match(respondentPage, selector('EN', 'Switch to English'));
+    assert.match(respondentPage, new RegExp(`href="/lang/en[?]next=%2Fs%2F${token}"`));
+    assert.match(respondentPage, /data-theme-toggle aria-label="Cambiar al tema oscuro"/);
+  });
+
+  test('validation messages and the CSV export follow the language', async () => {
+    const { c, id, token } = await spanishCreatorWithSurvey('es-errors@corp.local');
+
+    const invalid = await c.request('/surveys', { method: 'POST', form: { _csrf: await c.csrf(), title: '', fields_json: '[]' } });
+    assert.equal(invalid.status, 422);
+    assert.match(invalid.text, /El título es obligatorio\./);
+    assert.match(invalid.text, /Agrega al menos una pregunta\./);
+
+    const respondent = spanish();
+    const answer = await respondent.request(`/s/${token}`, { method: 'POST', form: { respondent_name: 'x'.repeat(101) } });
+    assert.equal(answer.status, 422);
+    assert.match(answer.text, /Este campo es obligatorio\./);
+    assert.match(answer.text, /El nombre puede tener como máximo 100 caracteres\./);
+    assert.match(answer.text, /Revisa estas 2 respuestas:/);
+
+    const csv = (await c.request(`/surveys/${id}/export.csv`)).text;
+    assert.equal(csv.split('\r\n')[0], 'ID de respuesta,Enviada el (UTC),Nombre,Comida');
+
+    const missing = await spanish().request('/s/no-existe');
+    assert.equal(missing.status, 404);
+    assert.match(missing.text, /Esta encuesta no existe/);
+  });
+
+  test('browser scripts receive their strings in a JSON data block', async () => {
+    const english = clientStrings((await new Client(app.base).request('/')).text);
+    assert.equal(english.copied, 'Copied!');
+    assert.equal(english.themeToLight, 'Switch to light theme');
+    const es = clientStrings((await spanish().request('/')).text);
+    assert.equal(es.copied, '¡Copiado!');
+    assert.equal(es.resultsUpdated, 'Resultados actualizados');
+    assert.equal(es['builder.addQuestion'], 'Agregar una pregunta');
   });
 });

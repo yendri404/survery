@@ -9,7 +9,7 @@ function sessionCookie(config, id, maxAgeSeconds) {
   return `sid=${id}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${config.cookieSecure ? '; Secure' : ''}`;
 }
 
-export function registerAuthRoutes({ route, repo, config, views }) {
+export function registerAuthRoutes({ route, repo, config, views, ui }) {
   // Keyed by email+IP so an attacker cannot lock a colleague out from another machine.
   const loginFailures = createRateLimiter({ limit: config.loginMaxFailures, windowMs: config.loginWindowMs });
 
@@ -23,13 +23,13 @@ export function registerAuthRoutes({ route, repo, config, views }) {
 
   route('GET', '/', (ctx) => {
     if (ctx.user) return redirect(ctx.res, '/surveys');
-    sendHtml(ctx.res, 200, views.homePage({ allowRegistration: config.allowRegistration }));
+    sendHtml(ctx.res, 200, views.homePage({ ...ui(ctx), allowRegistration: config.allowRegistration }));
   });
 
   route('GET', '/login', (ctx) => {
     const next = safeNext(ctx.url.searchParams.get('next'));
     if (ctx.user) return redirect(ctx.res, next);
-    sendHtml(ctx.res, 200, views.loginPage({ next, allowRegistration: config.allowRegistration }));
+    sendHtml(ctx.res, 200, views.loginPage({ ...ui(ctx), next, allowRegistration: config.allowRegistration }));
   });
 
   route('POST', '/login', async (ctx) => {
@@ -43,8 +43,8 @@ export function registerAuthRoutes({ route, repo, config, views }) {
       const retryAfter = loginFailures.retryAfterSeconds(limitKey);
       ctx.res.setHeader('Retry-After', String(retryAfter));
       return sendHtml(ctx.res, 429, views.loginPage({
-        next, email, allowRegistration: config.allowRegistration,
-        error: `Too many failed login attempts. Try again in ${Math.ceil(retryAfter / 60)} minute(s).`,
+        ...ui(ctx), next, email, allowRegistration: config.allowRegistration,
+        error: ctx.i18n.t('login.tooManyAttempts', { minutes: Math.ceil(retryAfter / 60) }),
       }));
     }
 
@@ -53,7 +53,7 @@ export function registerAuthRoutes({ route, repo, config, views }) {
     if (!user || !valid) {
       loginFailures.hit(limitKey);
       return sendHtml(ctx.res, 401, views.loginPage({
-        next, email, error: 'Invalid email or password.', allowRegistration: config.allowRegistration,
+        ...ui(ctx), next, email, error: ctx.i18n.t('login.invalid'), allowRegistration: config.allowRegistration,
       }));
     }
     loginFailures.reset(limitKey);
@@ -61,25 +61,26 @@ export function registerAuthRoutes({ route, repo, config, views }) {
   });
 
   route('GET', '/register', (ctx) => {
-    if (!config.allowRegistration) throw new HttpError(404, 'Registration is disabled. Ask an administrator for an account.');
+    if (!config.allowRegistration) throw new HttpError(404, 'register.disabled');
     if (ctx.user) return redirect(ctx.res, '/surveys');
-    sendHtml(ctx.res, 200, views.registerPage({}));
+    sendHtml(ctx.res, 200, views.registerPage({ ...ui(ctx) }));
   });
 
   route('POST', '/register', async (ctx) => {
-    if (!config.allowRegistration) throw new HttpError(404, 'Registration is disabled. Ask an administrator for an account.');
+    if (!config.allowRegistration) throw new HttpError(404, 'register.disabled');
     const form = await readForm(ctx.req);
     const values = { name: (form.get('name') ?? '').trim(), email: (form.get('email') ?? '').trim() };
     const password = form.get('password') ?? '';
     const errors = [];
+    const { t } = ctx.i18n;
 
-    if (!values.name || values.name.length > 100) errors.push('Name is required (max. 100 characters).');
-    if (!EMAIL.test(values.email) || values.email.length > 254) errors.push('Enter a valid email address.');
-    if (password.length < 8 || password.length > 200) errors.push('Password must be between 8 and 200 characters.');
-    if (password !== (form.get('confirm') ?? '')) errors.push('Passwords do not match.');
-    if (!errors.length && repo.findUserByEmail(values.email)) errors.push('An account with this email already exists.');
+    if (!values.name || values.name.length > 100) errors.push(t('register.nameInvalid'));
+    if (!EMAIL.test(values.email) || values.email.length > 254) errors.push(t('register.emailInvalid'));
+    if (password.length < 8 || password.length > 200) errors.push(t('register.passwordLength'));
+    if (password !== (form.get('confirm') ?? '')) errors.push(t('register.passwordMismatch'));
+    if (!errors.length && repo.findUserByEmail(values.email)) errors.push(t('register.emailTaken'));
 
-    if (errors.length) return sendHtml(ctx.res, 422, views.registerPage({ values, errors }));
+    if (errors.length) return sendHtml(ctx.res, 422, views.registerPage({ ...ui(ctx), values, errors }));
 
     const userId = repo.createUser({ ...values, passwordHash: await hashPassword(password) });
     startSession(ctx, userId, '/surveys');

@@ -293,6 +293,9 @@ th { background: var(--brand-soft); }
 .topbar-actions { display: flex; align-items: center; gap: .25rem .75rem; flex-wrap: wrap; }
 .theme-toggle { width: var(--tap); height: var(--tap); min-height: var(--tap); padding: 0; background: transparent; border-color: rgba(255, 255, 255, .45); color: #fff; }
 .theme-toggle:hover { background: rgba(255, 255, 255, .15); border-color: #fff; }
+/* Language switch: a link styled like the theme button, showing the code of the other language. */
+.lang-toggle { width: var(--tap); height: var(--tap); min-height: var(--tap); padding: 0; background: transparent; border-color: rgba(255, 255, 255, .45); color: #fff; font-size: .9rem; font-weight: 700; letter-spacing: .04em; text-decoration: none; }
+.lang-toggle:hover { background: rgba(255, 255, 255, .15); border-color: #fff; }
 .theme-toggle .icon-sun { display: none; }
 :root[data-theme="dark"] .theme-toggle .icon-sun { display: inline; }
 :root[data-theme="dark"] .theme-toggle .icon-moon { display: none; }

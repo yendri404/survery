@@ -18,7 +18,7 @@ A file-by-file tour of the server code: what each module does, what it exports, 
    - [Routes](#routes) — `routes/auth.js`, `routes/surveys.js`, `routes/public.js`
    - [Domain](#domain) — `surveys.js`
    - [Infrastructure](#infrastructure) — `repo.js`, `auth.js`, `rate-limit.js`
-   - [Presentation](#presentation) — `views.js`
+   - [Presentation](#presentation) — `views.js`, `i18n.js`
 6. [Common changes: where to touch](#6-common-changes-where-to-touch)
 
 ---
@@ -37,13 +37,16 @@ src/
 ├── rate-limit.js      In-memory rate limiter + client IP detection
 ├── qr.js              QR code of the share link (SVG for the page, PNG download)
 ├── live.js            Live updates: in-process events streamed with Server-Sent Events
+├── i18n.js            Interface languages: picks one per request, translates, formats dates
 ├── repo.js            All SQL queries (the only file that talks to the DB)
 ├── surveys.js         Business rules: survey definitions, answers, CSV
 ├── views.js           Server-rendered HTML pages
 └── routes/
     ├── auth.js        Creator accounts: register, login, logout
     ├── surveys.js     Creator dashboard: CRUD, results, export
-    └── public.js      Respondents: answer a survey through its link
+    └── public.js      Respondents: answer a survey through its link, and the language switch
+
+locales/               en.json, es.json: every interface text, one file per language
 ```
 
 | File | Lines (approx.) | Layer | One-line purpose |
@@ -64,6 +67,7 @@ src/
 | `qr.js` | 20 | Infrastructure | QR codes (wraps the `qrcode` package) |
 | `live.js` | 45 | Infrastructure | Live updates (Server-Sent Events) |
 | `views.js` | 270 | Presentation | HTML templates |
+| `i18n.js` | 80 | Presentation | Translations (`locales/*.json`) and language choice |
 
 ---
 
@@ -259,17 +263,21 @@ Pass `':memory:'` for a throwaway database (the tests do this).
 | Function | Responsibility |
 |----------|----------------|
 | Security headers | Strict `Content-Security-Policy` (no inline scripts), `X-Frame-Options: DENY`, `nosniff`, `no-referrer` |
+| Language | `ctx.i18n = createI18n(negotiateLanguage(cookie sharevy_lang, Accept-Language))`, before routing, so error pages are translated too |
 | `loadSession(ctx)` | Cookie `sid` → `hashSessionId` → `repo.getSession` → `ctx.session`, `ctx.user` |
 | `matchRoute(method, path)` | Returns the handler and decoded params. Returns 405 if the path exists with another method, 404 if it does not exist, 400 for a malformed `%` encoding |
-| Error boundary | `HttpError` → page with that status. Unknown error → logged + generic 500 (no stack traces to users). Respondent pages (`/s/...`) render without creator navigation |
+| Error boundary | `HttpError` → page with that status, its message translated with `ctx.i18n`. Unknown error → logged + generic 500 (no stack traces to users). Respondent pages (`/s/...`) render without creator navigation |
 
 **The `ctx` object** passed to every handler:
 
 ```js
-{ req, res, url, params, user, session }
+{ req, res, url, params, user, session, i18n }
+// i18n    → { lang, t, tn, formatDate } for the request's language (see i18n.js)
 // user    → { id, name, email } | null
 // session → { id, user_id, csrf_token, expires_at } | null
 ```
+
+Routes also receive `ui(ctx)` in their dependencies: `{ i18n, currentPath }`, the two things every page needs (its language, and its own URL for the language switch). Pass it to every view: `views.homePage({ ...ui(ctx), ... })`.
 
 > **Order matters:** routes are matched in registration order. `/surveys/new` is registered before `/surveys/:id`, otherwise `new` would be captured as an id.
 
@@ -279,19 +287,19 @@ Pass `':memory:'` for a throwaway database (the tests do this).
 
 | Export | What it does |
 |--------|--------------|
-| `HttpError(status, message)` | Throwable error carrying an HTTP status; `app.js` renders it |
+| `HttpError(status, key, params)` | Throwable error carrying an HTTP status and a translation key (e.g. `'error.surveyNotFound'`); `app.js` renders it in the request's language. `err.message` holds the English text for logs |
 | `parseCookies(header)` | `"a=1; b=2"` → `{ a: '1', b: '2' }`, tolerant of bad encoding |
 | `readForm(req, limit = 1 MB)` | Reads a `application/x-www-form-urlencoded` body and returns `URLSearchParams`. 415 for other content types, 413 if over the limit |
 | `sendHtml(res, status, html)` | Writes HTML with `Cache-Control: no-store` |
 | `redirect(res, location, headers)` | `303 See Other`, so the browser does a GET after a POST (no "resend form?" prompts) |
-| `safeNext(value)` | Validates the post-login redirect target (see below) |
+| `safeNext(value, fallback)` | Validates a redirect target from the URL: after login, and after switching language (see below) |
 
 **`safeNext` in detail** — prevents open redirects (`/login?next=https://evil.com`):
 
 1. It must start with `/` and not with `//`.
 2. It must not contain control characters, spaces or `\`. Browsers silently strip tabs and newlines, so `/\t/evil.com` would become `//evil.com`.
 3. It is parsed with `new URL()`, and the origin must stay the same.
-4. Anything else falls back to `/surveys`.
+4. Anything else falls back to `/surveys` (or the `fallback` given; the language switch uses `/`).
 
 `readForm` returns `URLSearchParams` on purpose: `getAll(name)` handles multi-value fields (checkboxes) without a custom parser.
 
@@ -373,6 +381,7 @@ All routes are wrapped in `authed` / `authedPost`.
 | GET | `/s/:token` | The form, or a "closed" page |
 | POST | `/s/:token` | 303 `/thanks` · 422 with per-field errors and the values kept · 403 closed · 429 rate limited |
 | GET | `/s/:token/thanks` | Confirmation page |
+| GET | `/lang/:code?next=<path>` | Language switch for everyone: 303 to `safeNext(next, '/')` with a `sharevy_lang` cookie (HttpOnly, SameSite=Lax, 1 year). 404 for an unsupported code |
 
 **Order of checks on submit** (cheapest and most decisive first):
 
@@ -398,7 +407,8 @@ The heart of the app. It has no database, no HTTP and no HTML, which is why it c
 
 | Export | Content |
 |--------|---------|
-| `FIELD_TYPES` | `text`, `textarea`, `number`, `email`, `date`, `select`, `radio`, `checkbox` → display label |
+| `FIELD_TYPES` | `text`, `textarea`, `number`, `email`, `date`, `select`, `radio`, `checkbox` → English display label |
+| `fieldTypeLabels(t)` | The same map with labels in the translator's language (used by the editor) |
 | `CHOICE_TYPES` | `select`, `radio`, `checkbox` (the types that have options) |
 | `LIMITS` | Maximum lengths and counts (title 200, 100 fields, 100 options, text answers 1 000, long text 10 000…) |
 
@@ -408,19 +418,21 @@ The heart of the app. It has no database, no HTTP and no HTML, which is why it c
 { id: 'a1b2c3d4e5f6', label: 'Department', type: 'select', required: true, options: ['IT', 'HR'] }
 ```
 
+**Messages:** validation messages come from a translator passed in the options argument (`{ t }`), English by default. Routes pass `ctx.i18n.t`; unit tests can omit it. The only import besides `node:crypto` is `i18n.js`, for that English default.
+
 **Functions**
 
 | Function | Input → Output | Notes |
 |----------|----------------|-------|
-| `parseSurveyInput({ title, description, fieldsJson, closesOn }, { today, currentClosesOn })` | → `{ value, errors[] }` | Empty `closesOn` defaults to `today` + `DEFAULT_OPEN_DAYS` (10). A past date is rejected unless it is the survey's current date (editing an expired survey). Also trims, enforces limits, removes duplicate and blank options. **Keeps a valid existing `id`** so edits do not orphan answers; generates a new one when it is missing, invalid or duplicated |
-| `validateAnswers(fields, form)` | → `{ answers, errors{fieldId: msg} }` | Reads only defined fields (`f_<id>`), so extra keys are ignored. Checks type, required, and that choices are among the options. Checkbox values are returned in option order |
+| `parseSurveyInput({ title, description, fieldsJson, closesOn }, { today, currentClosesOn, t })` | → `{ value, errors[] }` | Empty `closesOn` defaults to `today` + `DEFAULT_OPEN_DAYS` (10). A past date is rejected unless it is the survey's current date (editing an expired survey). Also trims, enforces limits, removes duplicate and blank options. **Keeps a valid existing `id`** so edits do not orphan answers; generates a new one when it is missing, invalid or duplicated |
+| `validateAnswers(fields, form, { t })` | → `{ answers, errors{fieldId: msg} }` | Reads only defined fields (`f_<id>`), so extra keys are ignored. Checks type, required, and that choices are among the options. Checkbox values are returned in option order |
 | `surveyStatus(survey, today)` | → `'open' | 'closed' | 'expired'` | `closed` = switched off by the creator; `expired` = `today` is after `closesOn`. Only `open` accepts answers |
 | `localDateString(date)`, `addDays(date, n)` | → `YYYY-MM-DD` | Server-local calendar date; calendar math without time zones |
-| `parseRespondentName(value)` | → `{ name, error }` | Optional respondent name: trimmed, max. 100 characters, empty means anonymous |
+| `parseRespondentName(value, { t })` | → `{ name, error }` | Optional respondent name: trimmed, max. 100 characters, empty means anonymous |
 | `formatAnswer(value)` | → `string` | Arrays become `"a, b"` |
 | `summarize(fields, responses)` | → per choice field: `answered`, counts per option | Feeds the summary section of the detail page |
 | `csvCell(value, delimiter)` | → escaped cell | Quotes when needed. Prefixes `'` to values starting with `= + - @` (formula injection), except plain numbers like `-5` |
-| `toCsv(fields, responses, delimiter)` | → full CSV text | Header + rows in submission order, `\r\n` line endings |
+| `toCsv(fields, responses, delimiter, { t })` | → full CSV text | Header (fixed columns in the translator's language) + rows in submission order, `\r\n` line endings |
 
 **Validation per type**
 
@@ -521,6 +533,8 @@ Both use medium error correction and a 2-module margin. The SVG is embedded with
 
 Server-rendered template strings. Every page is plain HTML forms, so it works without JavaScript, except the question builder (`public/builder.js`).
 
+**Every view takes `i18n` and `currentPath`** (from `ui(ctx)`) and gets all its text from `i18n.t(key)`; without them it renders English. Text that must contain markup (a link or `<strong>` inside a sentence) uses `tHtml(i18n, key, { name: markup })`: the translation is escaped first, then each `{name}` is replaced by markup built in `views.js`.
+
 **Safety first:** `esc(value)` escapes `& < > " '`. **Every** user-controlled value goes through it, in text and in attributes. When adding a view, never interpolate raw data.
 
 | Export | Page | Notes |
@@ -536,9 +550,11 @@ Server-rendered template strings. Every page is plain HTML forms, so it works wi
 
 **Branding and icons:** `APP_NAME` (`Sharevy`) is used for the header and every `<title>` (`<page> · Sharevy`). `icon(name)` returns an inline SVG from the `ICONS` map; icon-only buttons always carry an `aria-label` and a `title` so they stay understandable.
 
-**Confirmation messages:** creator actions redirect with `?msg=<key>` (`created`, `saved`, `closed`, `opened`, `deleted`, `response-deleted`). `flashMessage(key)` maps only known keys to fixed text; the query value is never reflected into the page.
+**Confirmation messages:** creator actions redirect with `?msg=<key>` (`created`, `saved`, `closed`, `opened`, `deleted`, `response-deleted`). `flashMessage(key, i18n)` maps only known keys to fixed, translated text; the query value is never reflected into the page.
 
 **Light and dark theme:** every page has a theme button (`themeToggle()`, rendered `hidden` until `public/app.js` activates it). The choice is stored in `localStorage` (`sharevy-theme`); without a choice, the OS setting (`prefers-color-scheme`) decides. `public/theme.js` is loaded in `<head>` so a saved choice applies before the first paint (no flash of the wrong theme). Colors are CSS custom properties in `style.css`; the dark palette redefines them under `[data-theme="dark"]` and in the `prefers-color-scheme: dark` media query. Use `--brand-text` for brand-colored text and `--brand` for brand backgrounds.
+
+**Language switch:** next to the theme button, `languageToggle()` renders a plain link (`ES` / `EN`, labelled in the target language) to `/lang/<code>?next=<current page>`. It needs no JavaScript. Strings that the browser scripts need (keys starting with `client.`) travel in `<script type="application/json" id="i18n-client">` in `<head>`: a data block, never executed, so the CSP allows it; `<` is written as `\u003c` so the JSON cannot close the tag. `public/app.js` and `public/builder.js` read it.
 
 **Mobile first:** `public/style.css` targets phones by default (44px touch targets, 16px+ inputs, full-width buttons) and enhances layouts from 700px. On phones, the responses table turns into one card per response using each cell's `data-label`.
 
@@ -548,22 +564,65 @@ Server-rendered template strings. Every page is plain HTML forms, so it works wi
 
 ---
 
+#### `i18n.js` — interface languages
+
+All interface text lives in `locales/<code>.json`, one flat file per language, read once at startup.
+
+| Export | What it does |
+|--------|--------------|
+| `SUPPORTED_LANGUAGES`, `DEFAULT_LANGUAGE` | `['en', 'es']`, `'en'` |
+| `LANGUAGE_COOKIE` | `sharevy_lang`, set by `GET /lang/:code` |
+| `negotiateLanguage(cookie, acceptLanguage)` | A supported cookie wins; otherwise the first supported language of `Accept-Language` by q-value (`es-MX` → `es`); `*`, nothing or only unsupported languages → `en` |
+| `createI18n(lang)` | `{ lang, t(key, params), tn(key, count, params), formatDate(yyyyMmDd) }` |
+| `clientMessages(i18n)` | The `client.*` strings, prefix removed, for the browser scripts |
+| `defaultI18n` | English translator, the default wherever no request is involved |
+
+**Locale file format**
+
+```json
+{
+  "list.responses.one": "{count} response",
+  "list.responses.other": "{count} responses",
+  "validation.titleTooLong": "Title must be at most {max} characters."
+}
+```
+
+| Rule | Detail |
+|------|--------|
+| Keys | Flat, dot-separated, grouped by page (`nav.`, `detail.`, `respond.`, `validation.`, `client.`…) |
+| Placeholders | `{name}`, filled by `t(key, { name })`. Unknown placeholders are left as they are |
+| Plurals | `<key>.one` / `<key>.other`, chosen by `tn(key, count)` with `Intl.PluralRules`; `{count}` is available |
+| Missing key | Falls back to English, then to the key itself |
+| Dates | `formatDate` uses `Intl` (UTC): `Nov 26, 2026` in English, `26 nov 2026` in Spanish |
+
+`test/i18n.test.js` checks that every locale file has exactly the keys of `en.json` and keeps every `{placeholder}`.
+
+**How to add a language** (e.g. Portuguese)
+
+1. Copy `locales/en.json` to `locales/pt.json` and translate the values (keep keys and `{placeholders}`).
+2. Add `'pt'` to `SUPPORTED_LANGUAGES` and a date locale (`pt: 'pt-BR'`) to `DATE_LOCALES` in `i18n.js`.
+3. Run `npm test`. The language button cycles to the next supported language, so it now goes EN → ES → PT.
+
+---
+
 ## 6. Common changes: where to touch
 
 | I want to… | Files |
 |------------|-------|
-| **Add a field type** (e.g. `phone`) | `surveys.js` (`FIELD_TYPES` + a `validateAnswers` case) → `views.js` (`renderField` / `INPUT_TYPES`) → `test/surveys.test.js`. The builder picks it up automatically from `FIELD_TYPES` |
-| **Add a page or endpoint** | The matching `routes/*.js` + a function in `views.js` (+ a `repo.js` method if it needs data) + `test/app.test.js` |
+| **Add a field type** (e.g. `phone`) | `surveys.js` (`FIELD_TYPE_IDS` + a `validateAnswers` case) → a `fieldType.<id>` label in every `locales/*.json` → `views.js` (`renderField` / `INPUT_TYPES`) → `test/surveys.test.js`. The builder picks it up automatically from `FIELD_TYPES` |
+| **Add a page or endpoint** | The matching `routes/*.js` + a function in `views.js` (pass `...ui(ctx)`; new text goes in every `locales/*.json`) (+ a `repo.js` method if it needs data) + `test/app.test.js` |
 | **Add a column** | `db.js` (schema + an `ALTER TABLE` for existing databases) → `repo.js` (query + hydrate) |
 | **Add a setting** | `config.js` → the consumer → the README configuration table |
 | **Change limits** | `LIMITS` in `surveys.js` (survey content) or `config.js` (rate limits) |
 | **Add an icon** | Add its path to `ICONS` in `views.js` (and in `public/builder.js` if the builder uses it) |
-| **Translate the UI** | Strings live in `views.js`, `public/builder.js`, and the error messages in `surveys.js` and `routes/*.js` |
+| **Change or translate a text** | Edit the key in `locales/en.json` and `locales/es.json`. Browser-script text uses `client.*` keys |
+| **Add a language** | A new `locales/<code>.json` + `SUPPORTED_LANGUAGES` and `DATE_LOCALES` in `i18n.js` (see [`i18n.js`](#i18njs--interface-languages)) |
 
 **Checklist before committing**
 
 - [ ] `npm test` is green
 - [ ] Every new HTML interpolation uses `esc()`
+- [ ] Every new interface text is a key in every `locales/*.json` (`test/i18n.test.js` checks it)
 - [ ] Every new creator route uses `authed` / `authedPost` and `ownedSurvey`
 - [ ] New SQL lives in `repo.js` and uses `?` parameters
 - [ ] No inline `<script>` or `style=""` (the CSP would block it)

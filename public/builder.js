@@ -5,6 +5,15 @@
   if (!root || !hidden) return;
 
   const types = JSON.parse(root.dataset.types);
+  // Interface strings from the server's JSON data block; {name} placeholders are filled in here.
+  let messages = {};
+  try {
+    messages = JSON.parse(document.getElementById('i18n-client')?.textContent || '{}');
+  } catch {
+    // Missing strings show their keys; the builder keeps working.
+  }
+  const t = (key, params = {}) => (messages[`builder.${key}`] ?? key)
+    .replace(/\{(\w+)\}/g, (match, name) => (Object.hasOwn(params, name) ? String(params[name]) : match));
   const CHOICE_TYPES = new Set(['select', 'radio', 'checkbox']);
   const SVG_NS = 'http://www.w3.org/2000/svg';
   const ICONS = {
@@ -63,7 +72,7 @@
   }
 
   const list = el('ol', { className: 'field-list' });
-  const addButton = el('button', { type: 'button', className: 'big add-question' }, [svgIcon('plus'), ' Add a question']);
+  const addButton = el('button', { type: 'button', className: 'big add-question' }, [svgIcon('plus'), ` ${t('addQuestion')}`]);
   addButton.addEventListener('click', () => {
     fields.push(blank());
     render(fields.length - 1);
@@ -85,17 +94,17 @@
 
   function remove(index) {
     if (fields.length === 1) {
-      alert('A survey needs at least one question.');
+      alert(t('needOneQuestion'));
       return;
     }
     const name = fields[index].label.trim();
-    if (name && !confirm(`Delete the question "${name}"?`)) return;
+    if (name && !confirm(t('deleteConfirm', { name }))) return;
     fields.splice(index, 1);
     render(Math.min(index, fields.length - 1));
   }
 
   function fieldItem(field, index) {
-    const label = el('input', { value: field.label, required: true, maxLength: 300, placeholder: 'Write your question here' });
+    const label = el('input', { value: field.label, required: true, maxLength: 300, placeholder: t('questionPlaceholder') });
     label.addEventListener('input', () => { field.label = label.value; });
 
     const type = el('select', {}, Object.entries(types).map(([value, text]) =>
@@ -104,11 +113,11 @@
     const required = el('input', { type: 'checkbox', checked: field.required });
     required.addEventListener('change', () => { field.required = required.checked; });
 
-    const options = el('textarea', { value: field.options, rows: 4, placeholder: 'Write one option per line, for example:\nYes\nNo' });
+    const options = el('textarea', { value: field.options, rows: 4, placeholder: t('optionsPlaceholder') });
     options.addEventListener('input', () => { field.options = options.value; });
     const optionsWrap = el('label', { className: 'options' }, [
-      'Options ',
-      el('span', { className: 'hint', textContent: 'One option per line.' }),
+      `${t('options')} `,
+      el('span', { className: 'hint', textContent: t('optionsHint') }),
       options,
     ]);
     optionsWrap.hidden = !CHOICE_TYPES.has(field.type);
@@ -120,21 +129,21 @@
     });
 
     const toolbar = el('div', { className: 'field-toolbar' }, [
-      el('span', { className: 'field-number', textContent: `Question ${index + 1}` }),
+      el('span', { className: 'field-number', textContent: t('questionNumber', { n: index + 1 }) }),
       el('div', { className: 'icon-group' }, [
-        iconButton('up', 'Move up', () => move(index, -1), { disabled: index === 0 }),
-        iconButton('down', 'Move down', () => move(index, 1), { disabled: index === fields.length - 1 }),
-        iconButton('copy', 'Duplicate question', () => duplicate(index)),
-        iconButton('trash', 'Delete question', () => remove(index), { danger: true }),
+        iconButton('up', t('moveUp'), () => move(index, -1), { disabled: index === 0 }),
+        iconButton('down', t('moveDown'), () => move(index, 1), { disabled: index === fields.length - 1 }),
+        iconButton('copy', t('duplicate'), () => duplicate(index)),
+        iconButton('trash', t('delete'), () => remove(index), { danger: true }),
       ]),
     ]);
 
     return el('li', { className: 'field-item panel' }, [
       toolbar,
-      el('label', {}, ['Question', label]),
+      el('label', {}, [t('question'), label]),
       el('div', { className: 'field-settings' }, [
-        el('label', {}, ['Type of answer', type]),
-        el('label', { className: 'choice switch' }, [required, el('span', { textContent: 'Answer is required' })]),
+        el('label', {}, [t('answerType'), type]),
+        el('label', { className: 'choice switch' }, [required, el('span', { textContent: t('required') })]),
       ]),
       optionsWrap,
     ]);

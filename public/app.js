@@ -1,5 +1,15 @@
 // Small progressive enhancements. Every page works without this file except the question builder.
 
+// Interface strings in the page language, from the JSON data block the server puts in <head>.
+const i18n = (() => {
+  try {
+    return JSON.parse(document.getElementById('i18n-client')?.textContent || '{}');
+  } catch {
+    return {};
+  }
+})();
+const t = (key) => i18n[key] ?? key;
+
 function flashButton(btn, text) {
   const label = btn.querySelector('span') ?? btn;
   const original = label.textContent;
@@ -22,11 +32,11 @@ document.addEventListener('click', (event) => {
   // navigator.clipboard only exists on HTTPS/localhost; fall back for plain-HTTP intranets.
   if (navigator.clipboard && window.isSecureContext) {
     navigator.clipboard.writeText(input.value).then(
-      () => flashButton(btn, 'Copied!'),
-      () => { document.execCommand('copy'); flashButton(btn, 'Copied!'); },
+      () => flashButton(btn, t('copied')),
+      () => { document.execCommand('copy'); flashButton(btn, t('copied')); },
     );
   } else {
-    flashButton(btn, document.execCommand('copy') ? 'Copied!' : 'Select and copy the link');
+    flashButton(btn, document.execCommand('copy') ? t('copied') : t('copyFallback'));
   }
 });
 
@@ -52,7 +62,7 @@ for (const input of document.querySelectorAll('.share-url')) {
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
   const current = () => root.dataset.theme ?? (prefersDark.matches ? 'dark' : 'light');
   const syncLabels = () => {
-    const label = current() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
+    const label = current() === 'dark' ? t('themeToLight') : t('themeToDark');
     for (const btn of document.querySelectorAll('[data-theme-toggle]')) {
       btn.setAttribute('aria-label', label);
       btn.title = label;
@@ -102,7 +112,7 @@ if (window.EventSource) {
           region.classList.remove('live-updated');
           void region.offsetWidth; // restart the highlight animation
           region.classList.add('live-updated');
-          announce('Results updated');
+          announce(t('resultsUpdated'));
         }
       } catch {
         // Network hiccup: the next event or reconnection triggers another refresh.

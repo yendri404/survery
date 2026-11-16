@@ -4,18 +4,19 @@ import { HttpError, redirect, sendHtml } from '../http.js';
 import { qrPng, qrSvg } from '../qr.js';
 import { DEFAULT_OPEN_DAYS, addDays, parseSurveyInput, toCsv } from '../surveys.js';
 
-export function registerSurveyRoutes({ route, repo, config, views, today, live }) {
+export function registerSurveyRoutes({ route, repo, config, views, today, live, ui }) {
   const session = (ctx) => ({
+    ...ui(ctx),
     user: ctx.user,
     csrf: ctx.session.csrf_token,
-    flash: views.flashMessage(ctx.url.searchParams.get('msg')),
+    flash: views.flashMessage(ctx.url.searchParams.get('msg'), ctx.i18n),
     today: today(),
   });
 
   function ownedSurvey(ctx) {
     const id = Number(ctx.params.id);
     const survey = Number.isSafeInteger(id) ? repo.getOwnedSurvey(id, ctx.user.id) : undefined;
-    if (!survey) throw new HttpError(404, 'Survey not found.');
+    if (!survey) throw new HttpError(404, 'error.surveyNotFound');
     return survey;
   }
 
@@ -53,7 +54,7 @@ export function registerSurveyRoutes({ route, repo, config, views, today, live }
 
   route('POST', '/surveys', authedPost((ctx, form) => {
     const input = editorInput(form);
-    const { value, errors } = parseSurveyInput(input, { today: today() });
+    const { value, errors } = parseSurveyInput(input, { today: today(), t: ctx.i18n.t });
     if (errors.length) return sendHtml(ctx.res, 422, views.surveyEditorPage({ ...session(ctx), values: input, errors }));
     const id = repo.createSurvey({ ownerId: ctx.user.id, publicToken: newToken(18), ...value });
     live.surveyChanged({ id, ownerId: ctx.user.id });
@@ -68,7 +69,7 @@ export function registerSurveyRoutes({ route, repo, config, views, today, live }
       survey,
       responses: repo.listResponses(survey.id),
       shareUrl: url,
-      qrSvg: await qrSvg(url, 'QR code that opens this survey'),
+      qrSvg: await qrSvg(url, views.esc(ctx.i18n.t('detail.qrLabel'))),
     }));
   }));
 
@@ -97,7 +98,7 @@ export function registerSurveyRoutes({ route, repo, config, views, today, live }
   route('POST', '/surveys/:id', authedPost((ctx, form) => {
     const survey = ownedSurvey(ctx);
     const input = editorInput(form);
-    const { value, errors } = parseSurveyInput(input, { today: today(), currentClosesOn: survey.closesOn });
+    const { value, errors } = parseSurveyInput(input, { today: today(), currentClosesOn: survey.closesOn, t: ctx.i18n.t });
     if (errors.length) return sendHtml(ctx.res, 422, views.surveyEditorPage({ ...session(ctx), survey, values: input, errors }));
     repo.updateSurvey(survey.id, ctx.user.id, value);
     live.surveyChanged(survey);
@@ -129,7 +130,7 @@ export function registerSurveyRoutes({ route, repo, config, views, today, live }
   route('GET', '/surveys/:id/export.csv', authed((ctx) => {
     const survey = ownedSurvey(ctx);
     const delimiter = ctx.url.searchParams.get('delimiter') === 'semicolon' ? ';' : ',';
-    const csv = toCsv(survey.fields, repo.listResponses(survey.id), delimiter);
+    const csv = toCsv(survey.fields, repo.listResponses(survey.id), delimiter, { t: ctx.i18n.t });
     const filename = `sharevy-survey-${survey.id}-responses.csv`;
     ctx.res.writeHead(200, {
       'Content-Type': 'text/csv; charset=utf-8',

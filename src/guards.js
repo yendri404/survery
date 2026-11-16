@@ -23,6 +23,6 @@ export const authedPost = (handler) => async (ctx) => {
 export function checkCsrf(ctx, form) {
   const expected = ctx.session?.csrf_token;
   if (!expected || !safeEqual(form.get('_csrf') ?? '', expected)) {
-    throw new HttpError(403, 'This form has expired. Go back, reload the page and try again.');
+    throw new HttpError(403, 'error.csrf');
   }
 }
