@@ -119,6 +119,17 @@ describe('survey app', () => {
     await c.register('redir@corp.local');
     const res = await c.request('/login', { method: 'POST', form: { email: 'redir@corp.local', password: 'secret123', next: '//evil.example' } });
     assert.equal(res.location, '/surveys');
+
+    // Browsers strip tabs/newlines when parsing URLs, so "/\t/evil" would become "//evil".
+    for (const next of ['/\t/evil.example', '/\n/evil.example', '/\\evil.example']) {
+      const post = await c.request('/login', { method: 'POST', form: { email: 'redir@corp.local', password: 'secret123', next } });
+      assert.equal(post.location, '/surveys', JSON.stringify(next));
+    }
+    const get = await c.request('/login?next=%2F%09%2Fevil.example');
+    assert.equal(get.location, '/surveys');
+
+    const valid = await c.request('/login?next=%2Fsurveys%2Fnew%3Fa%3D1');
+    assert.equal(valid.location, '/surveys/new?a=1');
   });
 
   test('full flow: create survey, answer anonymously, see results and export CSV', async () => {

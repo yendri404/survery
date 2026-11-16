@@ -48,9 +48,19 @@ export function redirect(res, location, headers = {}) {
   res.end();
 }
 
-/** Only allow same-site relative paths as redirect targets. */
+/**
+ * Only allow same-site relative paths as redirect targets.
+ * Control characters, spaces and backslashes are rejected because browsers strip or
+ * normalize them while parsing URLs ("/\t/evil.com" becomes "//evil.com").
+ */
 export function safeNext(value, fallback = '/surveys') {
-  if (typeof value !== 'string') return fallback;
-  if (!value.startsWith('/') || value.startsWith('//') || value.startsWith('/\\')) return fallback;
-  return value;
+  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')) return fallback;
+  if (/[\x00-\x20\x7f\\]/.test(value)) return fallback;
+  const origin = 'http://same-site.invalid';
+  try {
+    const url = new URL(value, origin);
+    return url.origin === origin ? url.pathname + url.search : fallback;
+  } catch {
+    return fallback;
+  }
 }
