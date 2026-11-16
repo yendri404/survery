@@ -91,9 +91,11 @@ function layout({ title, body, user, csrf, flash, respondent = false, i18n = def
         </nav>`
       : `<nav aria-label="${esc(t('nav.main'))}"><a href="/login">${esc(t('nav.logIn'))}</a></nav>`;
   }
+  // The logo is decorative (alt=""): the name next to it already says what it is.
+  const logo = `<img class="brand-logo" src="${asset('logo.png')}" alt="" width="32" height="32">`;
   const brand = respondent
-    ? `<span class="brand">${APP_NAME}</span>`
-    : `<a href="/" class="brand">${APP_NAME}</a>`;
+    ? `<span class="brand">${logo}${APP_NAME}</span>`
+    : `<a href="/" class="brand">${logo}${APP_NAME}</a>`;
   const flashHtml = flash ? `<div class="flash" role="status">${icon('check')}<span>${esc(flash)}</span></div>` : '';
 
   return `<!doctype html>

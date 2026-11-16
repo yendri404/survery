@@ -98,7 +98,8 @@ p { margin: 0 0 1rem; }
 /* ---------- Top bar ---------- */
 .topbar { background: var(--topbar); color: #fff; }
 .topbar-inner { max-width: 960px; margin: 0 auto; padding: .5rem 1rem; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .25rem 1rem; min-height: 56px; }
-.brand { color: #fff; font-weight: 800; font-size: 1.3rem; letter-spacing: .02em; text-decoration: none; }
+.brand { color: #fff; font-weight: 800; font-size: 1.3rem; letter-spacing: .02em; text-decoration: none; display: inline-flex; align-items: center; gap: .5rem; min-height: var(--tap); }
+.brand-logo { width: 32px; height: 32px; flex: none; }
 .topbar nav { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .75rem; }
 .topbar nav a, .topbar nav button.link { color: #fff; text-decoration: none; min-height: var(--tap); display: inline-flex; align-items: center; gap: .35rem; }
 .topbar nav a:hover, .topbar nav button.link:hover { text-decoration: underline; }

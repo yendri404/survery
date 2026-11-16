@@ -97,7 +97,8 @@ src/
   views.js         server-rendered HTML
   i18n.js          interface languages: choosing one, translating, dates
 locales/           en.json, es.json (all interface text)
-public/            builder.js (question editor), app.js, style.css
+public/            builder.js (question editor), app.js, style.css, logo.png, favicon.svg
+assets/           logo-source.png (full-size original of the header logo)
 scripts/           create-user.js
 test/              node:test suites
 ```

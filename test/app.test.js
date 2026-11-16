@@ -467,6 +467,23 @@ describe('survey app', () => {
     assert.match(form.text, /<title>Team lunch · Sharevy<\/title>/);
   });
 
+  test('the header shows the Sharevy logo next to the name', async () => {
+    const home = (await new Client(app.base).request('/')).text;
+    const logo = home.match(/<a href="\/" class="brand"><img class="brand-logo" src="(\/public\/logo\.png\?v=[0-9a-f]{10})" alt="" width="\d+" height="\d+">Sharevy<\/a>/);
+    assert.ok(logo, 'brand link contains the logo image');
+    const png = await fetch(app.base + logo[1]);
+    assert.equal(png.status, 200);
+    assert.equal(png.headers.get('content-type'), 'image/png');
+    const body = Buffer.from(await png.arrayBuffer());
+    assert.deepEqual([...body.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+
+    const c = new Client(app.base);
+    await c.register('logo@corp.local');
+    const id = await c.createSurvey([{ label: 'Q', type: 'text' }]);
+    const form = (await new Client(app.base).request(`/s/${await c.shareToken(id)}`)).text;
+    assert.match(form, /<span class="brand"><img class="brand-logo" src="\/public\/logo\.png\?v=[0-9a-f]{10}" alt=""[^>]*>Sharevy<\/span>/);
+  });
+
   test('creator and respondent pages offer a theme switch applied before rendering', async () => {
     const c = new Client(app.base);
     await c.register('theme@corp.local');

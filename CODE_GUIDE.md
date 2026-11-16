@@ -254,7 +254,7 @@ Pass `':memory:'` for a throwaway database (the tests do this).
 | Piece | Detail |
 |-------|--------|
 | `repo` | `createRepo(db)` |
-| Static assets | Reads `public/style.css`, `app.js`, `builder.js`, `theme.js` and `favicon.svg` into memory. Only these names are served; there is no directory listing or path traversal surface |
+| Static assets | Reads `public/style.css`, `app.js`, `builder.js`, `theme.js`, `favicon.svg` and `logo.png` into memory. Only these names are served; there is no directory listing or path traversal surface |
 | Asset versions | Hashes each asset (SHA-256, 10 chars) and hands the map to `views.setAssetVersions`. Pages link `/public/style.css?v=<hash>`, which is served with `immutable` caching; when a file changes its URL changes, so browsers never keep a stale stylesheet |
 | Routes table | Each `route(method, '/path/:param', handler)` compiles to a regex; `:param` matches one path segment |
 
@@ -548,7 +548,7 @@ Server-rendered template strings. Every page is plain HTML forms, so it works wi
 | `thanksPage`, `closedPage` | Respondent states | |
 | `errorPage` | Any error | `respondent: true` hides creator navigation |
 
-**Branding and icons:** `APP_NAME` (`Sharevy`) is used for the header and every `<title>` (`<page> · Sharevy`). `icon(name)` returns an inline SVG from the `ICONS` map; icon-only buttons always carry an `aria-label` and a `title` so they stay understandable.
+**Branding and icons:** `APP_NAME` (`Sharevy`) is used for the header and every `<title>` (`<page> · Sharevy`). The header shows `public/logo.png` (white clipboard, 128px, decorative `alt=""`) left of the name; it is a cropped copy of `assets/logo-source.png`. The favicon (`public/favicon.svg`) draws the same clipboard on the brand purple so it stays visible on light browser tabs. `icon(name)` returns an inline SVG from the `ICONS` map; icon-only buttons always carry an `aria-label` and a `title` so they stay understandable.
 
 **Confirmation messages:** creator actions redirect with `?msg=<key>` (`created`, `saved`, `closed`, `opened`, `deleted`, `response-deleted`). `flashMessage(key, i18n)` maps only known keys to fixed, translated text; the query value is never reflected into the page.
 
