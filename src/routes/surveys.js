@@ -1,13 +1,14 @@
 import { newToken } from '../auth.js';
 import { authed, authedPost } from '../guards.js';
 import { HttpError, redirect, sendHtml } from '../http.js';
-import { parseSurveyInput, toCsv } from '../surveys.js';
+import { DEFAULT_OPEN_DAYS, addDays, parseSurveyInput, toCsv } from '../surveys.js';
 
-export function registerSurveyRoutes({ route, repo, config, views }) {
+export function registerSurveyRoutes({ route, repo, config, views, today }) {
   const session = (ctx) => ({
     user: ctx.user,
     csrf: ctx.session.csrf_token,
     flash: views.flashMessage(ctx.url.searchParams.get('msg')),
+    today: today(),
   });
 
   function ownedSurvey(ctx) {
@@ -26,6 +27,7 @@ export function registerSurveyRoutes({ route, repo, config, views }) {
     title: form.get('title') ?? '',
     description: form.get('description') ?? '',
     fieldsJson: form.get('fields_json') ?? '[]',
+    closesOn: form.get('closes_on') ?? '',
   });
 
   route('GET', '/surveys', authed((ctx) => {
@@ -34,13 +36,14 @@ export function registerSurveyRoutes({ route, repo, config, views }) {
 
   route('GET', '/surveys/new', authed((ctx) => {
     sendHtml(ctx.res, 200, views.surveyEditorPage({
-      ...session(ctx), values: { title: '', description: '', fieldsJson: '[]' },
+      ...session(ctx),
+      values: { title: '', description: '', fieldsJson: '[]', closesOn: addDays(today(), DEFAULT_OPEN_DAYS) },
     }));
   }));
 
   route('POST', '/surveys', authedPost((ctx, form) => {
     const input = editorInput(form);
-    const { value, errors } = parseSurveyInput(input);
+    const { value, errors } = parseSurveyInput(input, { today: today() });
     if (errors.length) return sendHtml(ctx.res, 422, views.surveyEditorPage({ ...session(ctx), values: input, errors }));
     const id = repo.createSurvey({ ownerId: ctx.user.id, publicToken: newToken(18), ...value });
     redirect(ctx.res, `/surveys/${id}?msg=created`);
@@ -58,14 +61,16 @@ export function registerSurveyRoutes({ route, repo, config, views }) {
     sendHtml(ctx.res, 200, views.surveyEditorPage({
       ...session(ctx),
       survey,
-      values: { title: survey.title, description: survey.description, fieldsJson: JSON.stringify(survey.fields) },
+      values: {
+        title: survey.title, description: survey.description, fieldsJson: JSON.stringify(survey.fields), closesOn: survey.closesOn,
+      },
     }));
   }));
 
   route('POST', '/surveys/:id', authedPost((ctx, form) => {
     const survey = ownedSurvey(ctx);
     const input = editorInput(form);
-    const { value, errors } = parseSurveyInput(input);
+    const { value, errors } = parseSurveyInput(input, { today: today(), currentClosesOn: survey.closesOn });
     if (errors.length) return sendHtml(ctx.res, 422, views.surveyEditorPage({ ...session(ctx), survey, values: input, errors }));
     repo.updateSurvey(survey.id, ctx.user.id, value);
     redirect(ctx.res, `/surveys/${survey.id}?msg=saved`);

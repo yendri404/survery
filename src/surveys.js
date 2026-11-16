@@ -5,7 +5,7 @@ export const FIELD_TYPES = {
   textarea: 'Paragraph (long answer)',
   number: 'Number',
   email: 'Email address',
-  date: 'Date',
+  date: 'Date (calendar)',
   select: 'Dropdown list',
   radio: 'Choose one option',
   checkbox: 'Choose several options',
@@ -24,6 +24,31 @@ export const LIMITS = {
   textarea: 10000,
   respondentName: 100,
 };
+
+/** Days a survey stays open when the creator does not pick a closing date. */
+export const DEFAULT_OPEN_DAYS = 10;
+
+/** Calendar date (YYYY-MM-DD) in the server's local time zone. */
+export function localDateString(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/** Adds whole days to a YYYY-MM-DD date (pure calendar math, no time zone involved). */
+export function addDays(dateString, days) {
+  const d = new Date(`${dateString}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * 'open' accepts answers; 'closed' was closed by the creator; 'expired' passed its closing date.
+ * A survey accepts answers during the whole closing day. YYYY-MM-DD strings compare correctly as text.
+ */
+export function surveyStatus(survey, today) {
+  if (!survey.isOpen) return 'closed';
+  return survey.closesOn && today > survey.closesOn ? 'expired' : 'open';
+}
 
 /** Optional name a respondent may leave. Empty means anonymous. */
 export function parseRespondentName(value) {
@@ -47,17 +72,23 @@ function newFieldId(taken) {
 /**
  * Validates and normalizes the survey definition sent by the editor.
  * Field ids are preserved when valid so existing answers keep matching after an edit.
+ *
+ * The closing date defaults to DEFAULT_OPEN_DAYS from `today` when empty. A past date is rejected,
+ * except when it is the survey's current date (editing an expired survey without changing it).
  */
-export function parseSurveyInput({ title, description, fieldsJson }) {
+export function parseSurveyInput({ title, description, fieldsJson, closesOn }, { today = localDateString(), currentClosesOn } = {}) {
   const errors = [];
   const cleanTitle = String(title ?? '').trim();
   const cleanDescription = String(description ?? '').trim();
+  const cleanClosesOn = String(closesOn ?? '').trim() || addDays(today, DEFAULT_OPEN_DAYS);
 
   if (!cleanTitle) errors.push('Title is required.');
   else if (cleanTitle.length > LIMITS.title) errors.push(`Title must be at most ${LIMITS.title} characters.`);
   if (cleanDescription.length > LIMITS.description) {
     errors.push(`Description must be at most ${LIMITS.description} characters.`);
   }
+  if (!isValidDate(cleanClosesOn)) errors.push('Choose a valid closing date.');
+  else if (cleanClosesOn < today && cleanClosesOn !== currentClosesOn) errors.push('The closing date cannot be in the past.');
 
   let raw;
   try {
@@ -107,7 +138,7 @@ export function parseSurveyInput({ title, description, fieldsJson }) {
     });
   }
 
-  return { value: { title: cleanTitle, description: cleanDescription, fields }, errors };
+  return { value: { title: cleanTitle, description: cleanDescription, closesOn: cleanClosesOn, fields }, errors };
 }
 
 function isValidDate(value) {

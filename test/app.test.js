@@ -396,6 +396,60 @@ describe('abuse protection', () => {
   });
 });
 
+describe('closing date', () => {
+  let app;
+  let now = new Date(2026, 10, 16, 12, 0); // Nov 16, 2026, server local time
+  before(async () => { app = await startApp({ now: () => now }); });
+  after(() => app.close());
+
+  test('surveys close 10 days after creation by default', async () => {
+    now = new Date(2026, 10, 16, 12, 0);
+    const c = new Client(app.base);
+    await c.register('deadline@corp.local');
+    const editor = (await c.request('/surveys/new')).text;
+    assert.match(editor, /<input type="date" name="closes_on" value="2026-11-26" min="2026-11-16"/);
+
+    const id = await c.createSurvey([{ label: 'Q', type: 'text' }]);
+    assert.match((await c.request(`/surveys/${id}`)).text, /Closes on Nov 26, 2026/);
+    const token = await c.shareToken(id);
+    const respondent = new Client(app.base);
+    assert.match((await respondent.request(`/s/${token}`)).text, /Open until Nov 26, 2026/);
+
+    now = new Date(2026, 10, 26, 23, 59); // still open during the whole closing day
+    assert.equal((await respondent.request(`/s/${token}`, { method: 'POST', form: {} })).status, 303);
+
+    now = new Date(2026, 10, 27, 0, 1);
+    assert.match((await respondent.request(`/s/${token}`)).text, /closed on Nov 26, 2026/);
+    assert.equal((await respondent.request(`/s/${token}`, { method: 'POST', form: {} })).status, 403);
+    assert.match((await c.request('/surveys')).text, /Expired/);
+    assert.match((await c.request(`/surveys/${id}`)).text, /Change the closing date/);
+  });
+
+  test('the closing date is chosen when creating and can extend an expired survey', async () => {
+    now = new Date(2026, 10, 16, 12, 0);
+    const c = new Client(app.base);
+    await c.register('extend@corp.local');
+    const _csrf = await c.csrf('/surveys/new');
+    const fields_json = JSON.stringify([{ label: 'Q', type: 'text' }]);
+
+    const past = await c.request('/surveys', { method: 'POST', form: { _csrf, title: 'Past', fields_json, closes_on: '2026-11-10' } });
+    assert.equal(past.status, 422);
+    assert.match(past.text, /The closing date cannot be in the past/);
+
+    const created = await c.request('/surveys', { method: 'POST', form: { _csrf, title: 'Short', fields_json, closes_on: '2026-11-17' } });
+    const id = Number(created.location.match(/\d+/)[0]);
+    const token = await c.shareToken(id);
+
+    now = new Date(2026, 10, 20, 9, 0);
+    const edit = (await c.request(`/surveys/${id}/edit`)).text;
+    assert.match(edit, /name="closes_on" value="2026-11-17"/);
+    const fieldsJson = edit.match(/id="fields_json" value="([^"]*)"/)[1].replace(/&quot;/g, '"');
+    const saved = await c.request(`/surveys/${id}`, { method: 'POST', form: { _csrf, title: 'Short', fields_json: fieldsJson, closes_on: '2026-11-30' } });
+    assert.equal(saved.status, 303);
+    assert.equal((await new Client(app.base).request(`/s/${token}`, { method: 'POST', form: {} })).status, 303);
+  });
+});
+
 describe('registration disabled', () => {
   let app;
   before(async () => { app = await startApp({ allowRegistration: false }); });

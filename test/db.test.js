@@ -46,3 +46,18 @@ test('openDatabase adds the respondent name column to existing databases, keepin
     openDatabase(path).close(); // running migrations twice is safe
   });
 });
+
+test('openDatabase gives existing surveys a closing date 10 days after creation', () => {
+  withOldDatabase((path) => {
+    const db = openDatabase(path);
+    assert.ok(columns(db, 'surveys').includes('closes_on'));
+    const survey = db.prepare('SELECT * FROM surveys').get();
+    assert.equal(survey.closes_on, '2026-11-11');
+    assert.equal(survey.title, 'Old survey');
+    db.prepare("UPDATE surveys SET closes_on = '2027-01-01'").run();
+    db.close();
+    const again = openDatabase(path); // a later boot must not overwrite a chosen date
+    assert.equal(again.prepare('SELECT closes_on FROM surveys').get().closes_on, '2027-01-01');
+    again.close();
+  });
+});

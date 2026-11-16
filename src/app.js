@@ -7,6 +7,7 @@ import { createRepo } from './repo.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerPublicRoutes } from './routes/public.js';
 import { registerSurveyRoutes } from './routes/surveys.js';
+import { localDateString } from './surveys.js';
 import * as views from './views.js';
 
 const ASSET_TYPES = {
@@ -47,7 +48,10 @@ export function createApp({ db, config }) {
 
   const routes = [];
   const route = (method, path, handler) => routes.push(compileRoute(method, path, handler));
-  const deps = { route, repo, config, views };
+  // Injectable clock so tests can move time; `today` is the server's local calendar date.
+  const now = config.now ?? (() => new Date());
+  const today = () => localDateString(now());
+  const deps = { route, repo, config, views, today };
   registerAuthRoutes(deps);
   registerSurveyRoutes(deps);
   registerPublicRoutes(deps);

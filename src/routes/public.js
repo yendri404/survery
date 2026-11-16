@@ -1,9 +1,9 @@
 import { HttpError, readForm, redirect, sendHtml } from '../http.js';
 import { clientIp, createRateLimiter } from '../rate-limit.js';
-import { parseRespondentName, validateAnswers } from '../surveys.js';
+import { parseRespondentName, surveyStatus, validateAnswers } from '../surveys.js';
 
 /** Respondent-facing routes: no account required. */
-export function registerPublicRoutes({ route, repo, config, views }) {
+export function registerPublicRoutes({ route, repo, config, views, today }) {
   const submissions = createRateLimiter({ limit: config.submissionLimit, windowMs: config.submissionWindowMs });
 
   function surveyByToken(ctx) {
@@ -18,14 +18,16 @@ export function registerPublicRoutes({ route, repo, config, views }) {
 
   route('GET', '/s/:token', (ctx) => {
     const survey = surveyByToken(ctx);
-    if (!survey.isOpen) return sendHtml(ctx.res, 200, views.closedPage({ survey }));
+    const status = surveyStatus(survey, today());
+    if (status !== 'open') return sendHtml(ctx.res, 200, views.closedPage({ survey, status }));
     sendHtml(ctx.res, 200, views.publicFormPage({ survey }));
   });
 
   route('POST', '/s/:token', async (ctx) => {
     const survey = surveyByToken(ctx);
     const form = await readForm(ctx.req);
-    if (!survey.isOpen) return sendHtml(ctx.res, 403, views.closedPage({ survey }));
+    const status = surveyStatus(survey, today());
+    if (status !== 'open') return sendHtml(ctx.res, 403, views.closedPage({ survey, status }));
 
     const limitKey = `${survey.id}|${clientIp(ctx.req, config.trustProxy)}`;
     if (submissions.isLimited(limitKey)) {

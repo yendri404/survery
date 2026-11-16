@@ -300,3 +300,6 @@ th { background: var(--brand-soft); }
   :root:not([data-theme="light"]) .theme-toggle .icon-sun { display: inline; }
   :root:not([data-theme="light"]) .theme-toggle .icon-moon { display: none; }
 }
+
+/* Closing date line under survey titles. */
+.meta { display: flex; align-items: center; gap: .4rem; color: var(--muted); font-size: .95rem; }

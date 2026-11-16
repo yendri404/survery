@@ -1,4 +1,4 @@
-import { FIELD_TYPES, LIMITS, formatAnswer, summarize } from './surveys.js';
+import { FIELD_TYPES, LIMITS, formatAnswer, summarize, surveyStatus } from './surveys.js';
 
 export const APP_NAME = 'Sharevy';
 
@@ -27,6 +27,7 @@ const ICONS = {
   check: '<path d="M5 12l5 5 9-10"/>',
   back: '<path d="M15 6l-6 6 6 6"/>',
   alert: '<path d="M12 3l10 18H2L12 3zM12 10v5M12 18h.01"/>',
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
   inbox: '<path d="M3 13h5l2 3h4l2-3h5M5 5h14l2 8v6H3v-6l2-8z"/>',
   moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
@@ -95,9 +96,25 @@ function errorList(errors) {
 }
 const escapedErrors = (errors) => errorList(errors?.map(esc));
 
-const statusBadge = (isOpen) => (isOpen
-  ? '<span class="badge open">Open</span>'
-  : '<span class="badge closed">Closed</span>');
+const STATUS_BADGES = {
+  open: '<span class="badge open">Open</span>',
+  closed: '<span class="badge closed">Closed</span>',
+  expired: '<span class="badge closed">Expired</span>',
+};
+const statusBadge = (status) => STATUS_BADGES[status];
+
+/** "2026-11-26" -> "Nov 26, 2026". */
+export function formatDate(dateString) {
+  if (!dateString) return '';
+  return new Date(`${dateString}T00:00:00Z`).toLocaleDateString('en-US', {
+    timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric',
+  });
+}
+
+function closingText(survey, status) {
+  if (status === 'expired') return `Closed on ${formatDate(survey.closesOn)} (closing date passed)`;
+  return `Closes on ${formatDate(survey.closesOn)}`;
+}
 
 export function homePage({ allowRegistration }) {
   return layout({
@@ -156,14 +173,14 @@ ${escapedErrors(errors)}
   });
 }
 
-export function surveyListPage({ user, csrf, surveys, flash }) {
-  const cards = surveys.map((s) => `<li>
+export function surveyListPage({ user, csrf, surveys, flash, today }) {
+  const cards = surveys.map((s) => { const status = surveyStatus(s, today); return `<li>
     <a class="card card-link" href="/surveys/${s.id}">
       <span class="card-title">${esc(s.title)}</span>
-      ${statusBadge(s.isOpen)}
-      <span class="muted">${s.responseCount} ${s.responseCount === 1 ? 'response' : 'responses'} · Created ${esc(s.createdAt.slice(0, 10))}</span>
+      ${statusBadge(status)}
+      <span class="muted">${s.responseCount} ${s.responseCount === 1 ? 'response' : 'responses'} · ${esc(closingText(s, status))}</span>
     </a>
-  </li>`).join('');
+  </li>`; }).join('');
   return layout({
     title: 'My surveys',
     user,
@@ -179,7 +196,9 @@ ${surveys.length
   });
 }
 
-export function surveyEditorPage({ user, csrf, survey, values, errors = [] }) {
+export function surveyEditorPage({ user, csrf, survey, values, errors = [], today }) {
+  // An expired survey keeps its past date valid until the creator changes it.
+  const minDate = survey?.closesOn && survey.closesOn < today ? survey.closesOn : today;
   const editing = Boolean(survey);
   const action = editing ? `/surveys/${survey.id}` : '/surveys';
   const cancel = editing ? `/surveys/${survey.id}` : '/surveys';
@@ -201,6 +220,8 @@ ${escapedErrors(errors)}
     <label>Survey title <input name="title" value="${esc(values.title)}" required maxlength="${LIMITS.title}" placeholder="e.g. Team lunch preferences"></label>
     <label>Description <span class="hint">Optional. Shown at the top of the survey.</span>
       <textarea name="description" rows="3" maxlength="${LIMITS.description}">${esc(values.description)}</textarea></label>
+    <label>Closing date <span class="hint">The survey accepts answers until the end of this day. By default, 10 days from today.</span>
+      <input type="date" name="closes_on" value="${esc(values.closesOn)}" min="${esc(minDate)}" required></label>
   </section>
   <section class="stack">
     <h2>2. Questions</h2>
@@ -230,7 +251,8 @@ function summaryHtml(fields, responses) {
 </section>`).join('')}`;
 }
 
-export function surveyDetailPage({ user, csrf, survey, responses, shareUrl, flash }) {
+export function surveyDetailPage({ user, csrf, survey, responses, shareUrl, flash, today }) {
+  const status = surveyStatus(survey, today);
   const head = survey.fields.map((f) => `<th>${esc(f.label)}</th>`).join('');
   const rows = responses.map((r) => `<tr>
     <td data-label="Response">#${r.id}</td>
@@ -247,13 +269,15 @@ export function surveyDetailPage({ user, csrf, survey, responses, shareUrl, flas
     csrf,
     flash,
     body: `<a class="back" href="/surveys">${icon('back')} My surveys</a>
-<h1>${esc(survey.title)} ${statusBadge(survey.isOpen)}</h1>
+<h1>${esc(survey.title)} ${statusBadge(status)}</h1>
+<p class="meta">${icon('calendar')} ${esc(closingText(survey, status))}</p>
 ${survey.description ? `<p class="description">${esc(survey.description)}</p>` : ''}
 
 <section class="panel share">
   <h2>${icon('share')} Share this link</h2>
   <p>Send this link to the people who should answer. They do not need an account.</p>
-  ${survey.isOpen ? '' : `<p class="notice">${icon('lock')}<span>The survey is closed: people who open the link will see that it no longer accepts answers.</span></p>`}
+  ${status === 'closed' ? `<p class="notice">${icon('lock')}<span>The survey is closed: people who open the link will see that it no longer accepts answers.</span></p>` : ''}
+  ${status === 'expired' ? `<p class="notice">${icon('calendar')}<span>The closing date has passed, so the survey no longer accepts answers. <a href="/surveys/${survey.id}/edit">Change the closing date</a> to open it again.</span></p>` : ''}
   <input id="share-url" class="share-url" value="${esc(shareUrl)}" readonly aria-label="Share link">
   <div class="button-row">
     <button type="button" data-copy="share-url">${icon('copy')} <span>Copy link</span></button>
@@ -265,7 +289,7 @@ ${survey.description ? `<p class="description">${esc(survey.description)}</p>` :
 <section class="panel">
   <h2>Manage</h2>
   <div class="button-row">
-    <a class="button secondary" href="/surveys/${survey.id}/edit">${icon('edit')} Edit questions</a>
+    <a class="button secondary" href="/surveys/${survey.id}/edit">${icon('edit')} Edit survey</a>
     <form method="post" action="/surveys/${survey.id}/toggle" class="inline">${csrfInput(csrf)}
       ${survey.isOpen
     ? `<button type="submit" class="secondary">${icon('lock')} Close survey</button>`
@@ -275,7 +299,7 @@ ${survey.description ? `<p class="description">${esc(survey.description)}</p>` :
       <button type="submit" class="danger">${icon('trash')} Delete survey</button>
     </form>
   </div>
-  <p class="hint">Closing a survey stops new answers. You can reopen it at any time.</p>
+  <p class="hint">Closing a survey stops new answers before its closing date. You can reopen it at any time.</p>
 </section>
 
 <section>
@@ -361,6 +385,7 @@ export function publicFormPage({ survey, values = {}, errors = {}, respondentNam
     body: `<div class="panel intro">
   <h1>${esc(survey.title)}</h1>
   ${survey.description ? `<p class="description">${esc(survey.description)}</p>` : ''}
+  <p class="meta">${icon('calendar')} Open until ${esc(formatDate(survey.closesOn))}</p>
   ${hasRequired ? '<p class="hint">Questions marked with <span class="req">*</span> must be answered.</p>' : ''}
 </div>
 ${errorSummary}
@@ -386,14 +411,16 @@ export function thanksPage({ survey }) {
   });
 }
 
-export function closedPage({ survey }) {
+export function closedPage({ survey, status = 'closed' }) {
   return layout({
     title: survey.title,
     respondent: true,
     body: `<div class="panel result">
-  <div class="result-icon">${icon('lock')}</div>
+  <div class="result-icon">${icon(status === 'expired' ? 'calendar' : 'lock')}</div>
   <h1>${esc(survey.title)}</h1>
-  <p>This survey is closed and no longer accepts answers.</p>
+  <p>${status === 'expired'
+    ? `This survey closed on ${esc(formatDate(survey.closesOn))} and no longer accepts answers.`
+    : 'This survey is closed and no longer accepts answers.'}</p>
 </div>`,
   });
 }

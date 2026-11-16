@@ -45,7 +45,8 @@ npm run create-user -- <email> <name> <password>
 - Question types: short text, long text, number, email, date, dropdown, single choice, multiple choice. Each can be required.
 - Respondents can optionally leave their name; otherwise the response is anonymous.
 - Edit questions at any time; existing answers are kept.
-- Open/close a survey to start/stop accepting responses.
+- Every survey has a closing date (picked with a calendar; 10 days from creation by default). It accepts answers until the end of that day, server time.
+- Open/close a survey manually at any time.
 - Results table, per-option summary for choice questions, delete individual responses.
 - Light and dark theme (follows the device setting until changed with the theme button).
 - CSV export (comma, or semicolon for Excel with regional settings that use `;`). UTF-8 with BOM.

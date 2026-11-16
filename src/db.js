@@ -55,6 +55,14 @@ const MIGRATIONS = [
       db.exec('ALTER TABLE responses ADD COLUMN respondent_name TEXT');
     }
   },
+  // Every survey has a closing date (YYYY-MM-DD). Existing surveys get creation date + 10 days,
+  // only once, when the column is added, so later boots never overwrite a date chosen by a creator.
+  (db) => {
+    if (!hasColumn(db, 'surveys', 'closes_on')) {
+      db.exec('ALTER TABLE surveys ADD COLUMN closes_on TEXT');
+      db.exec("UPDATE surveys SET closes_on = date(created_at, '+10 days') WHERE closes_on IS NULL");
+    }
+  },
 ];
 
 function migrate(db) {

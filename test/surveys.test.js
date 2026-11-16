@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { csvCell, parseSurveyInput, toCsv, validateAnswers } from '../src/surveys.js';
+import {
+  addDays, csvCell, localDateString, parseSurveyInput, surveyStatus, toCsv, validateAnswers,
+} from '../src/surveys.js';
 
 const form = (pairs) => new URLSearchParams(pairs);
 
@@ -34,6 +36,32 @@ test('parseSurveyInput reports missing title, no fields, bad types and empty opt
     'Field 1: unknown field type.',
     'Field 2: add at least one option.',
   ]);
+});
+
+test('parseSurveyInput defaults the closing date to 10 days from today and validates it', () => {
+  const fieldsJson = JSON.stringify([{ label: 'Q', type: 'text' }]);
+  const today = '2026-11-16';
+  assert.equal(parseSurveyInput({ title: 'x', fieldsJson }, { today }).value.closesOn, '2026-11-26');
+  assert.equal(parseSurveyInput({ title: 'x', fieldsJson, closesOn: '' }, { today }).value.closesOn, '2026-11-26');
+  assert.equal(parseSurveyInput({ title: 'x', fieldsJson, closesOn: '2026-12-31' }, { today }).value.closesOn, '2026-12-31');
+  assert.deepEqual(parseSurveyInput({ title: 'x', fieldsJson, closesOn: today }, { today }).errors, []);
+  assert.deepEqual(parseSurveyInput({ title: 'x', fieldsJson, closesOn: '2026-02-30' }, { today }).errors, ['Choose a valid closing date.']);
+  assert.deepEqual(parseSurveyInput({ title: 'x', fieldsJson, closesOn: '2026-11-15' }, { today }).errors, ['The closing date cannot be in the past.']);
+  // Editing an expired survey without touching its date is allowed.
+  assert.deepEqual(parseSurveyInput({ title: 'x', fieldsJson, closesOn: '2026-11-15' }, { today, currentClosesOn: '2026-11-15' }).errors, []);
+});
+
+test('surveyStatus combines the manual switch and the closing date', () => {
+  assert.equal(surveyStatus({ isOpen: true, closesOn: '2026-11-16' }, '2026-11-16'), 'open');
+  assert.equal(surveyStatus({ isOpen: true, closesOn: '2026-11-15' }, '2026-11-16'), 'expired');
+  assert.equal(surveyStatus({ isOpen: false, closesOn: '2026-11-30' }, '2026-11-16'), 'closed');
+  assert.equal(surveyStatus({ isOpen: false, closesOn: '2026-11-01' }, '2026-11-16'), 'closed');
+});
+
+test('addDays and localDateString work on calendar dates', () => {
+  assert.equal(addDays('2026-12-28', 10), '2027-01-07');
+  assert.equal(addDays('2028-02-25', 10), '2028-03-06');
+  assert.equal(localDateString(new Date(2026, 10, 16, 23, 59)), '2026-11-16');
 });
 
 test('parseSurveyInput regenerates duplicate ids', () => {

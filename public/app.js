@@ -71,6 +71,17 @@ for (const input of document.querySelectorAll('.share-url')) {
   syncLabels();
 }
 
+// Open the calendar when tapping anywhere on a date field, not only on its small icon.
+document.addEventListener('click', (event) => {
+  const input = event.target.closest?.('input[type="date"]');
+  if (!input || typeof input.showPicker !== 'function') return;
+  try {
+    input.showPicker();
+  } catch {
+    // Some browsers refuse outside a direct user gesture; the native picker still works.
+  }
+});
+
 // Confirmation for destructive forms: <form data-confirm="Are you sure?">
 document.addEventListener('submit', (event) => {
   const message = event.target.dataset?.confirm;

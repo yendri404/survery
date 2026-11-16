@@ -155,6 +155,7 @@ erDiagram
         text description
         text fields_json "array of field definitions"
         int is_open "1 = accepting responses"
+        text closes_on "YYYY-MM-DD, last day that accepts answers"
     }
     responses {
         int id PK
@@ -208,6 +209,7 @@ All foreign keys use `ON DELETE CASCADE`: deleting a survey deletes its response
 | `loginWindowMs` | — | 15 min | `routes/auth.js` |
 | `submissionLimit` | `SUBMISSION_LIMIT` | `60` (`0` = off) | `routes/public.js` |
 | `submissionWindowMs` | — | 10 min | `routes/public.js` |
+| `now` | — (tests only) | `() => new Date()` | `app.js` → `today()`, the clock used for closing dates |
 
 **Design note:** it takes `env` as a parameter instead of reading `process.env` directly, so tests can call `loadConfig({})` and override single keys.
 
@@ -400,8 +402,10 @@ The heart of the app. It has no database, no HTTP and no HTML, which is why it c
 
 | Function | Input → Output | Notes |
 |----------|----------------|-------|
-| `parseSurveyInput({ title, description, fieldsJson })` | → `{ value, errors[] }` | Trims, enforces limits, removes duplicate and blank options. **Keeps a valid existing `id`** so edits do not orphan answers; generates a new one when it is missing, invalid or duplicated |
+| `parseSurveyInput({ title, description, fieldsJson, closesOn }, { today, currentClosesOn })` | → `{ value, errors[] }` | Empty `closesOn` defaults to `today` + `DEFAULT_OPEN_DAYS` (10). A past date is rejected unless it is the survey's current date (editing an expired survey). Also trims, enforces limits, removes duplicate and blank options. **Keeps a valid existing `id`** so edits do not orphan answers; generates a new one when it is missing, invalid or duplicated |
 | `validateAnswers(fields, form)` | → `{ answers, errors{fieldId: msg} }` | Reads only defined fields (`f_<id>`), so extra keys are ignored. Checks type, required, and that choices are among the options. Checkbox values are returned in option order |
+| `surveyStatus(survey, today)` | → `'open' | 'closed' | 'expired'` | `closed` = switched off by the creator; `expired` = `today` is after `closesOn`. Only `open` accepts answers |
+| `localDateString(date)`, `addDays(date, n)` | → `YYYY-MM-DD` | Server-local calendar date; calendar math without time zones |
 | `parseRespondentName(value)` | → `{ name, error }` | Optional respondent name: trimmed, max. 100 characters, empty means anonymous |
 | `formatAnswer(value)` | → `string` | Arrays become `"a, b"` |
 | `summarize(fields, responses)` | → per choice field: `answered`, counts per option | Feeds the summary section of the detail page |
