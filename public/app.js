@@ -46,6 +46,31 @@ for (const input of document.querySelectorAll('.share-url')) {
   input.addEventListener('focus', () => input.select());
 }
 
+// Light/dark theme switch: <button data-theme-toggle hidden>. public/theme.js applies the saved choice early.
+{
+  const root = document.documentElement;
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
+  const current = () => root.dataset.theme ?? (prefersDark.matches ? 'dark' : 'light');
+  const syncLabels = () => {
+    const label = current() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
+    for (const btn of document.querySelectorAll('[data-theme-toggle]')) {
+      btn.setAttribute('aria-label', label);
+      btn.title = label;
+    }
+  };
+  for (const btn of document.querySelectorAll('[data-theme-toggle]')) {
+    btn.hidden = false;
+    btn.addEventListener('click', () => {
+      const next = current() === 'dark' ? 'light' : 'dark';
+      root.dataset.theme = next;
+      try { localStorage.setItem('sharevy-theme', next); } catch { /* storage blocked: theme lasts for this page only */ }
+      syncLabels();
+    });
+  }
+  prefersDark.addEventListener('change', syncLabels);
+  syncLabels();
+}
+
 // Confirmation for destructive forms: <form data-confirm="Are you sure?">
 document.addEventListener('submit', (event) => {
   const message = event.target.dataset?.confirm;

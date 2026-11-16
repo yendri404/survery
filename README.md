@@ -47,6 +47,7 @@ npm run create-user -- <email> <name> <password>
 - Edit questions at any time; existing answers are kept.
 - Open/close a survey to start/stop accepting responses.
 - Results table, per-option summary for choice questions, delete individual responses.
+- Light and dark theme (follows the device setting until changed with the theme button).
 - CSV export (comma, or semicolon for Excel with regional settings that use `;`). UTF-8 with BOM.
 
 ## Security notes

@@ -295,6 +295,21 @@ describe('survey app', () => {
     assert.match(form.text, /<title>Team lunch · Sharevy<\/title>/);
   });
 
+  test('creator and respondent pages offer a theme switch applied before rendering', async () => {
+    const c = new Client(app.base);
+    await c.register('theme@corp.local');
+    const id = await c.createSurvey([{ label: 'Q', type: 'text' }]);
+    const token = await c.shareToken(id);
+    for (const page of [(await new Client(app.base).request('/')).text, (await new Client(app.base).request(`/s/${token}`)).text]) {
+      // Loaded in <head> (not deferred) so the saved theme applies before the first paint.
+      assert.match(page, /<head>[\s\S]*<script src="\/public\/theme\.js\?v=[0-9a-f]{10}"><\/script>[\s\S]*<\/head>/);
+      assert.match(page, /<button type="button"[^>]*data-theme-toggle[^>]*aria-label="Switch to dark theme"/);
+    }
+    const script = await fetch(`${app.base}/public/theme.js`);
+    assert.equal(script.status, 200);
+    assert.match(script.headers.get('content-type'), /javascript/);
+  });
+
   test('actions redirect with a confirmation message', async () => {
     const c = new Client(app.base);
     await c.register('flash@corp.local');

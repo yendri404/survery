@@ -14,6 +14,7 @@ const ASSET_TYPES = {
   'app.js': 'text/javascript; charset=utf-8',
   'builder.js': 'text/javascript; charset=utf-8',
   'favicon.svg': 'image/svg+xml',
+  'theme.js': 'text/javascript; charset=utf-8',
 };
 
 const SECURITY_HEADERS = {

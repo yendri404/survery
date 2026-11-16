@@ -243,7 +243,7 @@ Pass `':memory:'` for a throwaway database (the tests do this).
 | Piece | Detail |
 |-------|--------|
 | `repo` | `createRepo(db)` |
-| Static assets | Reads `public/style.css`, `app.js`, `builder.js` and `favicon.svg` into memory. Only these names are served; there is no directory listing or path traversal surface |
+| Static assets | Reads `public/style.css`, `app.js`, `builder.js`, `theme.js` and `favicon.svg` into memory. Only these names are served; there is no directory listing or path traversal surface |
 | Asset versions | Hashes each asset (SHA-256, 10 chars) and hands the map to `views.setAssetVersions`. Pages link `/public/style.css?v=<hash>`, which is served with `immutable` caching; when a file changes its URL changes, so browsers never keep a stale stylesheet |
 | Routes table | Each `route(method, '/path/:param', handler)` compiles to a regex; `:param` matches one path segment |
 
@@ -499,6 +499,8 @@ Server-rendered template strings. Every page is plain HTML forms, so it works wi
 **Branding and icons:** `APP_NAME` (`Sharevy`) is used for the header and every `<title>` (`<page> · Sharevy`). `icon(name)` returns an inline SVG from the `ICONS` map; icon-only buttons always carry an `aria-label` and a `title` so they stay understandable.
 
 **Confirmation messages:** creator actions redirect with `?msg=<key>` (`created`, `saved`, `closed`, `opened`, `deleted`, `response-deleted`). `flashMessage(key)` maps only known keys to fixed text; the query value is never reflected into the page.
+
+**Light and dark theme:** every page has a theme button (`themeToggle()`, rendered `hidden` until `public/app.js` activates it). The choice is stored in `localStorage` (`sharevy-theme`); without a choice, the OS setting (`prefers-color-scheme`) decides. `public/theme.js` is loaded in `<head>` so a saved choice applies before the first paint (no flash of the wrong theme). Colors are CSS custom properties in `style.css`; the dark palette redefines them under `[data-theme="dark"]` and in the `prefers-color-scheme: dark` media query. Use `--brand-text` for brand-colored text and `--brand` for brand backgrounds.
 
 **Mobile first:** `public/style.css` targets phones by default (44px touch targets, 16px+ inputs, full-width buttons) and enhances layouts from 700px. On phones, the responses table turns into one card per response using each cell's `data-label`.
 

@@ -28,10 +28,16 @@ const ICONS = {
   back: '<path d="M15 6l-6 6 6 6"/>',
   alert: '<path d="M12 3l10 18H2L12 3zM12 10v5M12 18h.01"/>',
   inbox: '<path d="M3 13h5l2 3h4l2-3h5M5 5h14l2 8v6H3v-6l2-8z"/>',
+  moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
 };
 
-export const icon = (name) =>
-  `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${ICONS[name]}</svg>`;
+export const icon = (name, extraClass = '') =>
+  `<svg class="icon${extraClass ? ` ${extraClass}` : ''}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${ICONS[name]}</svg>`;
+
+// Rendered hidden: public/app.js shows it and keeps its label in sync with the active theme.
+const themeToggle = () =>
+  `<button type="button" class="theme-toggle" data-theme-toggle aria-label="Switch to dark theme" title="Switch to dark theme" hidden>${icon('moon', 'icon-moon')}${icon('sun', 'icon-sun')}</button>`;
 
 // Confirmation messages shown after an action (?msg=<key>). Only known keys are rendered.
 const FLASH_MESSAGES = {
@@ -70,9 +76,10 @@ function layout({ title, body, user, csrf, flash, respondent = false }) {
 <title>${esc(pageTitle)}</title>
 <link rel="icon" href="${asset('favicon.svg')}" type="image/svg+xml">
 <link rel="stylesheet" href="${asset('style.css')}">
+<script src="${asset('theme.js')}"></script>
 </head>
 <body${respondent ? ' class="respondent"' : ''}>
-<header class="topbar"><div class="topbar-inner">${brand}${nav}</div></header>
+<header class="topbar"><div class="topbar-inner">${brand}<div class="topbar-actions">${nav}${themeToggle()}</div></div></header>
 <main>
 ${flashHtml}
 ${body}
