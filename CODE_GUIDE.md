@@ -164,6 +164,7 @@ erDiagram
         int survey_id FK
         text answers_json "{ fieldId: value }"
         text respondent_name "optional, NULL = anonymous"
+        text device_hash "sha256 of the device cookie; unique per survey"
         text submitted_at "UTC"
     }
 ```
@@ -377,6 +378,8 @@ All routes are wrapped in `authed` / `authedPost`.
 4. Answers valid (`validateAnswers`)? Otherwise 422, re-rendered with the values the person typed.
 5. Count the submission against the limit, store it, redirect.
 
+**One response per device:** the first accepted submission sets an HttpOnly `sharevy_device` cookie (random id, 400 days). Its hash is stored in `responses.device_hash`, and a unique index on `(survey_id, device_hash)` makes the database reject a second response, even when two submissions race. A device that already answered sees `alreadyAnsweredPage` (200 on GET, 409 on POST). Clearing cookies, private mode or another browser count as a new device: this stops accidental and casual duplicates, not determined abuse.
+
 No CSRF token here, on purpose: respondents are anonymous and have no session to protect. Invalid submissions do not count toward the rate limit.
 
 ---
@@ -440,7 +443,7 @@ The heart of the app. It has no database, no HTTP and no HTML, which is why it c
 | Users | `createUser`, `findUserByEmail`, `findUserById` |
 | Sessions | `createSession`, `getSession` (ignores expired ones), `deleteSession`, `deleteExpiredSessions` |
 | Surveys | `listSurveys(ownerId)`, `createSurvey`, `getOwnedSurvey(id, ownerId)`, `getSurveyByToken`, `updateSurvey`, `setSurveyOpen`, `deleteSurvey` |
-| Responses | `addResponse`, `listResponses` (newest first), `deleteResponse(surveyId, responseId)` |
+| Responses | `addResponse` (returns `null` when the device already answered), `hasDeviceResponse`, `listResponses` (newest first), `deleteResponse(surveyId, responseId)` |
 
 **Design notes:**
 
@@ -457,7 +460,7 @@ The heart of the app. It has no database, no HTTP and no HTML, which is why it c
 | `newToken(bytes = 32)` | Random URL-safe token (session ids, CSRF tokens, survey links) |
 | `hashPassword(pw)` | scrypt with a random 16-byte salt → `"scrypt$<salt>$<key>"` |
 | `verifyPassword(pw, stored)` | Recomputes and compares in constant time; `false` for malformed hashes |
-| `hashSessionId(id)` | SHA-256 of the cookie value. A leaked DB does not give usable cookies |
+| `hashToken(token)` / `hashSessionId(id)` | SHA-256 of a cookie value (sessions and respondent devices). A leaked DB does not give usable cookies |
 | `safeEqual(a, b)` | Constant-time string comparison (used for CSRF) |
 | `DUMMY_HASH` | Precomputed hash for the "unknown email" login path |
 

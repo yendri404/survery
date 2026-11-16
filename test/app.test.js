@@ -20,16 +20,25 @@ async function startApp(overrides = {}) {
   };
 }
 
-/** Minimal browser-like client that keeps the session cookie. */
+/** Minimal browser-like client with a cookie jar (session and device cookies). */
 class Client {
   constructor(base) {
     this.base = base;
-    this.cookie = '';
+    this.jar = new Map();
+  }
+
+  /** Cookie header value, as a browser would send it. */
+  get cookie() {
+    return [...this.jar].map(([k, v]) => `${k}=${v}`).join('; ');
+  }
+
+  get sid() {
+    return this.jar.get('sid') ?? '';
   }
 
   async request(path, { method = 'GET', form } = {}) {
     const headers = {};
-    if (this.cookie) headers.cookie = this.cookie;
+    if (this.jar.size) headers.cookie = this.cookie;
     let body;
     if (form) {
       headers['content-type'] = 'application/x-www-form-urlencoded';
@@ -38,7 +47,8 @@ class Client {
     const res = await fetch(this.base + path, { method, headers, body, redirect: 'manual' });
     for (const c of res.headers.getSetCookie()) {
       const [name, value] = c.split(';')[0].split('=');
-      if (name === 'sid') this.cookie = value ? `sid=${value}` : '';
+      if (value) this.jar.set(name, value);
+      else this.jar.delete(name);
     }
     return { status: res.status, location: res.headers.get('location'), headers: res.headers, text: await res.text() };
   }
@@ -95,7 +105,7 @@ describe('survey app', () => {
 
     const out = await c.request('/logout', { method: 'POST', form: { _csrf: await c.csrf() } });
     assert.equal(out.status, 303);
-    assert.equal(c.cookie, '');
+    assert.equal(c.sid, '');
     assert.equal((await c.request('/surveys')).status, 303);
 
     const bad = await c.request('/login', { method: 'POST', form: { email: 'ana@corp.local', password: 'wrong-pass' } });
@@ -161,7 +171,8 @@ describe('survey app', () => {
     });
     assert.equal(ok.status, 303);
     assert.equal(ok.location, `/s/${token}/thanks`);
-    assert.equal(respondent.cookie, '');
+    assert.equal(respondent.sid, '', 'respondents never get a session');
+    assert.ok(respondent.jar.has('sharevy_device'), 'respondents get a device cookie');
 
     const detail = await creator.request(`/surveys/${id}`);
     assert.match(detail.text, /Responses \(1\)/);
@@ -187,10 +198,10 @@ describe('survey app', () => {
     assert.match(form.text, /optional/i);
     const field = form.text.match(/name="(f_[a-z0-9]+)"/)[1];
 
-    const r = new Client(app.base);
-    assert.equal((await r.request(`/s/${token}`, { method: 'POST', form: [['respondent_name', '  Marta Gómez '], [field, 'x']] })).status, 303);
-    assert.equal((await r.request(`/s/${token}`, { method: 'POST', form: [[field, 'y']] })).status, 303);
-    const tooLong = await r.request(`/s/${token}`, { method: 'POST', form: [['respondent_name', 'a'.repeat(101)], [field, 'z']] });
+    const send = (form) => new Client(app.base).request(`/s/${token}`, { method: 'POST', form });
+    assert.equal((await send([['respondent_name', '  Marta Gómez '], [field, 'x']])).status, 303);
+    assert.equal((await send([[field, 'y']])).status, 303);
+    const tooLong = await new Client(app.base).request(`/s/${token}`, { method: 'POST', form: [['respondent_name', 'a'.repeat(101)], [field, 'z']] });
     assert.equal(tooLong.status, 422);
     assert.match(tooLong.text, /Name must be at most 100 characters/);
     assert.match(tooLong.text, /value="a{101}"/);
@@ -229,6 +240,50 @@ describe('survey app', () => {
     await other.register('qr-other@corp.local');
     assert.equal((await other.request(`/surveys/${id}/qr.png`)).status, 404);
     assert.equal((await new Client(app.base).request(`/surveys/${id}/qr.png`)).status, 303);
+  });
+
+  test('each device can answer a survey only once', async () => {
+    const c = new Client(app.base);
+    await c.register('once@corp.local');
+    const id = await c.createSurvey([{ label: 'Q', type: 'text' }]);
+    const token = await c.shareToken(id);
+
+    const phone = new Client(app.base);
+    const first = await phone.request(`/s/${token}`, { method: 'POST', form: { f_nope: 'x' } });
+    assert.equal(first.status, 303, 'first valid submission is accepted');
+    assert.ok(phone.jar.has('sharevy_device'));
+    assert.doesNotMatch((await phone.request(`/s/${token}/thanks`)).text, /Send another response/);
+
+    const again = await phone.request(`/s/${token}`, { method: 'POST', form: {} });
+    assert.equal(again.status, 409);
+    assert.match(again.text, /already answered this survey/);
+    const form = await phone.request(`/s/${token}`);
+    assert.equal(form.status, 200);
+    assert.match(form.text, /already answered this survey/);
+    assert.doesNotMatch(form.text, /<form method="post" action="\/s\//);
+
+    // Another device can still answer, and the same device can answer other surveys.
+    assert.equal((await new Client(app.base).request(`/s/${token}`, { method: 'POST', form: {} })).status, 303);
+    const otherId = await c.createSurvey([{ label: 'Q2', type: 'text' }], 'Second');
+    const otherToken = await c.shareToken(otherId);
+    assert.equal((await phone.request(`/s/${otherToken}`, { method: 'POST', form: {} })).status, 303);
+    assert.match((await c.request(`/surveys/${id}`)).text, /Responses \(2\)/);
+  });
+
+  test('simultaneous submissions from one device store a single response', async () => {
+    const c = new Client(app.base);
+    await c.register('race@corp.local');
+    const id = await c.createSurvey([{ label: 'Q', type: 'text' }]);
+    const token = await c.shareToken(id);
+    const post = () => fetch(`${app.base}/s/${token}`, {
+      method: 'POST',
+      redirect: 'manual',
+      headers: { cookie: 'sharevy_device=same-device-token-1234567890', 'content-type': 'application/x-www-form-urlencoded' },
+      body: '',
+    }).then((r) => r.status);
+    const statuses = (await Promise.all([post(), post(), post()])).sort();
+    assert.deepEqual(statuses, [303, 409, 409]);
+    assert.match((await c.request(`/surveys/${id}`)).text, /Responses \(1\)/);
   });
 
   test('closed surveys reject responses until reopened', async () => {
@@ -403,10 +458,11 @@ describe('abuse protection', () => {
     await creator.register('flood@corp.local');
     const id = await creator.createSurvey([{ label: 'Q', type: 'text' }]);
     const token = await creator.shareToken(id);
-    const r = new Client(app.base);
-    assert.equal((await r.request(`/s/${token}`, { method: 'POST', form: {} })).status, 303);
-    assert.equal((await r.request(`/s/${token}`, { method: 'POST', form: {} })).status, 303);
-    const blocked = await r.request(`/s/${token}`, { method: 'POST', form: {} });
+    // Different devices (no shared cookie) behind the same IP still count against the IP limit.
+    const fresh = () => new Client(app.base);
+    assert.equal((await fresh().request(`/s/${token}`, { method: 'POST', form: {} })).status, 303);
+    assert.equal((await fresh().request(`/s/${token}`, { method: 'POST', form: {} })).status, 303);
+    const blocked = await fresh().request(`/s/${token}`, { method: 'POST', form: {} });
     assert.equal(blocked.status, 429);
     assert.match(blocked.text, /Too many responses/);
     assert.match((await creator.request(`/surveys/${id}`)).text, /Responses \(2\)/);
@@ -415,7 +471,7 @@ describe('abuse protection', () => {
   test('session ids are stored hashed, not as the cookie value', async () => {
     const c = new Client(app.base);
     await c.register('hash@corp.local');
-    const raw = c.cookie.slice('sid='.length);
+    const raw = c.sid;
     const ids = app.db.prepare('SELECT id FROM sessions').all().map((s) => s.id);
     assert.ok(ids.length > 0);
     assert.ok(!ids.includes(raw));

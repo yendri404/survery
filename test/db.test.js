@@ -61,3 +61,16 @@ test('openDatabase gives existing surveys a closing date 10 days after creation'
     again.close();
   });
 });
+
+test('openDatabase adds a per-device column with a unique index per survey', () => {
+  withOldDatabase((path) => {
+    const db = openDatabase(path);
+    assert.ok(columns(db, 'responses').includes('device_hash'));
+    const insert = db.prepare('INSERT INTO responses (survey_id, answers_json, device_hash) VALUES (1, ?, ?)');
+    insert.run('{}', 'device-a');
+    assert.throws(() => insert.run('{}', 'device-a'), /UNIQUE/);
+    insert.run('{}', null); // old and anonymous rows without a device are not restricted
+    insert.run('{}', null);
+    db.close();
+  });
+});

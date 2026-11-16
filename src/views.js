@@ -415,7 +415,19 @@ export function thanksPage({ survey }) {
   <h1>Thank you!</h1>
   <p>Your answers to <strong>${esc(survey.title)}</strong> were sent.</p>
   <p class="muted">You can close this page now.</p>
-  <p><a href="/s/${esc(survey.publicToken)}">Send another response</a></p>
+</div>`,
+  });
+}
+
+export function alreadyAnsweredPage({ survey }) {
+  return layout({
+    title: survey.title,
+    respondent: true,
+    body: `<div class="panel result">
+  <div class="result-icon ok">${icon('check')}</div>
+  <h1>${esc(survey.title)}</h1>
+  <p>You already answered this survey from this device. Thank you!</p>
+  <p class="muted">Each device can send one response.</p>
 </div>`,
   });
 }

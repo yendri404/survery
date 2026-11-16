@@ -89,10 +89,22 @@ export function createRepo(db) {
     },
 
     // Responses
-    addResponse(surveyId, answers, respondentName = null) {
-      const r = q('INSERT INTO responses (survey_id, answers_json, respondent_name) VALUES (?, ?, ?)')
-        .run(surveyId, JSON.stringify(answers), respondentName || null);
-      return Number(r.lastInsertRowid);
+    /**
+     * Stores a response. Returns its id, or null when this device already answered the survey
+     * (enforced by a unique index, so concurrent submissions cannot both succeed).
+     */
+    addResponse(surveyId, answers, respondentName = null, deviceHash = null) {
+      try {
+        const r = q('INSERT INTO responses (survey_id, answers_json, respondent_name, device_hash) VALUES (?, ?, ?, ?)')
+          .run(surveyId, JSON.stringify(answers), respondentName || null, deviceHash);
+        return Number(r.lastInsertRowid);
+      } catch (err) {
+        if (deviceHash && /UNIQUE constraint failed/.test(err.message)) return null;
+        throw err;
+      }
+    },
+    hasDeviceResponse(surveyId, deviceHash) {
+      return Boolean(q('SELECT 1 FROM responses WHERE survey_id = ? AND device_hash = ?').get(surveyId, deviceHash));
     },
     listResponses(surveyId) {
       return q('SELECT * FROM responses WHERE survey_id = ? ORDER BY id DESC').all(surveyId).map(hydrateResponse);

@@ -6,8 +6,10 @@ const KEY_LENGTH = 64;
 
 export const newToken = (bytes = 32) => randomBytes(bytes).toString('base64url');
 
-/** Sessions are stored by hash so a leaked database does not expose usable cookies. */
-export const hashSessionId = (id) => createHash('sha256').update(String(id)).digest('base64url');
+/** SHA-256 of a secret token. Stored instead of the token so a leaked database does not expose usable cookies. */
+export const hashToken = (token) => createHash('sha256').update(String(token)).digest('base64url');
+
+export const hashSessionId = hashToken;
 
 export async function hashPassword(password) {
   const salt = randomBytes(16);

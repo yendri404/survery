@@ -63,6 +63,14 @@ const MIGRATIONS = [
       db.exec("UPDATE surveys SET closes_on = date(created_at, '+10 days') WHERE closes_on IS NULL");
     }
   },
+  // One response per device and survey. Rows without a device (older responses) are not restricted.
+  (db) => {
+    if (!hasColumn(db, 'responses', 'device_hash')) {
+      db.exec('ALTER TABLE responses ADD COLUMN device_hash TEXT');
+    }
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_responses_survey_device
+             ON responses(survey_id, device_hash) WHERE device_hash IS NOT NULL`);
+  },
 ];
 
 function migrate(db) {
