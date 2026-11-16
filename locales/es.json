@@ -1,6 +1,7 @@
 {
   "language.code": "ES",
-  "language.switchTo": "Cambiar a español",
+  "language.name": "Español",
+  "language.menuLabel": "Idioma: {name}",
 
   "nav.main": "Principal",
   "nav.mySurveys": "Mis encuestas",

@@ -381,7 +381,7 @@ All routes are wrapped in `authed` / `authedPost`.
 | GET | `/s/:token` | The form, or a "closed" page |
 | POST | `/s/:token` | 303 `/thanks` · 422 with per-field errors and the values kept · 403 closed · 429 rate limited |
 | GET | `/s/:token/thanks` | Confirmation page |
-| GET | `/lang/:code?next=<path>` | Language switch for everyone: 303 to `safeNext(next, '/')` with a `sharevy_lang` cookie (HttpOnly, SameSite=Lax, 1 year). 404 for an unsupported code |
+| GET | `/lang/:code?next=<path>` | Language menu links, for everyone: 303 to `safeNext(next, '/')` with a `sharevy_lang` cookie (HttpOnly, SameSite=Lax, 1 year). 404 for an unsupported code |
 
 **Order of checks on submit** (cheapest and most decisive first):
 
@@ -554,7 +554,7 @@ Server-rendered template strings. Every page is plain HTML forms, so it works wi
 
 **Light and dark theme:** every page has a theme button (`themeToggle()`, rendered `hidden` until `public/app.js` activates it). The choice is stored in `localStorage` (`sharevy-theme`); without a choice, the OS setting (`prefers-color-scheme`) decides. `public/theme.js` is loaded in `<head>` so a saved choice applies before the first paint (no flash of the wrong theme). Colors are CSS custom properties in `style.css`; the dark palette redefines them under `[data-theme="dark"]` and in the `prefers-color-scheme: dark` media query. Use `--brand-text` for brand-colored text and `--brand` for brand backgrounds.
 
-**Language switch:** next to the theme button, `languageToggle()` renders a plain link (`ES` / `EN`, labelled in the target language) to `/lang/<code>?next=<current page>`. It needs no JavaScript. Strings that the browser scripts need (keys starting with `client.`) travel in `<script type="application/json" id="i18n-client">` in `<head>`: a data block, never executed, so the CSP allows it; `<` is written as `\u003c` so the JSON cannot close the tag. `public/app.js` and `public/builder.js` read it.
+**Language menu:** next to the theme button, `languageMenu()` renders a native `<details class="lang-menu">`: the summary shows a globe and the current code (`EN`), the list has one link per `SUPPORTED_LANGUAGES` entry, named in its own language (`language.name`: "English", "Español") and pointing to `/lang/<code>?next=<current page>`; the current one has `aria-current="true"`. It works without JavaScript; `public/app.js` only closes it on an outside click or Escape. On phones the panel opens under the whole top bar so it is never cut off. Strings that the browser scripts need (keys starting with `client.`) travel in `<script type="application/json" id="i18n-client">` in `<head>`: a data block, never executed, so the CSP allows it; `<` is written as `\u003c` so the JSON cannot close the tag. `public/app.js` and `public/builder.js` read it.
 
 **Mobile first:** `public/style.css` targets phones by default (44px touch targets, 16px+ inputs, full-width buttons) and enhances layouts from 700px. On phones, the responses table turns into one card per response using each cell's `data-label`.
 
@@ -601,7 +601,7 @@ All interface text lives in `locales/<code>.json`, one flat file per language, r
 
 1. Copy `locales/en.json` to `locales/pt.json` and translate the values (keep keys and `{placeholders}`).
 2. Add `'pt'` to `SUPPORTED_LANGUAGES` and a date locale (`pt: 'pt-BR'`) to `DATE_LOCALES` in `i18n.js`.
-3. Run `npm test`. The language button cycles to the next supported language, so it now goes EN → ES → PT.
+3. Run `npm test`. The language menu lists the new language automatically, under its own `language.name` ("Português").
 
 ---
 

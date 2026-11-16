@@ -1,6 +1,7 @@
 {
   "language.code": "EN",
-  "language.switchTo": "Switch to English",
+  "language.name": "English",
+  "language.menuLabel": "Language: {name}",
 
   "nav.main": "Main",
   "nav.mySurveys": "My surveys",

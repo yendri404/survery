@@ -42,6 +42,7 @@ const ICONS = {
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
   inbox: '<path d="M3 13h5l2 3h4l2-3h5M5 5h14l2 8v6H3v-6l2-8z"/>',
   moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 3.8 5.5 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.5-3.8-9s1.3-6.5 3.8-9z"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
 };
 
@@ -55,15 +56,19 @@ const themeToggle = (i18n) => {
 };
 
 /**
- * Link to the next supported language, labelled in that language ("ES" / "Cambiar a español").
- * /lang/<code> saves the choice and comes back to `currentPath`; it needs no JavaScript.
+ * Language menu: one link per SUPPORTED_LANGUAGES entry, each named in its own language
+ * ("English", "Español"), so a new locale shows up here on its own. A native <details> opens it
+ * without JavaScript; public/app.js only adds "close on outside click / Escape".
+ * /lang/<code> saves the choice and comes back to `currentPath`.
  */
-function languageToggle(i18n, currentPath) {
-  const target = SUPPORTED_LANGUAGES[(SUPPORTED_LANGUAGES.indexOf(i18n.lang) + 1) % SUPPORTED_LANGUAGES.length];
-  const targetI18n = createI18n(target);
-  const label = esc(targetI18n.t('language.switchTo'));
-  const href = `/lang/${target}?next=${encodeURIComponent(currentPath || '/')}`;
-  return `<a class="button lang-toggle" href="${esc(href)}" hreflang="${target}" lang="${target}" aria-label="${label}" title="${label}">${esc(targetI18n.t('language.code'))}</a>`;
+function languageMenu(i18n, currentPath) {
+  const next = encodeURIComponent(currentPath || '/');
+  const label = esc(i18n.t('language.menuLabel', { name: i18n.t('language.name') }));
+  const links = SUPPORTED_LANGUAGES.map((code) => {
+    const current = code === i18n.lang ? ' aria-current="true"' : '';
+    return `<li><a href="${esc(`/lang/${code}?next=${next}`)}" hreflang="${code}" lang="${code}"${current}>${esc(createI18n(code).t('language.name'))}</a></li>`;
+  }).join('');
+  return `<details class="lang-menu" data-lang-menu><summary class="button lang-summary" aria-label="${label}" title="${label}">${icon('globe')}<span>${esc(i18n.t('language.code'))}</span></summary><ul class="lang-list">${links}</ul></details>`;
 }
 
 // Confirmation messages shown after an action (?msg=<key>). Only known keys are rendered.
@@ -111,7 +116,7 @@ function layout({ title, body, user, csrf, flash, respondent = false, i18n = def
 ${clientStringsBlock(i18n)}
 </head>
 <body${respondent ? ' class="respondent"' : ''}>
-<header class="topbar"><div class="topbar-inner">${brand}<div class="topbar-actions">${nav}${languageToggle(i18n, currentPath)}${themeToggle(i18n)}</div></div></header>
+<header class="topbar"><div class="topbar-inner">${brand}<div class="topbar-actions">${nav}${languageMenu(i18n, currentPath)}${themeToggle(i18n)}</div></div></header>
 <main>
 ${flashHtml}
 ${body}

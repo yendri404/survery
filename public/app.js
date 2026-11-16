@@ -81,6 +81,23 @@ for (const input of document.querySelectorAll('.share-url')) {
   syncLabels();
 }
 
+// Language menu: <details data-lang-menu>. It opens and closes natively; this only closes it on a
+// click outside or on Escape, like other menus.
+{
+  const menus = [...document.querySelectorAll('[data-lang-menu]')];
+  document.addEventListener('click', (event) => {
+    for (const menu of menus) if (menu.open && !menu.contains(event.target)) menu.open = false;
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    for (const menu of menus) {
+      if (!menu.open) continue;
+      menu.open = false;
+      menu.querySelector('summary').focus();
+    }
+  });
+}
+
 // Live updates: <section id="..." data-live="/events-url">. When the server reports a change, the
 // page re-fetches its own HTML and swaps that section, so it shows exactly what a refresh would.
 if (window.EventSource) {

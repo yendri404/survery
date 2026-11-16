@@ -658,10 +658,10 @@ describe('language', () => {
   after(() => app.close());
 
   const spanish = () => new Client(app.base, { language: 'es-ES' });
-  const selector = (code, label) => new RegExp(
-    `<div class="topbar-actions">.*<a class="button lang-toggle" href="[^"]+" hreflang="${code.toLowerCase()}" lang="${code.toLowerCase()}" aria-label="${label}" title="${label}">${code}</a><button type="button" class="theme-toggle"`,
-    's',
-  );
+  /** The language menu: current code in the summary, one link per language named in that language. */
+  const menu = (html) => html.match(/<div class="topbar-actions">.*?(<details class="lang-menu"[\s\S]*?<\/details>)<button type="button" class="theme-toggle"/s)?.[1];
+  const menuLinks = (html) => [...(menu(html) ?? '').matchAll(/<a href="([^"]+)" hreflang="(\w+)" lang="(\w+)"( aria-current="true")?>([^<]+)<\/a>/g)]
+    .map(([, href, hreflang, lang, current, name]) => ({ href: href.replaceAll('&amp;', '&'), hreflang, lang, current: Boolean(current), name }));
   const clientStrings = (html) => JSON.parse(html.match(/<script type="application\/json" id="i18n-client">([\s\S]*?)<\/script>/)[1]);
 
   async function spanishCreatorWithSurvey(email) {
@@ -728,23 +728,36 @@ describe('language', () => {
     assert.equal(unknown.headers.getSetCookie().length, 0);
   });
 
-  test('the language switch sits next to the theme switch on creator and respondent pages', async () => {
+  test('the language menu sits next to the theme switch and lists every language in its own name', async () => {
     const english = new Client(app.base);
     await english.register('switch@corp.local');
     const id = await english.createSurvey([{ label: 'Q', type: 'text' }]);
     const token = await english.shareToken(id);
 
     const detail = (await english.request(`/surveys/${id}?msg=saved`)).text;
-    assert.match(detail, selector('ES', 'Cambiar a español'));
-    assert.match(detail, new RegExp(`href="/lang/es[?]next=%2Fsurveys%2F${id}%3Fmsg%3Dsaved"`));
-    assert.match((await new Client(app.base).request(`/s/${token}`)).text, selector('ES', 'Cambiar a español'));
+    assert.match(menu(detail), /<summary class="button lang-summary" aria-label="Language: English" title="Language: English"><svg class="icon"[^>]*>[\s\S]*?<\/svg><span>EN<\/span><\/summary>/);
+    assert.deepEqual(menuLinks(detail), [
+      { href: `/lang/en?next=%2Fsurveys%2F${id}%3Fmsg%3Dsaved`, hreflang: 'en', lang: 'en', current: true, name: 'English' },
+      { href: `/lang/es?next=%2Fsurveys%2F${id}%3Fmsg%3Dsaved`, hreflang: 'es', lang: 'es', current: false, name: 'Español' },
+    ]);
+    assert.ok(menu((await new Client(app.base).request(`/s/${token}`)).text), 'respondent pages have the menu too');
 
     const es = spanish();
-    assert.match((await es.request('/')).text, selector('EN', 'Switch to English'));
+    const home = (await es.request('/')).text;
+    assert.match(menu(home), /aria-label="Idioma: Español"[\s\S]*<span>ES<\/span>/);
     const respondentPage = (await es.request(`/s/${token}`)).text;
-    assert.match(respondentPage, selector('EN', 'Switch to English'));
-    assert.match(respondentPage, new RegExp(`href="/lang/en[?]next=%2Fs%2F${token}"`));
+    assert.deepEqual(menuLinks(respondentPage).map(({ href, current, name }) => ({ href, current, name })), [
+      { href: `/lang/en?next=%2Fs%2F${token}`, current: false, name: 'English' },
+      { href: `/lang/es?next=%2Fs%2F${token}`, current: true, name: 'Español' },
+    ]);
     assert.match(respondentPage, /data-theme-toggle aria-label="Cambiar al tema oscuro"/);
+
+    // Every menu link goes through /lang, which only redirects inside the site.
+    for (const { href } of menuLinks(respondentPage)) {
+      const res = await new Client(app.base).request(href);
+      assert.equal(res.status, 303);
+      assert.equal(res.location, `/s/${token}`);
+    }
   });
 
   test('validation messages and the CSV export follow the language', async () => {

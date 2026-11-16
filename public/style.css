@@ -294,9 +294,22 @@ th { background: var(--brand-soft); }
 .topbar-actions { display: flex; align-items: center; gap: .25rem .75rem; flex-wrap: wrap; }
 .theme-toggle { width: var(--tap); height: var(--tap); min-height: var(--tap); padding: 0; background: transparent; border-color: rgba(255, 255, 255, .45); color: #fff; }
 .theme-toggle:hover { background: rgba(255, 255, 255, .15); border-color: #fff; }
-/* Language switch: a link styled like the theme button, showing the code of the other language. */
-.lang-toggle { width: var(--tap); height: var(--tap); min-height: var(--tap); padding: 0; background: transparent; border-color: rgba(255, 255, 255, .45); color: #fff; font-size: .9rem; font-weight: 700; letter-spacing: .04em; text-decoration: none; }
-.lang-toggle:hover { background: rgba(255, 255, 255, .15); border-color: #fff; }
+/* Language menu: a native <details>, styled like the theme button, with the list as a floating panel. */
+.lang-menu { position: relative; }
+.lang-summary { list-style: none; height: var(--tap); padding: 0 .65rem; gap: .35rem; background: transparent; border-color: rgba(255, 255, 255, .45); color: #fff; font-size: .9rem; font-weight: 700; letter-spacing: .04em; user-select: none; }
+.lang-summary::-webkit-details-marker { display: none; }
+.lang-summary:hover, .lang-menu[open] > .lang-summary { background: rgba(255, 255, 255, .15); border-color: #fff; }
+.lang-list { position: absolute; right: 0; top: calc(100% + .4rem); z-index: 20; min-width: 10rem; margin: 0; padding: .35rem; list-style: none; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 24px var(--shadow); }
+.lang-list a { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: var(--tap); padding: 0 .75rem; border-radius: 6px; color: var(--text); text-decoration: none; }
+.lang-list a:hover, .lang-list a:focus-visible { background: var(--brand-soft); }
+.lang-list a[aria-current="true"] { color: var(--brand-text); font-weight: 700; }
+.lang-list a[aria-current="true"]::after { content: "✓"; }
+/* Phones: the top bar wraps, so the button can sit at the left edge; open the panel under the whole bar instead. */
+@media (max-width: 699px) {
+  .topbar-inner { position: relative; }
+  .lang-menu { position: static; }
+  .lang-list { left: 1rem; right: 1rem; top: calc(100% - .25rem); }
+}
 .theme-toggle .icon-sun { display: none; }
 :root[data-theme="dark"] .theme-toggle .icon-sun { display: inline; }
 :root[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
