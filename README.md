@@ -53,6 +53,7 @@ npm run create-user -- <email> <name> <password>
 - Results page with key figures (responses, named vs anonymous, last response, days left), charts for choice questions (a donut for single choice, bars for multiple choice), the full results table, and deleting individual responses.
 - Phone-first layout; on wide screens (1100px and up) pages use two columns: results next to a sticky share panel, questions next to the survey settings.
 - Light and dark theme (follows the device setting until changed with the theme button).
+- Smooth animations (page fades, cards and charts that animate in, a check mark that draws itself after answering); turned off when the device asks for reduced motion.
 - English and Spanish interface, chosen from the language menu next to the theme button (see [Languages](#languages)).
 - QR code of the share link on every survey, downloadable as PNG to print or send.
 - CSV export (comma, or semicolon for Excel with regional settings that use `;`). UTF-8 with BOM.

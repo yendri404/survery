@@ -581,6 +581,16 @@ The SVG is `aria-hidden`; the legend and bar labels carry every number as text. 
 
 **Internal helpers:** `layout()` (shared shell; `respondent: true` gives a minimal header), `errorList()`, `csrfInput()`, `renderField()` (maps each field type to its HTML control, uses `required` for native browser validation; the server is still the source of truth), and `summaryHtml()` / `donutChart()` / `barChart()` / `kpiTiles()`.
 
+**Animations:** CSS only, in the "Motion" section at the end of `public/style.css`. Rules that keep them cheap and calm:
+
+| Rule | Detail |
+|------|--------|
+| Only `transform` and `opacity` | Plus `stroke-dashoffset` for the thanks check mark; nothing that forces a re-layout. No JS animation loops, no library |
+| Page changes | `@view-transition { navigation: auto; }` cross-fades pages where supported; the top bar keeps its own `view-transition-name` |
+| Live updates | `.live-updated *` turns entrance animations off, so a swapped section only gets the highlight ring |
+| Theme switch | Short color fade on the main surfaces only (`body`, top bar, panels, cards, inputs), never on `*` |
+| Reduced motion | `prefers-reduced-motion: reduce` sets every animation and transition to ~0 and disables view transitions |
+
 **No inline JS or CSS:** the CSP forbids it, so behaviors like "copy link" or "confirm delete" are declared with `data-copy` / `data-confirm` attributes and handled by `public/app.js`.
 
 ---
