@@ -8,7 +8,7 @@ const DEVICE_ID = /^[A-Za-z0-9_-]{20,100}$/;
 const DEVICE_MAX_AGE = 400 * 24 * 60 * 60; // browsers cap cookie lifetime at 400 days
 
 /** Respondent-facing routes: no account required. */
-export function registerPublicRoutes({ route, repo, config, views, today }) {
+export function registerPublicRoutes({ route, repo, config, views, today, live }) {
   const submissions = createRateLimiter({ limit: config.submissionLimit, windowMs: config.submissionWindowMs });
 
   function surveyByToken(ctx) {
@@ -77,6 +77,7 @@ export function registerPublicRoutes({ route, repo, config, views, today }) {
     if (responseId === null) return sendHtml(ctx.res, 409, views.alreadyAnsweredPage({ survey }));
 
     submissions.hit(limitKey);
+    live.surveyChanged(survey);
     const headers = existingDeviceId ? {} : { 'Set-Cookie': deviceCookie(deviceId) };
     redirect(ctx.res, `/s/${encodeURIComponent(survey.publicToken)}/thanks`, headers);
   });

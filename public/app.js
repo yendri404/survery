@@ -71,6 +71,56 @@ for (const input of document.querySelectorAll('.share-url')) {
   syncLabels();
 }
 
+// Live updates: <section id="..." data-live="/events-url">. When the server reports a change, the
+// page re-fetches its own HTML and swaps that section, so it shows exactly what a refresh would.
+if (window.EventSource) {
+  let announcer;
+  const announce = (text) => {
+    if (!announcer) {
+      announcer = Object.assign(document.createElement('div'), { className: 'visually-hidden' });
+      announcer.setAttribute('aria-live', 'polite');
+      document.body.append(announcer);
+    }
+    announcer.textContent = '';
+    setTimeout(() => { announcer.textContent = text; }, 50);
+  };
+
+  for (const region of document.querySelectorAll('[data-live][id]')) {
+    let running = false;
+    let queued = false;
+
+    const refresh = async () => {
+      if (running) { queued = true; return; }
+      running = true;
+      try {
+        const res = await fetch(window.location.href, { credentials: 'same-origin', cache: 'no-store' });
+        if (!res.ok) return;
+        const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+        const fresh = doc.getElementById(region.id);
+        if (fresh && fresh.innerHTML !== region.innerHTML) {
+          region.innerHTML = fresh.innerHTML;
+          region.classList.remove('live-updated');
+          void region.offsetWidth; // restart the highlight animation
+          region.classList.add('live-updated');
+          announce('Results updated');
+        }
+      } catch {
+        // Network hiccup: the next event or reconnection triggers another refresh.
+      } finally {
+        running = false;
+        if (queued) { queued = false; refresh(); }
+      }
+    };
+
+    const source = new EventSource(region.dataset.live);
+    let opened = false;
+    source.addEventListener('change', refresh);
+    // After a reconnection, events may have been missed while offline: refresh once.
+    source.addEventListener('open', () => { if (opened) refresh(); opened = true; });
+    window.addEventListener('pagehide', () => source.close());
+  }
+}
+
 // Open the calendar when tapping anywhere on a date field, not only on its small icon.
 document.addEventListener('click', (event) => {
   const input = event.target.closest?.('input[type="date"]');

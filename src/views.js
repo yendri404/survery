@@ -191,9 +191,11 @@ export function surveyListPage({ user, csrf, surveys, flash, today }) {
   <h1>My surveys</h1>
   <a class="button" href="/surveys/new">${icon('plus')} New survey</a>
 </div>
+<div id="survey-list" data-live="/surveys/events">
 ${surveys.length
     ? `<ul class="cards">${cards}</ul>`
-    : `<div class="empty">${icon('inbox')}<p>You have no surveys yet.</p><a class="button big" href="/surveys/new">${icon('plus')} Create your first survey</a></div>`}`,
+    : `<div class="empty">${icon('inbox')}<p>You have no surveys yet.</p><a class="button big" href="/surveys/new">${icon('plus')} Create your first survey</a></div>`}
+</div>`,
   });
 }
 
@@ -311,7 +313,7 @@ ${survey.description ? `<p class="description">${esc(survey.description)}</p>` :
   <p class="hint">Closing a survey stops new answers before its closing date. You can reopen it at any time.</p>
 </section>
 
-<section>
+<section id="responses" data-live="/surveys/${survey.id}/events">
   <div class="page-head">
     <h2>Responses (${responses.length})</h2>
     <div class="button-row">

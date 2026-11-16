@@ -314,3 +314,8 @@ th { background: var(--brand-soft); }
   .qr { width: 200px; flex: none; }
   .qr-help h3 { justify-content: flex-start; }
 }
+
+/* Brief highlight when a live update replaces a section. */
+@keyframes live-flash { from { box-shadow: 0 0 0 3px var(--brand-text); } to { box-shadow: 0 0 0 3px transparent; } }
+.live-updated { animation: live-flash 1.2s ease-out; border-radius: var(--radius); }
+@media (prefers-reduced-motion: reduce) { .live-updated { animation: none; } }

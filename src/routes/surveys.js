@@ -4,7 +4,7 @@ import { HttpError, redirect, sendHtml } from '../http.js';
 import { qrPng, qrSvg } from '../qr.js';
 import { DEFAULT_OPEN_DAYS, addDays, parseSurveyInput, toCsv } from '../surveys.js';
 
-export function registerSurveyRoutes({ route, repo, config, views, today }) {
+export function registerSurveyRoutes({ route, repo, config, views, today, live }) {
   const session = (ctx) => ({
     user: ctx.user,
     csrf: ctx.session.csrf_token,
@@ -35,6 +35,15 @@ export function registerSurveyRoutes({ route, repo, config, views, today }) {
     sendHtml(ctx.res, 200, views.surveyListPage({ ...session(ctx), surveys: repo.listSurveys(ctx.user.id) }));
   }));
 
+  route('GET', '/surveys/events', authed((ctx) => {
+    live.stream(ctx.req, ctx.res, `owner:${ctx.user.id}`);
+  }));
+
+  route('GET', '/surveys/:id/events', authed((ctx) => {
+    const survey = ownedSurvey(ctx);
+    live.stream(ctx.req, ctx.res, `survey:${survey.id}`);
+  }));
+
   route('GET', '/surveys/new', authed((ctx) => {
     sendHtml(ctx.res, 200, views.surveyEditorPage({
       ...session(ctx),
@@ -47,6 +56,7 @@ export function registerSurveyRoutes({ route, repo, config, views, today }) {
     const { value, errors } = parseSurveyInput(input, { today: today() });
     if (errors.length) return sendHtml(ctx.res, 422, views.surveyEditorPage({ ...session(ctx), values: input, errors }));
     const id = repo.createSurvey({ ownerId: ctx.user.id, publicToken: newToken(18), ...value });
+    live.surveyChanged({ id, ownerId: ctx.user.id });
     redirect(ctx.res, `/surveys/${id}?msg=created`);
   }));
 
@@ -90,18 +100,21 @@ export function registerSurveyRoutes({ route, repo, config, views, today }) {
     const { value, errors } = parseSurveyInput(input, { today: today(), currentClosesOn: survey.closesOn });
     if (errors.length) return sendHtml(ctx.res, 422, views.surveyEditorPage({ ...session(ctx), survey, values: input, errors }));
     repo.updateSurvey(survey.id, ctx.user.id, value);
+    live.surveyChanged(survey);
     redirect(ctx.res, `/surveys/${survey.id}?msg=saved`);
   }));
 
   route('POST', '/surveys/:id/toggle', authedPost((ctx) => {
     const survey = ownedSurvey(ctx);
     repo.setSurveyOpen(survey.id, ctx.user.id, !survey.isOpen);
+    live.surveyChanged(survey);
     redirect(ctx.res, `/surveys/${survey.id}?msg=${survey.isOpen ? 'closed' : 'opened'}`);
   }));
 
   route('POST', '/surveys/:id/delete', authedPost((ctx) => {
     const survey = ownedSurvey(ctx);
     repo.deleteSurvey(survey.id, ctx.user.id);
+    live.surveyChanged(survey);
     redirect(ctx.res, '/surveys?msg=deleted');
   }));
 
@@ -109,6 +122,7 @@ export function registerSurveyRoutes({ route, repo, config, views, today }) {
     const survey = ownedSurvey(ctx);
     const responseId = Number(ctx.params.responseId);
     if (Number.isSafeInteger(responseId)) repo.deleteResponse(survey.id, responseId);
+    live.surveyChanged(survey);
     redirect(ctx.res, `/surveys/${survey.id}?msg=response-deleted`);
   }));
 

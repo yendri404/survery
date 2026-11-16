@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { hashSessionId } from './auth.js';
 import { HttpError, parseCookies, sendHtml } from './http.js';
+import { createLiveUpdates } from './live.js';
 import { createRepo } from './repo.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerPublicRoutes } from './routes/public.js';
@@ -51,7 +52,8 @@ export function createApp({ db, config }) {
   // Injectable clock so tests can move time; `today` is the server's local calendar date.
   const now = config.now ?? (() => new Date());
   const today = () => localDateString(now());
-  const deps = { route, repo, config, views, today };
+  const live = createLiveUpdates();
+  const deps = { route, repo, config, views, today, live };
   registerAuthRoutes(deps);
   registerSurveyRoutes(deps);
   registerPublicRoutes(deps);

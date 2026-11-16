@@ -49,6 +49,7 @@ npm run create-user -- <email> <name> <password>
 - Edit questions at any time; existing answers are kept.
 - Every survey has a closing date (picked with a calendar; 10 days from creation by default). It accepts answers until the end of that day, server time.
 - Open/close a survey manually at any time.
+- Results update live while you watch: new answers appear without reloading the page.
 - Results table, per-option summary for choice questions, delete individual responses.
 - Light and dark theme (follows the device setting until changed with the theme button).
 - QR code of the share link on every survey, downloadable as PNG to print or send.

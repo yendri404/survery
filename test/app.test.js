@@ -77,6 +77,37 @@ class Client {
   }
 }
 
+/** Opens a Server-Sent Events stream and lets a test wait for text to arrive on it. */
+async function openEvents(url, cookie) {
+  const controller = new AbortController();
+  const res = await fetch(url, { headers: cookie ? { cookie } : {}, redirect: 'manual', signal: controller.signal });
+  const reader = res.body?.getReader();
+  const decoder = new TextDecoder();
+  let received = '';
+  return {
+    res,
+    async waitFor(pattern, ms = 2000) {
+      const deadline = Date.now() + ms;
+      while (!pattern.test(received)) {
+        const left = deadline - Date.now();
+        if (left <= 0) throw new Error(`timed out waiting for ${pattern}; got: ${JSON.stringify(received)}`);
+        let timer;
+        const chunk = await Promise.race([
+          reader.read(),
+          new Promise((resolve) => { timer = setTimeout(() => resolve({ timeout: true }), left); }),
+        ]);
+        clearTimeout(timer);
+        if (chunk.done) throw new Error('stream ended');
+        if (chunk.value) received += decoder.decode(chunk.value, { stream: true });
+      }
+      const match = received;
+      received = '';
+      return match;
+    },
+    close: () => controller.abort(),
+  };
+}
+
 const FIELDS = [
   { label: 'Your name', type: 'text', required: true },
   { label: 'Department', type: 'select', required: true, options: ['IT', 'HR'] },
@@ -240,6 +271,62 @@ describe('survey app', () => {
     await other.register('qr-other@corp.local');
     assert.equal((await other.request(`/surveys/${id}/qr.png`)).status, 404);
     assert.equal((await new Client(app.base).request(`/surveys/${id}/qr.png`)).status, 303);
+  });
+
+  test('creators get live change events when someone answers', async () => {
+    const c = new Client(app.base);
+    await c.register('live@corp.local');
+    const id = await c.createSurvey([{ label: 'Q', type: 'text' }]);
+    const token = await c.shareToken(id);
+
+    const detail = (await c.request(`/surveys/${id}`)).text;
+    assert.match(detail, new RegExp(`<section id="responses" data-live="/surveys/${id}/events">`));
+    assert.match((await c.request('/surveys')).text, /<div id="survey-list" data-live="\/surveys\/events">/);
+
+    const surveyStream = await openEvents(`${app.base}/surveys/${id}/events`, c.cookie);
+    const listStream = await openEvents(`${app.base}/surveys/events`, c.cookie);
+    try {
+      assert.equal(surveyStream.res.status, 200);
+      assert.match(surveyStream.res.headers.get('content-type'), /^text\/event-stream/);
+      await surveyStream.waitFor(/: connected/);
+      await listStream.waitFor(/: connected/);
+
+      assert.equal((await new Client(app.base).request(`/s/${token}`, { method: 'POST', form: {} })).status, 303);
+      await surveyStream.waitFor(/event: change\ndata: /);
+      await listStream.waitFor(/event: change\ndata: /);
+
+      // Deleting a response also notifies (another open tab stays in sync).
+      const responseId = (await c.request(`/surveys/${id}`)).text.match(/responses\/(\d+)\/delete/)[1];
+      await c.request(`/surveys/${id}/responses/${responseId}/delete`, { method: 'POST', form: { _csrf: await c.csrf() } });
+      await surveyStream.waitFor(/event: change/);
+    } finally {
+      surveyStream.close();
+      listStream.close();
+    }
+  });
+
+  test('live event streams are private to the survey owner', async () => {
+    const owner = new Client(app.base);
+    await owner.register('live-owner@corp.local');
+    const id = await owner.createSurvey([{ label: 'Q', type: 'text' }]);
+    const other = new Client(app.base);
+    await other.register('live-other@corp.local');
+
+    const foreign = await other.request(`/surveys/${id}/events`);
+    assert.equal(foreign.status, 404);
+    const anonymous = await new Client(app.base).request(`/surveys/${id}/events`);
+    assert.equal(anonymous.status, 303);
+
+    // Another creator's list stream never hears about this survey.
+    const otherList = await openEvents(`${app.base}/surveys/events`, other.cookie);
+    try {
+      await otherList.waitFor(/: connected/);
+      const token = await owner.shareToken(id);
+      await new Client(app.base).request(`/s/${token}`, { method: 'POST', form: {} });
+      await assert.rejects(otherList.waitFor(/event: change/, 300), /timed out/);
+    } finally {
+      otherList.close();
+    }
   });
 
   test('each device can answer a survey only once', async () => {

@@ -36,6 +36,7 @@ src/
 ├── auth.js            Password hashing, tokens, session-id hashing
 ├── rate-limit.js      In-memory rate limiter + client IP detection
 ├── qr.js              QR code of the share link (SVG for the page, PNG download)
+├── live.js            Live updates: in-process events streamed with Server-Sent Events
 ├── repo.js            All SQL queries (the only file that talks to the DB)
 ├── surveys.js         Business rules: survey definitions, answers, CSV
 ├── views.js           Server-rendered HTML pages
@@ -61,6 +62,7 @@ src/
 | `auth.js` | 35 | Infrastructure | Crypto helpers |
 | `rate-limit.js` | 60 | Infrastructure | Abuse protection |
 | `qr.js` | 20 | Infrastructure | QR codes (wraps the `qrcode` package) |
+| `live.js` | 45 | Infrastructure | Live updates (Server-Sent Events) |
 | `views.js` | 270 | Presentation | HTML templates |
 
 ---
@@ -342,6 +344,8 @@ All routes are wrapped in `authed` / `authedPost`.
 | Method | Path | Result |
 |--------|------|--------|
 | GET | `/surveys` | List of the creator's surveys with response counts |
+| GET | `/surveys/events` | Live stream (SSE) for the creator's list; registered before `/surveys/:id` |
+| GET | `/surveys/:id/events` | Live stream (SSE) for one survey's results |
 | GET | `/surveys/new` | Empty editor |
 | POST | `/surveys` | Create → 303 `/surveys/:id` · 422 re-renders the editor with errors |
 | GET | `/surveys/:id` | Detail: share link, actions, summary, responses table |
@@ -486,6 +490,19 @@ The heart of the app. It has no database, no HTTP and no HTML, which is why it c
 | `X-Forwarded-For` opt-in | Otherwise any client could fake its IP to dodge the limit |
 
 ---
+
+#### `live.js` — live updates
+
+**Exports:** `createLiveUpdates()` → `{ surveyChanged(survey), stream(req, res, channel) }`. `app.js` creates one instance and passes it to the routes as `live`.
+
+| Piece | Detail |
+|-------|--------|
+| Channels | `survey:<id>` (results page) and `owner:<userId>` (survey list) |
+| Publishers | A new response (`routes/public.js`), and creating, editing, opening/closing, deleting a survey or a response (`routes/surveys.js`) |
+| `stream()` | Writes an `text/event-stream` response: `: connected` on open, `event: change` per change, `: ping` every 25 s, cleanup on disconnect |
+| Browser side | `public/app.js` opens an `EventSource` for each `[data-live][id]` element. On `change` it re-fetches the current page and swaps that element's HTML; after a reconnection it refreshes once, in case events were missed |
+
+**Why events carry no data:** the page re-renders through the same server code as a manual refresh, so a live update can never show something different from a reload. **Limits:** events live in memory in one process; running several server processes would need a shared bus (for example Redis pub/sub).
 
 #### `qr.js` — QR codes
 
