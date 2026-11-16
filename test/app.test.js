@@ -169,11 +169,39 @@ describe('survey app', () => {
     const csv = await creator.request(`/surveys/${id}/export.csv`);
     assert.equal(csv.status, 200);
     assert.match(csv.headers.get('content-type'), /text\/csv/);
-    assert.match(csv.text, /Response ID,Submitted at \(UTC\),Your name,Department,Tools\r\n/);
+    assert.match(csv.text, /Response ID,Submitted at \(UTC\),Name,Your name,Department,Tools\r\n/);
     assert.match(csv.text, /,"'=Luis, ""Lu""",HR,"Mail, Chat"\r\n/);
 
     const csvSemicolon = await creator.request(`/surveys/${id}/export.csv?delimiter=semicolon`);
-    assert.match(csvSemicolon.text, /Response ID;Submitted at \(UTC\);Your name;Department;Tools\r\n/);
+    assert.match(csvSemicolon.text, /Response ID;Submitted at \(UTC\);Name;Your name;Department;Tools\r\n/);
+  });
+
+  test('respondents can optionally leave their name', async () => {
+    const c = new Client(app.base);
+    await c.register('names@corp.local');
+    const id = await c.createSurvey([{ label: 'Q', type: 'text' }]);
+    const token = await c.shareToken(id);
+    const form = await new Client(app.base).request(`/s/${token}`);
+    assert.match(form.text, /name="respondent_name"/);
+    assert.match(form.text, /optional/i);
+    const field = form.text.match(/name="(f_[a-z0-9]+)"/)[1];
+
+    const r = new Client(app.base);
+    assert.equal((await r.request(`/s/${token}`, { method: 'POST', form: [['respondent_name', '  Marta Gómez '], [field, 'x']] })).status, 303);
+    assert.equal((await r.request(`/s/${token}`, { method: 'POST', form: [[field, 'y']] })).status, 303);
+    const tooLong = await r.request(`/s/${token}`, { method: 'POST', form: [['respondent_name', 'a'.repeat(101)], [field, 'z']] });
+    assert.equal(tooLong.status, 422);
+    assert.match(tooLong.text, /Name must be at most 100 characters/);
+    assert.match(tooLong.text, /value="a{101}"/);
+
+    const detail = (await c.request(`/surveys/${id}`)).text;
+    assert.match(detail, /Responses \(2\)/);
+    assert.match(detail, /Marta Gómez/);
+    assert.match(detail, /Anonymous/);
+    const csv = (await c.request(`/surveys/${id}/export.csv`)).text;
+    assert.match(csv, /Response ID,Submitted at \(UTC\),Name,Q\r\n/);
+    assert.match(csv, /,Marta Gómez,x\r\n/);
+    assert.match(csv, /,,y\r\n/);
   });
 
   test('closed surveys reject responses until reopened', async () => {

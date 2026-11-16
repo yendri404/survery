@@ -228,6 +228,7 @@ export function surveyDetailPage({ user, csrf, survey, responses, shareUrl, flas
   const rows = responses.map((r) => `<tr>
     <td data-label="Response">#${r.id}</td>
     <td data-label="Sent (UTC)" class="nowrap">${esc(r.submittedAt)}</td>
+    <td data-label="Name">${r.respondentName ? esc(r.respondentName) : '<span class="muted">Anonymous</span>'}</td>
     ${survey.fields.map((f) => `<td data-label="${esc(f.label)}">${esc(formatAnswer(r.answers[f.id])) || '<span class="muted">-</span>'}</td>`).join('')}
     <td class="row-actions"><form method="post" action="/surveys/${survey.id}/responses/${r.id}/delete" data-confirm="Delete response #${r.id}? This cannot be undone.">${csrfInput(csrf)}
       <button type="submit" class="icon-button danger" aria-label="Delete response #${r.id}" title="Delete response">${icon('trash')}</button></form></td>
@@ -280,7 +281,7 @@ ${survey.description ? `<p class="description">${esc(survey.description)}</p>` :
   </div>
   ${summaryHtml(survey.fields, responses)}
   ${responses.length
-    ? `<h3>All answers</h3><div class="table-wrap"><table class="responsive"><thead><tr><th>#</th><th>Sent (UTC)</th>${head}<th><span class="visually-hidden">Actions</span></th></tr></thead><tbody>${rows}</tbody></table></div>`
+    ? `<h3>All answers</h3><div class="table-wrap"><table class="responsive"><thead><tr><th>#</th><th>Sent (UTC)</th><th>Name</th>${head}<th><span class="visually-hidden">Actions</span></th></tr></thead><tbody>${rows}</tbody></table></div>`
     : `<div class="empty">${icon('inbox')}<p>No answers yet. Share the link above to start collecting them.</p></div>`}
 </section>`,
   });
@@ -326,13 +327,25 @@ function renderField(field, value, error, index) {
   }
 }
 
-export function publicFormPage({ survey, values = {}, errors = {} }) {
+function respondentNameField(value, error) {
+  const errorHtml = error ? `<p class="field-error" id="respondent_name_error">${icon('alert')} ${esc(error)}</p>` : '';
+  const described = error ? ' aria-describedby="respondent_name_error" aria-invalid="true"' : '';
+  return `<div class="field respondent-name${error ? ' has-error' : ''}">
+    <label for="respondent_name">Your name <span class="muted">(optional)</span></label>
+    <span class="hint">Leave it empty to answer anonymously.</span>
+    <input id="respondent_name" name="respondent_name" value="${esc(value)}" maxlength="${LIMITS.respondentName}" autocomplete="name"${described}>
+    ${errorHtml}
+  </div>`;
+}
+
+export function publicFormPage({ survey, values = {}, errors = {}, respondentName = '', respondentNameError }) {
   const invalid = survey.fields.filter((f) => errors[f.id]);
-  const errorSummary = invalid.length
-    ? errorList([
-      `Please check ${invalid.length === 1 ? 'this answer' : `these ${invalid.length} answers`}:`,
-      ...invalid.map((f) => `<a href="#fld_${esc(f.id)}">${esc(f.label)}</a>: ${esc(errors[f.id])}`),
-    ])
+  const problems = [
+    ...(respondentNameError ? [`<a href="#respondent_name">Your name</a>: ${esc(respondentNameError)}`] : []),
+    ...invalid.map((f) => `<a href="#fld_${esc(f.id)}">${esc(f.label)}</a>: ${esc(errors[f.id])}`),
+  ];
+  const errorSummary = problems.length
+    ? errorList([`Please check ${problems.length === 1 ? 'this answer' : `these ${problems.length} answers`}:`, ...problems])
     : '';
   const hasRequired = survey.fields.some((f) => f.required);
   return layout({
@@ -345,6 +358,7 @@ export function publicFormPage({ survey, values = {}, errors = {} }) {
 </div>
 ${errorSummary}
 <form method="post" action="/s/${esc(survey.publicToken)}" class="stack respondent-form">
+  ${respondentNameField(respondentName, respondentNameError)}
   ${survey.fields.map((f, i) => renderField(f, values[f.id] ?? '', errors[f.id], i)).join('\n')}
   <button type="submit" class="big block">${icon('check')} Send my answers</button>
 </form>`,

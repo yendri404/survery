@@ -15,7 +15,12 @@ function hydrateSurvey(row) {
 }
 
 function hydrateResponse(row) {
-  return { id: row.id, answers: JSON.parse(row.answers_json), submittedAt: row.submitted_at };
+  return {
+    id: row.id,
+    answers: JSON.parse(row.answers_json),
+    respondentName: row.respondent_name ?? null,
+    submittedAt: row.submitted_at,
+  };
 }
 
 export function createRepo(db) {
@@ -83,8 +88,9 @@ export function createRepo(db) {
     },
 
     // Responses
-    addResponse(surveyId, answers) {
-      const r = q('INSERT INTO responses (survey_id, answers_json) VALUES (?, ?)').run(surveyId, JSON.stringify(answers));
+    addResponse(surveyId, answers, respondentName = null) {
+      const r = q('INSERT INTO responses (survey_id, answers_json, respondent_name) VALUES (?, ?, ?)')
+        .run(surveyId, JSON.stringify(answers), respondentName || null);
       return Number(r.lastInsertRowid);
     },
     listResponses(surveyId) {

@@ -1,6 +1,6 @@
 import { HttpError, readForm, redirect, sendHtml } from '../http.js';
 import { clientIp, createRateLimiter } from '../rate-limit.js';
-import { validateAnswers } from '../surveys.js';
+import { parseRespondentName, validateAnswers } from '../surveys.js';
 
 /** Respondent-facing routes: no account required. */
 export function registerPublicRoutes({ route, repo, config, views }) {
@@ -37,11 +37,14 @@ export function registerPublicRoutes({ route, repo, config, views }) {
     }
 
     const { answers, errors } = validateAnswers(survey.fields, form);
-    if (Object.keys(errors).length) {
-      return sendHtml(ctx.res, 422, views.publicFormPage({ survey, values: answers, errors }));
+    const respondent = parseRespondentName(form.get('respondent_name'));
+    if (Object.keys(errors).length || respondent.error) {
+      return sendHtml(ctx.res, 422, views.publicFormPage({
+        survey, values: answers, errors, respondentName: respondent.name, respondentNameError: respondent.error,
+      }));
     }
     submissions.hit(limitKey);
-    repo.addResponse(survey.id, answers);
+    repo.addResponse(survey.id, answers, respondent.name);
     redirect(ctx.res, `/s/${encodeURIComponent(survey.publicToken)}/thanks`);
   });
 

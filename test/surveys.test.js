@@ -89,8 +89,8 @@ test('csvCell escapes delimiters/quotes and neutralizes formulas but not negativ
 
 test('toCsv writes header and rows in submission order', () => {
   const csv = toCsv(fields.slice(0, 1), [
-    { id: 2, submittedAt: '2026-01-02 00:00:00', answers: { name0001: 'Bo' } },
-    { id: 1, submittedAt: '2026-01-01 00:00:00', answers: { name0001: 'Ana' } },
+    { id: 2, submittedAt: '2026-01-02 00:00:00', respondentName: 'Bo B.', answers: { name0001: 'Bo' } },
+    { id: 1, submittedAt: '2026-01-01 00:00:00', respondentName: null, answers: { name0001: 'Ana' } },
   ]);
-  assert.equal(csv, 'Response ID,Submitted at (UTC),Name\r\n1,2026-01-01 00:00:00,Ana\r\n2,2026-01-02 00:00:00,Bo\r\n');
+  assert.equal(csv, 'Response ID,Submitted at (UTC),Name,Name\r\n1,2026-01-01 00:00:00,,Ana\r\n2,2026-01-02 00:00:00,Bo B.,Bo\r\n');
 });

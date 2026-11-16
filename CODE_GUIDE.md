@@ -160,6 +160,7 @@ erDiagram
         int id PK
         int survey_id FK
         text answers_json "{ fieldId: value }"
+        text respondent_name "optional, NULL = anonymous"
         text submitted_at "UTC"
     }
 ```
@@ -226,7 +227,8 @@ All foreign keys use `ON DELETE CASCADE`: deleting a survey deletes its response
 
 Pass `':memory:'` for a throwaway database (the tests do this).
 
-> **Limitation:** there is no migration system yet. Adding a column to an existing table needs an `ALTER TABLE` step, because `CREATE TABLE IF NOT EXISTS` will not modify a table that already exists.
+**Migrations:** after the base schema, `migrate()` runs the `MIGRATIONS` list inside one transaction. Each step checks the current shape first (for example `hasColumn`) and only then alters the table, so steps are idempotent and run on every boot. Add new steps at the end of the list; never edit a released step.
+
 
 ---
 
@@ -400,6 +402,7 @@ The heart of the app. It has no database, no HTTP and no HTML, which is why it c
 |----------|----------------|-------|
 | `parseSurveyInput({ title, description, fieldsJson })` | → `{ value, errors[] }` | Trims, enforces limits, removes duplicate and blank options. **Keeps a valid existing `id`** so edits do not orphan answers; generates a new one when it is missing, invalid or duplicated |
 | `validateAnswers(fields, form)` | → `{ answers, errors{fieldId: msg} }` | Reads only defined fields (`f_<id>`), so extra keys are ignored. Checks type, required, and that choices are among the options. Checkbox values are returned in option order |
+| `parseRespondentName(value)` | → `{ name, error }` | Optional respondent name: trimmed, max. 100 characters, empty means anonymous |
 | `formatAnswer(value)` | → `string` | Arrays become `"a, b"` |
 | `summarize(fields, responses)` | → per choice field: `answered`, counts per option | Feeds the summary section of the detail page |
 | `csvCell(value, delimiter)` | → escaped cell | Quotes when needed. Prefixes `'` to values starting with `= + - @` (formula injection), except plain numbers like `-5` |

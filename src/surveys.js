@@ -22,7 +22,17 @@ export const LIMITS = {
   option: 200,
   text: 1000,
   textarea: 10000,
+  respondentName: 100,
 };
+
+/** Optional name a respondent may leave. Empty means anonymous. */
+export function parseRespondentName(value) {
+  const name = String(value ?? '').trim();
+  if (name.length > LIMITS.respondentName) {
+    return { name, error: `Name must be at most ${LIMITS.respondentName} characters.` };
+  }
+  return { name, error: undefined };
+}
 
 const FIELD_ID = /^[a-z0-9]{4,32}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -190,10 +200,10 @@ export function csvCell(value, delimiter = ',') {
 }
 
 export function toCsv(fields, responses, delimiter = ',') {
-  const header = ['Response ID', 'Submitted at (UTC)', ...fields.map((f) => f.label)];
+  const header = ['Response ID', 'Submitted at (UTC)', 'Name', ...fields.map((f) => f.label)];
   const rows = responses
     .slice()
     .sort((a, b) => a.id - b.id)
-    .map((r) => [r.id, r.submittedAt, ...fields.map((f) => r.answers[f.id])]);
+    .map((r) => [r.id, r.submittedAt, r.respondentName ?? '', ...fields.map((f) => r.answers[f.id])]);
   return [header, ...rows].map((row) => row.map((c) => csvCell(c, delimiter)).join(delimiter)).join('\r\n') + '\r\n';
 }

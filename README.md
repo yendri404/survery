@@ -43,6 +43,7 @@ npm run create-user -- <email> <name> <password>
 ## Features
 
 - Question types: short text, long text, number, email, date, dropdown, single choice, multiple choice. Each can be required.
+- Respondents can optionally leave their name; otherwise the response is anonymous.
 - Edit questions at any time; existing answers are kept.
 - Open/close a survey to start/stop accepting responses.
 - Results table, per-option summary for choice questions, delete individual responses.

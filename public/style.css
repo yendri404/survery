@@ -228,3 +228,6 @@ th { background: var(--brand-soft); }
   .hero h1 { font-size: 3rem; }
   .hero .button-row { justify-content: center; }
 }
+
+/* Optional respondent name: visually separated from the survey questions. */
+.respondent-form .respondent-name { border-style: dashed; }
