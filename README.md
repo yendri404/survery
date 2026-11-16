@@ -77,3 +77,7 @@ public/            builder.js (question editor), app.js, style.css
 scripts/           create-user.js
 test/              node:test suites
 ```
+
+## Code guide
+
+See [CODE_GUIDE.md](CODE_GUIDE.md) for a file-by-file explanation of `src/`.
