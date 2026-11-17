@@ -17,7 +17,7 @@ export const CHOICE_TYPES = new Set(['select', 'radio', 'checkbox']);
 export const YES_NO = ['yes', 'no'];
 
 /** The values a single or multiple choice question accepts; yes/no has fixed ones. */
-export const fieldOptions = (field) => (field.type === 'yesno' ? YES_NO : field.options);
+const fieldOptions = (field) => (field.type === 'yesno' ? YES_NO : field.options);
 
 /** Text shown for an answer: yes/no in the reader's language, arrays as "a, b". */
 export function answerText(field, value, t = englishT) {
@@ -246,7 +246,7 @@ export function validateAnswers(fields, form, { t = englishT } = {}) {
   return { answers, errors };
 }
 
-export function formatAnswer(value) {
+function formatAnswer(value) {
   if (Array.isArray(value)) return value.join(', ');
   return value == null ? '' : String(value);
 }

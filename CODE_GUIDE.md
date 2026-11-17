@@ -246,7 +246,7 @@ erDiagram
     sessions {
         text id PK "sha256 of the Bearer token"
         int user_id FK
-        text csrf_token "legacy column, empty for API tokens"
+        text csrf_token "legacy (cookie sessions), always empty"
         int expires_at "epoch ms"
     }
     surveys {
@@ -518,8 +518,7 @@ The heart of the API. It has no database, no HTTP and no JSON output, which is w
 | `surveyStatus(survey, today)` | → `'open' \| 'closed' \| 'expired'` | `closed` = switched off by the creator; `expired` = `today` is after `closesOn`. Only `open` accepts answers |
 | `localDateString(date)`, `addDays(date, n)`, `daysBetween(from, to)` | → `YYYY-MM-DD` / whole days | Server-local calendar date; calendar math without time zones; "days left" |
 | `parseRespondentName(value, { t })` | → `{ name, error }` | Optional, trimmed, max 100 characters, empty means anonymous |
-| `formatAnswer(value)`, `answerText(field, value, t)` | → `string` | Arrays become `"a, b"`; `yes`/`no` translated (CSV) |
-| `fieldOptions(field)` | → `string[]` | `YES_NO` for `yesno`, otherwise the creator's options |
+| `answerText(field, value, t)` | → `string` | Arrays become `"a, b"`; `yes`/`no` translated (CSV) |
 | `summarize(fields, responses, { t })` | → per choice field (yes/no included): `answered`, counts per option | Feeds `/summary`, which adds percentages |
 | `csvCell(value, delimiter)` | → escaped cell | Quotes when needed. Prefixes `'` to values starting with `= + - @` (formula injection), except plain numbers like `-5` |
 | `toCsv(fields, responses, delimiter, { t })` | → full CSV text | Header (fixed columns in the requested language) + rows in submission order, first column = per-survey `number`, `\r\n` line endings |
@@ -568,7 +567,6 @@ The heart of the API. It has no database, no HTTP and no JSON output, which is w
 | `hashPassword(pw)` | scrypt with a random 16-byte salt → `"scrypt$<salt>$<key>"` |
 | `verifyPassword(pw, stored)` | Recomputes and compares in constant time; `false` for malformed hashes |
 | `hashToken(token)` | SHA-256 of a secret (Bearer tokens, device ids). A leaked DB does not give usable tokens |
-| `safeEqual(a, b)` | Constant-time string comparison |
 | `DUMMY_HASH` | Precomputed hash for the "unknown email" login path |
 
 **Why scrypt?** It is built into Node (no native dependency to compile on Windows) and is memory-hard, which makes GPU brute force expensive. The `scrypt$` prefix leaves room to switch algorithms later.

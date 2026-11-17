@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  csrf_token TEXT NOT NULL,
+  csrf_token TEXT NOT NULL, -- legacy (cookie sessions of the single-server version); always '' now
   expires_at INTEGER NOT NULL
 );
 

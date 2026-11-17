@@ -17,7 +17,7 @@ export function registerAuthRoutes({ route, repo, config }) {
   function startSession(ctx, user, status) {
     repo.deleteExpiredSessions();
     const token = newToken();
-    repo.createSession({ id: hashToken(token), userId: user.id, csrfToken: '', expiresAt: Date.now() + config.sessionTtlMs });
+    repo.createSession({ id: hashToken(token), userId: user.id, expiresAt: Date.now() + config.sessionTtlMs });
     sendJson(ctx.res, status, { token, user: publicUser(user) });
   }
 

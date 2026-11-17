@@ -42,8 +42,9 @@ export function createRepo(db) {
     },
 
     // Sessions
-    createSession({ id, userId, csrfToken, expiresAt }) {
-      q('INSERT INTO sessions (id, user_id, csrf_token, expires_at) VALUES (?, ?, ?, ?)').run(id, userId, csrfToken, expiresAt);
+    /** `id` is the hash of the Bearer token. csrf_token is a legacy column (cookie sessions): always ''. */
+    createSession({ id, userId, expiresAt }) {
+      q("INSERT INTO sessions (id, user_id, csrf_token, expires_at) VALUES (?, ?, '', ?)").run(id, userId, expiresAt);
     },
     getSession(id) {
       return q('SELECT * FROM sessions WHERE id = ? AND expires_at > ?').get(id, Date.now());
