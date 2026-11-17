@@ -21,7 +21,7 @@ Assumptions (not user-stated, chosen by the parent; revisit if the user objects)
 | T1 | S1, S3, S4 (backend), S6 docs for API | delegated (context backstop) | done — 65/65 api tests, old-vs-new differential identical | e241b59, 22e37fb, d294043, b0d9e58 |
 | T2 | S1, S2, S4 (frontend), S5 | delegated (context backstop; depends on T1 contract) | done — api 65/65, web 30/30, 36 Chrome e2e checks, screenshots equivalent to main | c16db4e, 055e0b2, d31f498 |
 | T3a | S6 desktop script (both layouts, both processes) | inline | done — legacy status on live server; split start/status/restart/stop on ports 3100/3101, LAN via proxy OK, API not reachable from LAN | outside repo (Desktop) |
-| T3b | S6 README + CODE_GUIDE for the split | delegated (context backstop) | in progress | — |
+| T3b | S6 README + CODE_GUIDE for the split | delegated (context backstop) | done — api 65/65, web 30/30 after docs | a541f70 |
 
 Route evidence: parent context is past the ~150k backstop; T1 and T2 are sequential (T2 consumes the T1 contract), so one bounded writer each.
 
@@ -36,3 +36,4 @@ Route evidence: parent context is past the ~150k backstop; T1 and T2 are sequent
 - L7: T1 tests leave `sharevy-api-v1-*` temp dirs in the OS temp folder — test hygiene to fix (clean up in `after`). Fixed in c16db4e.
 - L8 (2026-11-17): T2 done. `web/` = zero-dep server (static + SPA fallback + `/api` proxy incl. SSE, CSP, ETag) and ES-module client (pages as containers, components as pure DOM builders, no innerHTML). Token in localStorage (tradeoff documented in web/README.md); respondent form now needs JavaScript (accepted). Proxy overwrites `X-Forwarded-For`, so the API must run with `TRUST_PROXY=true` on `HOST=127.0.0.1`.
 - L9 (2026-11-17): T3a done. Desktop script `Sharevy server.bat` detects layout (legacy `src/server.js` vs split `api/` + `web/`), starts API on 127.0.0.1:3001 (TRUST_PROXY, WEB_BASE_URL and CORS_ORIGINS from detected LAN IP) and web on 0.0.0.0:3000 (API_URL), stops both with a node-only safety check; overrides SHAREVY_DIR / SHAREVY_WEB_PORT / SHAREVY_API_PORT. Next: T3b docs, then the user decides the merge of `feat/rest-api-split` into `main`.
+- L10 (2026-11-17): T3b done (README + CODE_GUIDE rewritten; docs/API.md and web/README.md factual fixes). Note: API `HOST` defaults to `0.0.0.0` in code; only the desktop script binds it to 127.0.0.1. All tasks done. Pending user decisions: (1) independent security review before merge (Risk items 2, 3, 5); (2) merge `feat/rest-api-split` into `main` (the user's uncommitted `public/style.css` edit on main becomes obsolete — S5 already applied in `web/`).
