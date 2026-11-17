@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createI18n } from '../src/i18n.js';
 import {
-  FIELD_TYPES, addDays, csvCell, localDateString, parseSurveyInput, summarize, surveyStatus, toCsv, validateAnswers,
+  FIELD_TYPE_IDS, addDays, csvCell, localDateString, parseSurveyInput, summarize, surveyStatus, toCsv, validateAnswers,
 } from '../src/surveys.js';
 
 const form = (pairs) => new URLSearchParams(pairs);
@@ -145,7 +145,7 @@ test('toCsv writes header and rows in submission order', () => {
 });
 
 test('yes/no questions need no options and accept only yes or no', () => {
-  assert.equal(FIELD_TYPES.yesno, 'Yes / No');
+  assert.ok(FIELD_TYPE_IDS.includes('yesno'));
   const { value, errors } = parseSurveyInput({
     title: 'x',
     fieldsJson: JSON.stringify([{ label: 'Remote?', type: 'yesno', required: true, options: ['Maybe'] }]),

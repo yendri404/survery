@@ -4,13 +4,8 @@ import { defaultI18n } from './i18n.js';
 // User-facing messages come from a translator `t` passed in by the caller; English by default.
 const englishT = defaultI18n.t;
 
-const FIELD_TYPE_IDS = ['text', 'textarea', 'number', 'email', 'date', 'select', 'radio', 'yesno', 'checkbox'];
-
-/** Field type id -> label shown in the editor, in the translator's language. */
-export const fieldTypeLabels = (t = englishT) => Object.fromEntries(FIELD_TYPE_IDS.map((type) => [type, t(`fieldType.${type}`)]));
-
-/** Field type id -> English label. */
-export const FIELD_TYPES = fieldTypeLabels();
+/** Question types, in the order editors offer them. Clients name them in their own language. */
+export const FIELD_TYPE_IDS = ['text', 'textarea', 'number', 'email', 'date', 'select', 'radio', 'yesno', 'checkbox'];
 
 /** Types whose options the creator writes. */
 export const CHOICE_TYPES = new Set(['select', 'radio', 'checkbox']);
@@ -145,7 +140,7 @@ export function parseSurveyInput({ title, description, fieldsJson, closesOn }, {
         if (first) duplicateQuestionErrors.push(t('validation.labelDuplicate', { first, second: n }));
         else questionNumbers.set(sameTextKey(label), n);
       }
-      if (!Object.hasOwn(FIELD_TYPES, type)) errors.push(t('validation.typeUnknown', { n }));
+      if (!FIELD_TYPE_IDS.includes(type)) errors.push(t('validation.typeUnknown', { n }));
 
       const id = typeof input.id === 'string' && FIELD_ID.test(input.id) && !ids.has(input.id)
         ? input.id
@@ -174,7 +169,7 @@ export function parseSurveyInput({ title, description, fieldsJson, closesOn }, {
 
 /**
  * Two texts count as the same question or option when they match after trimming, ignoring case.
- * public/builder.js applies the same rule while the creator types.
+ * The web client applies the same rule while the creator types.
  */
 const sameTextKey = (text) => text.trim().toLocaleLowerCase();
 
@@ -197,7 +192,8 @@ function isValidDate(value) {
 }
 
 /**
- * Validates a respondent submission. Form inputs are named `f_<fieldId>`.
+ * Validates a respondent submission. `form` reads values by name (URLSearchParams-like: get/getAll);
+ * each answer is named `f_<fieldId>`.
  * Returns the normalized answers and a map of fieldId -> error message.
  */
 export function validateAnswers(fields, form, { t = englishT } = {}) {

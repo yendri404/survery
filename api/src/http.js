@@ -1,74 +1,51 @@
-import { defaultI18n } from './i18n.js';
+import { ApiError } from './errors.js';
+
+export const BODY_LIMIT_BYTES = 1_000_000;
 
 /**
- * An error shown to the user as an error page. `key` is a translation key (locales/*.json) rendered
- * in the request's language; `message` keeps the English text for logs.
+ * Reads an application/json body and returns it as a plain object.
+ * An empty body counts as `{}`; anything other than a JSON object is rejected.
  */
-export class HttpError extends Error {
-  constructor(status, key, params = {}) {
-    super(defaultI18n.t(key, params));
-    this.status = status;
-    this.key = key;
-    this.params = params;
-  }
-}
-
-export function parseCookies(header = '') {
-  const cookies = {};
-  for (const part of header.split(';')) {
-    const i = part.indexOf('=');
-    if (i < 0) continue;
-    const key = part.slice(0, i).trim();
-    const value = part.slice(i + 1).trim();
-    if (!key) continue;
-    try {
-      cookies[key] = decodeURIComponent(value);
-    } catch {
-      cookies[key] = value;
-    }
-  }
-  return cookies;
-}
-
-/** Reads an application/x-www-form-urlencoded body and returns URLSearchParams. */
-export async function readForm(req, limitBytes = 1_000_000) {
-  const type = req.headers['content-type'] ?? '';
-  if (!type.startsWith('application/x-www-form-urlencoded')) {
-    throw new HttpError(415, 'error.formEncoding');
-  }
+export async function readJson(req, limitBytes = BODY_LIMIT_BYTES) {
+  const type = String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > limitBytes) throw new HttpError(413, 'error.formTooLarge');
+    if (size > limitBytes) throw new ApiError(413, 'error.bodyTooLarge');
     chunks.push(chunk);
   }
-  return new URLSearchParams(Buffer.concat(chunks).toString('utf8'));
+  const text = Buffer.concat(chunks).toString('utf8');
+  if (type !== 'application/json') {
+    if (!text) return {};
+    throw new ApiError(415, 'error.unsupportedMediaType');
+  }
+  if (!text.trim()) return {};
+  let body;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    throw new ApiError(400, 'error.invalidJson');
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new ApiError(400, 'error.invalidBody');
+  return body;
 }
 
-export function sendHtml(res, status, html) {
-  res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-  res.end(html);
+export function sendJson(res, status, data, headers = {}) {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', ...headers });
+  res.end(JSON.stringify(data));
 }
 
-export function redirect(res, location, headers = {}) {
-  res.writeHead(303, { Location: location, ...headers });
+export function sendNoContent(res) {
+  res.writeHead(204);
   res.end();
 }
 
-/**
- * Only allow same-site relative paths as redirect targets.
- * Control characters, spaces and backslashes are rejected because browsers strip or
- * normalize them while parsing URLs ("/\t/evil.com" becomes "//evil.com").
- */
-export function safeNext(value, fallback = '/surveys') {
-  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')) return fallback;
-  if (/[\x00-\x20\x7f\\]/.test(value)) return fallback;
-  const origin = 'http://same-site.invalid';
-  try {
-    const url = new URL(value, origin);
-    return url.origin === origin ? url.pathname + url.search : fallback;
-  } catch {
-    return fallback;
-  }
+/** Bearer token of the Authorization header, or undefined. */
+export function bearerToken(req) {
+  const match = /^Bearer\s+(\S+)\s*$/i.exec(String(req.headers.authorization ?? ''));
+  return match?.[1];
 }
+
+/** "2026-11-17 10:00:00" (SQLite UTC) -> "2026-11-17T10:00:00Z" (ISO 8601). */
+export const isoUtc = (sqliteDate) => (sqliteDate ? `${sqliteDate.replace(' ', 'T')}Z` : null);

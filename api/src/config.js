@@ -5,18 +5,20 @@ import { fileURLToPath } from 'node:url';
 export const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
 const fromRepo = (path) => (path === ':memory:' || isAbsolute(path) ? path : resolve(REPO_ROOT, path));
+const withoutTrailingSlash = (url) => url.trim().replace(/\/+$/, '');
 
 export function loadConfig(env = process.env) {
   return {
-    port: Number(env.PORT ?? 3000),
+    port: Number(env.PORT ?? 3001),
     host: env.HOST ?? '0.0.0.0',
     // Default: data/surveys.db at the repository root, whatever folder the server starts from.
     dbPath: fromRepo(env.DB_PATH ?? 'data/surveys.db'),
-    // Public base URL used to build share links (e.g. https://surveys.intranet.local).
-    // When empty, the request Host header is used.
-    baseUrl: (env.BASE_URL ?? '').replace(/\/+$/, ''),
+    // Address of the web client; share links and QR codes point to `${webBaseUrl}/s/<token>`.
+    // BASE_URL (the setting of the single-server version) is still read as a fallback.
+    webBaseUrl: withoutTrailingSlash(env.WEB_BASE_URL || env.BASE_URL || 'http://localhost:3000'),
+    // Browser origins allowed to call the API (comma-separated; "*" allows any origin).
+    corsOrigins: (env.CORS_ORIGINS ?? 'http://localhost:3000').split(',').map(withoutTrailingSlash).filter(Boolean),
     allowRegistration: env.ALLOW_REGISTRATION !== 'false',
-    cookieSecure: env.COOKIE_SECURE === 'true',
     sessionTtlMs: 7 * 24 * 60 * 60 * 1000,
     // Use X-Forwarded-For for the client IP (only when behind a reverse proxy you control).
     trustProxy: env.TRUST_PROXY === 'true',

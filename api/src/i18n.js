@@ -1,30 +1,25 @@
 import { readFileSync } from 'node:fs';
 
 /**
- * Interface translations. Each language lives in locales/<code>.json as flat "dot.separated" keys.
- * Values may contain {name} placeholders; plurals use "<key>.one" and "<key>.other".
- * All files are read once at startup.
+ * API-side texts. The API speaks English in error messages (clients translate the error codes);
+ * other languages only cover what the API itself writes for people: CSV headers and yes/no labels.
+ * Each language lives in api/locales/<code>.json as flat "dot.separated" keys with {name} placeholders.
  */
 export const SUPPORTED_LANGUAGES = ['en', 'es'];
 export const DEFAULT_LANGUAGE = 'en';
-export const LANGUAGE_COOKIE = 'sharevy_lang';
-
-const DATE_LOCALES = { en: 'en-US', es: 'es-ES' };
 
 const MESSAGES = Object.fromEntries(SUPPORTED_LANGUAGES.map((lang) => [
   lang,
-  JSON.parse(readFileSync(new URL(`../../locales/${lang}.json`, import.meta.url), 'utf8')),
+  JSON.parse(readFileSync(new URL(`../locales/${lang}.json`, import.meta.url), 'utf8')),
 ]));
 
-const isSupported = (code) => typeof code === 'string' && SUPPORTED_LANGUAGES.includes(code);
+export const isSupportedLanguage = (code) => typeof code === 'string' && SUPPORTED_LANGUAGES.includes(code);
 
 /**
- * Picks the interface language: a supported cookie value wins; otherwise the first supported
- * language of the Accept-Language header by q-value (region ignored: "es-MX" -> "es");
+ * First supported language of an Accept-Language header by q-value (region ignored: "es-MX" -> "es");
  * "*", an empty header or only unsupported languages give English.
  */
-export function negotiateLanguage(cookieValue, acceptLanguage) {
-  if (isSupported(cookieValue)) return cookieValue;
+export function negotiateLanguage(acceptLanguage) {
   const ranges = String(acceptLanguage ?? '')
     .split(',')
     .map((part, index) => {
@@ -37,7 +32,7 @@ export function negotiateLanguage(cookieValue, acceptLanguage) {
   for (const { tag } of ranges) {
     if (tag === '*') return DEFAULT_LANGUAGE;
     const primary = tag.split('-')[0];
-    if (isSupported(primary)) return primary;
+    if (isSupportedLanguage(primary)) return primary;
   }
   return DEFAULT_LANGUAGE;
 }
@@ -45,41 +40,13 @@ export function negotiateLanguage(cookieValue, acceptLanguage) {
 const interpolate = (text, params) =>
   text.replace(/\{(\w+)\}/g, (match, name) => (Object.hasOwn(params, name) ? String(params[name]) : match));
 
-/**
- * Translator for one language. Missing keys fall back to English, then to the key itself.
- * `t` and `tn` are plain functions, so they can be passed around on their own.
- */
+/** Translator for one language. Missing keys fall back to English, then to the key itself. */
 export function createI18n(lang = DEFAULT_LANGUAGE) {
-  const code = isSupported(lang) ? lang : DEFAULT_LANGUAGE;
+  const code = isSupportedLanguage(lang) ? lang : DEFAULT_LANGUAGE;
   const messages = MESSAGES[code];
-  const plurals = new Intl.PluralRules(code);
-  const dates = new Intl.DateTimeFormat(DATE_LOCALES[code], { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' });
-
   const t = (key, params = {}) => interpolate(messages[key] ?? MESSAGES[DEFAULT_LANGUAGE][key] ?? key, params);
-  const tn = (key, count, params = {}) =>
-    t(`${key}.${plurals.select(count) === 'one' ? 'one' : 'other'}`, { count, ...params });
-  /** "2026-11-26" -> "Nov 26, 2026" (en) or "26 nov 2026" (es). */
-  const formatDate = (dateString) => (dateString ? dates.format(new Date(`${dateString}T00:00:00Z`)) : '');
-
-  return { lang: code, t, tn, formatDate };
+  return { lang: code, t };
 }
 
-/**
- * Server messages the browser scripts also show, under their own names: public/app.js checks
- * answers with the same rules and words as the server before sending the form.
- */
-const SHARED_WITH_CLIENT = ['validation.', 'respond.checkAnswers.', 'respond.yourName'];
-
-/**
- * The strings the browser scripts need: keys starting with "client." without that prefix, plus
- * the SHARED_WITH_CLIENT keys with their full names.
- */
-export function clientMessages(i18n) {
-  const prefix = 'client.';
-  return Object.fromEntries(Object.keys(MESSAGES[DEFAULT_LANGUAGE])
-    .filter((key) => key.startsWith(prefix) || SHARED_WITH_CLIENT.some((shared) => key.startsWith(shared)))
-    .map((key) => [key.startsWith(prefix) ? key.slice(prefix.length) : key, i18n.t(key)]));
-}
-
-/** English translator, used as the default wherever no request language is available. */
+/** English translator, used as the default wherever no language is given. */
 export const defaultI18n = createI18n(DEFAULT_LANGUAGE);
