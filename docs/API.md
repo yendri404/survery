@@ -188,6 +188,7 @@ A creator only sees their own surveys: another creator's survey answers `404 not
   "isOpen": true,
   "status": "open",
   "closesOn": "2026-11-27",
+  "requireName": false,
   "responseCount": 3,
   "publicToken": "Xk2b9...",
   "shareUrl": "http://localhost:3000/s/Xk2b9...",
@@ -199,6 +200,7 @@ A creator only sees their own surveys: another creator's survey answers `404 not
 | Field | Meaning |
 |-------|---------|
 | `status` | `open` accepts answers; `closed` was closed by the creator; `expired` passed `closesOn`. A survey accepts answers during its whole closing day (server time). |
+| `requireName` | `true` when respondents must write their name to send an answer; `false` (the default) when the name is optional. |
 | `shareUrl` | Link for respondents, in the **web client**: `${WEB_BASE_URL}/s/<publicToken>`. Without `WEB_BASE_URL`, the base is the address the client used, from `X-Forwarded-Proto` + `X-Forwarded-Host` (only with `TRUST_PROXY`; the host must be `hostname[:port]`), else `http://localhost:3000`. |
 | `options` | Written by the creator for `select`, `radio`, `checkbox`; always `[]` for the others (`yesno` uses `yes` / `no`). |
 | `min`, `max` | Only on `scale` questions: the whole numbers at both ends of the slider (step 1). Other types never carry them. |
@@ -218,6 +220,7 @@ Newest first. Items are survey objects **without** `fields`.
   "title": "Team lunch",
   "description": "Internal",
   "closesOn": "2026-11-27",
+  "requireName": true,
   "fields": [
     { "label": "Department", "type": "radio", "required": true, "options": ["IT", "HR"] },
     { "label": "Work remotely?", "type": "yesno" },
@@ -238,6 +241,7 @@ Rules (`422 validation_failed` with `errors`, in this order):
 | `description_too_long` | `max` | Longer than `limits.description` |
 | `closing_date_invalid` | | `closesOn` is not a real `YYYY-MM-DD` date. Empty or missing means `today + defaultOpenDays`. |
 | `closing_date_past` | | `closesOn` before `today`, unless it is the survey's current date (editing an expired survey without changing its date) |
+| `require_name_invalid` | | `requireName` is present but not `true` or `false` (`"yes"`, `1`, `null`...) |
 | `fields_invalid` | | `fields` is not an array |
 | `fields_empty` / `fields_too_many` | `max` | No questions / more than `limits.fields` |
 | `field_invalid` | `n` | Question `n` (1-based) is not an object |
@@ -252,6 +256,7 @@ Rules (`422 validation_failed` with `errors`, in this order):
 
 `options` may be an array or one string with one option per line; blank options are dropped.
 `required` is true only when it is exactly `true`.
+`requireName` is optional: left out, a new survey gets `false` (the name stays optional).
 For `scale`, `min` and `max` may be numbers or whole-number strings (`"3"`); a missing (or `null` / `""`) end takes
 `scale.defaultMin` / `scale.defaultMax`, so a scale is 1 to 10 by default. Other types drop `min` / `max`.
 Changing a scale's range later does not rewrite existing answers: they are shown and exported as stored.
@@ -272,7 +277,9 @@ Changing a scale's range later does not rewrite existing answers: they are shown
 
 ### `PUT /surveys/:id`
 
-Replaces title, description, closing date and questions. Same body and rules as `POST /surveys`.
+Replaces title, description, closing date, `requireName` and questions. Same body and rules as `POST /surveys`,
+except that a body **without** `requireName` keeps the survey's current value (older clients do not reset it);
+send `false` to make the name optional again.
 **Send each existing question with its `id`**: questions keep their id, so existing answers still match.
 Questions without a (valid, unused) id get a new one.
 
@@ -441,7 +448,7 @@ A malformed value answers `400 invalid_device_id`. A new id counts as a new devi
 ```json
 200
 { "survey": {
-  "title": "Team lunch", "description": "Internal", "closesOn": "2026-11-27", "status": "open",
+  "title": "Team lunch", "description": "Internal", "closesOn": "2026-11-27", "status": "open", "requireName": true,
   "fields": [ { "id": "3f9a0c1b2d4e", "label": "Department", "type": "radio", "required": true, "options": ["IT", "HR"] } ],
   "alreadyAnswered": false
 } }
@@ -449,6 +456,7 @@ A malformed value answers `400 invalid_device_id`. A new id counts as a new devi
 ```
 
 `alreadyAnswered` is `true` when this `X-Device-Id` already answered. Show a closed message when `status` is not `open`.
+`requireName` tells the form whether the respondent name is required (`true`) or optional (`false`).
 
 ### `POST /public/surveys/:token/responses`
 
@@ -456,7 +464,7 @@ A malformed value answers `400 invalid_device_id`. A new id counts as a new devi
 { "respondentName": "Marta Gómez", "answers": { "3f9a0c1b2d4e": "HR", "c0ffee00": ["Mail", "Chat"] } }
 ```
 
-`respondentName` is optional (trimmed; empty means anonymous). Each answer is a string, or a list of strings for
+`respondentName` is trimmed; empty means anonymous. It is optional unless the survey's `requireName` is `true`. Each answer is a string, or a list of strings for
 `checkbox`. Unknown question ids are ignored. Yes/no answers must be exactly `yes` or `no`.
 A `scale` answer is a whole number from the question's `min` to `max`, sent as a number (`4`) or a string (`"4"`);
 leave it out or send `""` when the person did not move the slider (allowed only when the question is not required).
@@ -493,6 +501,7 @@ Checks, in this order:
 | `invalid_email` | | `email` is not an address (max 254) |
 | `invalid_date` | | `date` is not a real `YYYY-MM-DD` date |
 | `invalid_scale_value` | `min`, `max` | `scale` is not a whole number from `min` to `max` |
+| `respondent_name_required` (key `respondentName`) | | The survey's `requireName` is `true` and the name is missing, empty or only spaces |
 | `respondent_name_too_long` (key `respondentName`) | `max` | Name over `limits.respondentName` |
 
 `answers` that is not an object answers `422` with `errors: [{ "code": "answers_invalid" }]`.
@@ -502,6 +511,15 @@ Checks, in this order:
 { "error": { "code": "validation_failed", "message": "Some values are not valid.", "fields": {
   "3f9a0c1b2d4e": { "code": "required", "params": {}, "message": "This field is required." },
   "respondentName": { "code": "respondent_name_too_long", "params": { "max": 100 }, "message": "Name must be at most 100 characters." }
+} } }
+```
+
+A survey with `requireName: true` and no name:
+
+```json
+422
+{ "error": { "code": "validation_failed", "message": "Some values are not valid.", "fields": {
+  "respondentName": { "code": "respondent_name_required", "params": {}, "message": "Name is required." }
 } } }
 ```
 
@@ -555,8 +573,8 @@ The database schema only grows (additive migrations run on every start), so data
 
 Validation codes (inside `fields` / `errors`): `name_invalid`, `email_invalid`, `password_length`,
 `password_mismatch`, `email_taken`, `title_required`, `title_too_long`, `description_too_long`,
-`closing_date_invalid`, `closing_date_past`, `fields_invalid`, `fields_empty`, `fields_too_many`,
+`closing_date_invalid`, `closing_date_past`, `require_name_invalid`, `fields_invalid`, `fields_empty`, `fields_too_many`,
 `field_invalid`, `label_required`, `label_too_long`, `type_unknown`, `options_empty`, `options_too_many`,
 `option_too_long`, `option_duplicate`, `scale_bound_invalid`, `scale_order`, `scale_too_wide`,
-`label_duplicate`, `is_open_invalid`, `answers_invalid`, `respondent_name_too_long`, `required`, `invalid_option`,
+`label_duplicate`, `is_open_invalid`, `answers_invalid`, `respondent_name_required`, `respondent_name_too_long`, `required`, `invalid_option`,
 `too_long`, `invalid_number`, `invalid_email`, `invalid_date`, `invalid_scale_value`. Their English texts live in `api/locales/en.json`; the key-to-code table is `api/src/errors.js`.

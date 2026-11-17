@@ -259,6 +259,7 @@ erDiagram
         text fields_json "array of field definitions"
         int is_open "1 = accepting responses"
         text closes_on "YYYY-MM-DD, last day that accepts answers"
+        int require_name "1 = respondents must write their name"
         int response_seq "last response number handed out"
         text created_at "UTC"
         text updated_at "UTC"
@@ -339,7 +340,7 @@ The database file (`data/surveys.db`) is the same one the single-server version 
 
 Pass `':memory:'` for a throwaway database (the tests do this).
 
-**Migrations:** after the base schema, `migrate()` runs the `MIGRATIONS` list inside one transaction: `respondent_name`, `closes_on` (existing surveys get creation date + 10 days, once), `device_hash` with the unique index `(survey_id, device_hash)`, and per-survey response numbers: `surveys.response_seq` plus `responses.number` with the unique index `(survey_id, number)` (existing responses are numbered 1..n per survey by `id`, once, and each counter set to its survey's highest number). Each step checks the current shape first (`hasColumn`), so steps are idempotent and run on every boot. Add new steps at the end of the list; never edit a released step.
+**Migrations:** after the base schema, `migrate()` runs the `MIGRATIONS` list inside one transaction: `respondent_name`, `closes_on` (existing surveys get creation date + 10 days, once), `device_hash` with the unique index `(survey_id, device_hash)`, and per-survey response numbers: `surveys.response_seq` plus `responses.number` with the unique index `(survey_id, number)` (existing responses are numbered 1..n per survey by `id`, once, and each counter set to its survey's highest number), and `surveys.require_name` (default 0: existing surveys keep the name optional). Each step checks the current shape first (`hasColumn`), so steps are idempotent and run on every boot. Add new steps at the end of the list; never edit a released step.
 
 ---
 
@@ -468,7 +469,7 @@ All routes need a Bearer token (`authed(...)` registers them with `{ auth: true 
 
 | Method | Path | Result |
 |--------|------|--------|
-| GET | `/public/surveys/:token` | Title, description, closing date, `status`, fields, `alreadyAnswered` for this `X-Device-Id` |
+| GET | `/public/surveys/:token` | Title, description, closing date, `status`, `requireName`, fields, `alreadyAnswered` for this `X-Device-Id` |
 | POST | `/public/surveys/:token/responses` | `201 { id, number }` (plus `deviceId` when none was sent) · 400 · 403 · 409 · 422 · 429 |
 
 **Order of checks on submit** (cheapest and most decisive first):
@@ -478,7 +479,7 @@ All routes need a Bearer token (`authed(...)` registers them with `{ auth: true 
 3. Survey open? Otherwise 403 `survey_closed` / `survey_expired`.
 4. Device already answered? Otherwise 409 `already_answered`.
 5. Under the rate limit for `surveyId|ip`? Otherwise 429 with `Retry-After`.
-6. Answers valid (`validateAnswers`, `parseRespondentName`)? Otherwise 422 with `fields`.
+6. Answers valid (`validateAnswers`, `parseRespondentName` with `required: survey.requireName`)? Otherwise 422 with `fields`.
 7. Store (the unique index settles races with another 409), count against the limit, notify live streams.
 
 `answersForm()` turns the JSON answers into the name/value pairs `validateAnswers` reads (`f_<fieldId>`, repeated for checkbox lists), so the domain function is the same one the single-server version used.
@@ -517,11 +518,11 @@ The heart of the API. It has no database, no HTTP and no JSON output, which is w
 
 | Function | Input → Output | Notes |
 |----------|----------------|-------|
-| `parseSurveyInput({ title, description, fieldsJson, closesOn }, { today, currentClosesOn, t })` | → `{ value, errors[] }` | Empty `closesOn` defaults to `today` + `DEFAULT_OPEN_DAYS`. A past date is rejected unless it is the survey's current date (editing an expired survey). Trims, enforces limits, ignores blank options. **Rejects repeated options in one question and two questions with the same text** (equal after trimming, ignoring case): multiple-choice answers are stored by option text, so repeats could not be told apart. **Scale questions** get `min` / `max` (whole numbers, defaults from `SCALE`; errors `scale_bound_invalid`, `scale_order`, `scale_too_wide`); other types drop them. **Keeps a valid existing `id`** so edits do not orphan answers; generates a new one when it is missing, invalid or duplicated |
+| `parseSurveyInput({ title, description, fieldsJson, closesOn, requireName }, { today, currentClosesOn, currentRequireName, t })` | → `{ value, errors[] }` | Empty `closesOn` defaults to `today` + `DEFAULT_OPEN_DAYS`. A past date is rejected unless it is the survey's current date (editing an expired survey). `requireName` must be a boolean (`require_name_invalid`); `undefined` keeps `currentRequireName` (`false` for a new survey). Trims, enforces limits, ignores blank options. **Rejects repeated options in one question and two questions with the same text** (equal after trimming, ignoring case): multiple-choice answers are stored by option text, so repeats could not be told apart. **Scale questions** get `min` / `max` (whole numbers, defaults from `SCALE`; errors `scale_bound_invalid`, `scale_order`, `scale_too_wide`); other types drop them. **Keeps a valid existing `id`** so edits do not orphan answers; generates a new one when it is missing, invalid or duplicated |
 | `validateAnswers(fields, form, { t })` | → `{ answers, errors{fieldId: problem} }` | Reads only defined fields (`f_<id>`), so extra keys are ignored. Checks type, required, and that choices are among the options. Checkbox values are returned in option order |
 | `surveyStatus(survey, today)` | → `'open' \| 'closed' \| 'expired'` | `closed` = switched off by the creator; `expired` = `today` is after `closesOn`. Only `open` accepts answers |
 | `localDateString(date)`, `addDays(date, n)`, `daysBetween(from, to)` | → `YYYY-MM-DD` / whole days | Server-local calendar date; calendar math without time zones; "days left" |
-| `parseRespondentName(value, { t })` | → `{ name, error }` | Optional, trimmed, max 100 characters, empty means anonymous |
+| `parseRespondentName(value, { required, t })` | → `{ name, error }` | Trimmed, max 100 characters, empty means anonymous; with `required` (the survey's `requireName`) empty is `respondent_name_required` |
 | `answerText(field, value, t)` | → `string` | Arrays become `"a, b"`; `yes`/`no` translated (CSV) |
 | `isEmail(value)` | → `boolean` | The one email rule (at most 254 characters), for email questions and creator registration |
 | `summarize(fields, responses, { t })` | → per choice field (yes/no included): `answered`, counts per option; per scale field: a count for every value from `min` to `max` plus `scale: { min, max, average, median, outOfRange }` | Feeds `/summary`, which adds percentages. Scale answers outside the current range (after a range change) count in `answered`/average/median, not in a bar |
@@ -747,7 +748,7 @@ A page is `async (app, { params, query, signal }) → { title, body, respondent?
 | `home.js` | `homePage` | Landing with steps and login/register buttons (register only when `meta.allowRegistration`); logged-in creators go to `/surveys` |
 | `auth.js` | `loginPage`, `registerPage` | Forms; API errors in a box above the form (registration in field order); keep typed values (never the password); after login go to `safeNext(next)`; the submit button is disabled while sending |
 | `surveys.js` | `surveyListPage` (cards from `components/survey-cards.js`) | Cards with status badge, response count and closing text; live via `/surveys/events` |
-| `editor.js` | `editorPage` | New / edit. Reads `/meta` for limits, types, `today` and `defaultOpenDays` (default closing date, `min` of the date input). Title and closing date are checked with the questions by the builder; API `errors[]` are shown in order above the form. Warns when editing a survey with responses |
+| `editor.js` | `editorPage` | New / edit. Reads `/meta` for limits, types, `today` and `defaultOpenDays` (default closing date, `min` of the date input). Title and closing date are checked with the questions by the builder; API `errors[]` are shown in order above the form. A "Name is required" checkbox (`.choice.switch`, from `survey.requireName`, unchecked for new surveys) is sent as `requireName`. Warns when editing a survey with responses |
 | `detail.js` | `detailPage` | Container for the parts in `components/survey-detail.js`: share link (copy button with a fallback for plain HTTP, native share sheet when supported), QR image (`qr.svg` fetched as a blob), PNG download, CSV downloads (`?lang=` = current interface language), open/close, delete (confirm), key figures, charts, responses table with delete; results live via `/surveys/:id/events`. Each live update also refreshes the survey state shown outside the results (title and status badge, closing date, description, closed/expired notice, open/close button), and open/close always uses that latest state |
 | `respond.js` | `respondPage`, `thanksPage` | Respondent form, closed / expired / already-answered panels, thanks page. Sends `X-Device-Id`, keeps a `deviceId` the API returns. Checks every answer in the browser first (`attachValidation`); API `fields` errors use the same markup |
 
@@ -758,6 +759,7 @@ A page is `async (app, { params, query, signal }) → { title, body, respondent?
 | Checks before sending | On submit, every answer is checked with `checkAnswer` / `checkRespondentName` (`validation.js`). Invalid → nothing is sent; errors appear under each question (`.has-error`, `.field-error`, `aria-invalid` / `aria-describedby`), plus the `.errors` summary with a link to each, and the first invalid question gets the focus. A question's error clears as soon as its answer is valid. The form sets `noValidate` so browser bubbles do not compete |
 | Server errors | A 422 `fields` map is translated with `errors.js` and shown with the same markup; `already_answered`, `survey_closed`, `survey_expired` switch to their panels. Any other failure (network down, `api_unavailable`, `too_many_responses`...) shows its translated message in the `.errors` box above the form; the form and its answers stay, so the respondent can send again |
 | Scale questions | A native `<input type="range">` (min, max, step 1) with both ends labelled and the value shown big. It starts **unanswered**: the range has no `name` and is never sent; a hidden input `f_<id>` gets the value only after the person moves it (pointer, touch, or arrows/Home/End/PageUp/PageDown, also when a press does not change the value). Until then the thumb is faded, the value shows "–" and `aria-valuetext` says "Move the slider to choose" |
+| Respondent name | Optional ("(optional)", anonymous hint) unless the survey's `requireName` is `true`: then it carries the red `*` mark, `required` / `aria-required`, a "write your name" hint, and an empty name is reported like an unanswered required question (`validation.respondentNameRequired`) |
 | Number questions | A text input with `inputmode="decimal"` (a number input hides the typed text and cursor from scripts). Only digits, one point and a leading `-` can be typed, pasted or dropped (`beforeinput`, with an `input` safety net); a comma becomes a point; Up/Down add or subtract 1 (`number-input.js`) |
 
 ---
@@ -771,7 +773,7 @@ Pure functions from data (and callbacks) to DOM. They never fetch or navigate on
 | `layout.js` | `APP_NAME`, `topbar`, `themeToggle`, `languageMenu`, `flash`, `errorList`, `notice`, `backLink`, `emptyState`, `statusBadge`, `statusKey`, `closingText`, `resultPanel`, `errorPanel` | The language menu is a native `<details class="lang-menu">`: a globe and the current code, one link per language named in its own language, `aria-current` on the current one; on phones it opens under the whole top bar |
 | `icons.js` | `icon(name, extraClass)` | Stroke icons on a 24×24 grid, built with `s()`. Icon-only buttons always carry an `aria-label` and a `title` |
 | `builder.js` | `createBuilder({ fields, types, choiceTypes, scale, limits, t, basics })` → `{ element, validate(), value() }` | Question editor: add, move, duplicate, delete. Warns about repeated questions and options **while typing**; empty question text, missing options, title and closing date (`basics`) **after a submit attempt**. Same rule as the API: equal after trimming, ignoring case. Scale questions show "From" / "To" (prefilled from `/meta` `scale`), a live warning for a wrong range (`checkScaleRange`) and a slider preview. Keeps field ids so edits do not orphan answers |
-| `answer-field.js` | `answerField(field, index, i18n, limits)`, `respondentNameField`, `fieldError` | One control per type (`yesno`: two large side-by-side radios, `.choices.yesno`; choices in a `fieldset` + `legend`); control id `fld_<question id>` |
+| `answer-field.js` | `answerField(field, index, i18n, limits)`, `respondentNameField(i18n, limits, { required })`, `fieldError` | One control per type (`yesno`: two large side-by-side radios, `.choices.yesno`; choices in a `fieldset` + `legend`); control id `fld_<question id>` |
 | `results.js` | `kpiTiles`, `summaryCharts`, `responsesTable` | Key figures (`<dl class="kpis">`), charts, and the table (one card per response on phones, via each cell's `data-label`). Yes/no shown translated |
 | `survey-detail.js` | `surveyHeading`, `closingLine`, `surveyDescription`, `statusNotice`, `openCloseButton`, `sharePanel`, `managePanel`, `resultsContent` | The parts of one survey's page. The state parts are rebuilt by `pages/detail.js` on each live update (through `slot`); the panels take their actions as callbacks |
 | `survey-cards.js` | `surveyCards` | The creator's surveys as cards (status badge, response count, closing text), or the empty state |

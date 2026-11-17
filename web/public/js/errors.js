@@ -10,6 +10,7 @@ export const ERROR_KEYS = {
   description_too_long: 'validation.descriptionTooLong',
   closing_date_invalid: 'validation.closingDateInvalid',
   closing_date_past: 'validation.closingDatePast',
+  require_name_invalid: 'validation.requireNameInvalid',
   fields_invalid: 'validation.fieldsInvalid',
   fields_empty: 'validation.fieldsEmpty',
   fields_too_many: 'validation.fieldsTooMany',
@@ -28,6 +29,7 @@ export const ERROR_KEYS = {
   is_open_invalid: 'validation.isOpenInvalid',
   // Answers
   answers_invalid: 'validation.answersInvalid',
+  respondent_name_required: 'validation.respondentNameRequired',
   respondent_name_too_long: 'validation.respondentNameTooLong',
   required: 'validation.required',
   invalid_option: 'validation.invalidOption',

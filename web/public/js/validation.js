@@ -67,8 +67,13 @@ export function checkScaleRange(min, max, rules) {
   return undefined;
 }
 
-/** The optional respondent name (trimmed; empty means anonymous). */
-export function checkRespondentName(value, limits = {}) {
+/**
+ * The respondent name (trimmed). Empty means anonymous, unless the survey requires the name
+ * (`required`: the survey's requireName), like parseRespondentName.
+ */
+export function checkRespondentName(value, limits = {}, { required = false } = {}) {
+  const name = String(value ?? '').trim();
+  if (required && !name) return problem('validation.respondentNameRequired');
   const max = limits.respondentName;
-  return tooLong(String(value ?? '').trim(), max) ? problem('validation.respondentNameTooLong', { max }) : undefined;
+  return tooLong(name, max) ? problem('validation.respondentNameTooLong', { max }) : undefined;
 }

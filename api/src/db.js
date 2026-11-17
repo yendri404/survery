@@ -87,6 +87,13 @@ const MIGRATIONS = [
     }
     db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_responses_survey_number ON responses(survey_id, number)');
   },
+  // Whether respondents must write their name (1) or may leave it empty (0). Existing surveys keep
+  // the name optional, as before.
+  (db) => {
+    if (!hasColumn(db, 'surveys', 'require_name')) {
+      db.exec('ALTER TABLE surveys ADD COLUMN require_name INTEGER NOT NULL DEFAULT 0');
+    }
+  },
 ];
 
 function migrate(db) {

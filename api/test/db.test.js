@@ -116,3 +116,18 @@ test('the default database path is data/surveys.db at the repository root, not t
   assert.equal(loadConfig({}).dbPath, join(REPO_ROOT, 'data', 'surveys.db'));
   assert.equal(loadConfig({ DB_PATH: ':memory:' }).dbPath, ':memory:');
 });
+
+test('openDatabase adds the name requirement setting; existing surveys keep the name optional', () => {
+  withOldDatabase((path) => {
+    const db = openDatabase(path);
+    assert.ok(columns(db, 'surveys').includes('require_name'));
+    const survey = db.prepare('SELECT * FROM surveys').get();
+    assert.equal(survey.require_name, 0);
+    assert.equal(survey.title, 'Old survey');
+    db.prepare('UPDATE surveys SET require_name = 1').run();
+    db.close();
+    const again = openDatabase(path); // a later boot must not reset a chosen setting
+    assert.equal(again.prepare('SELECT require_name FROM surveys').get().require_name, 1);
+    again.close();
+  });
+});

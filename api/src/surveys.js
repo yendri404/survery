@@ -96,9 +96,13 @@ export function surveyStatus(survey, today) {
   return survey.closesOn && today > survey.closesOn ? 'expired' : 'open';
 }
 
-/** Optional name a respondent may leave. Empty means anonymous. */
-export function parseRespondentName(value, { t = englishT } = {}) {
+/**
+ * The name a respondent leaves. Empty means anonymous, unless the survey requires the name
+ * (`required`: the survey's requireName setting).
+ */
+export function parseRespondentName(value, { required = false, t = englishT } = {}) {
   const name = String(value ?? '').trim();
+  if (required && !name) return { name, error: t('validation.respondentNameRequired') };
   if (name.length > LIMITS.respondentName) {
     return { name, error: t('validation.respondentNameTooLong', { max: LIMITS.respondentName }) };
   }
@@ -124,8 +128,14 @@ function newFieldId(taken) {
  *
  * The closing date defaults to DEFAULT_OPEN_DAYS from `today` when empty. A past date is rejected,
  * except when it is the survey's current date (editing an expired survey without changing it).
+ *
+ * `requireName` (must respondents write their name?) is true or false; left out (undefined) it keeps
+ * `currentRequireName`, which is false for a new survey.
  */
-export function parseSurveyInput({ title, description, fieldsJson, closesOn }, { today = localDateString(), currentClosesOn, t = englishT } = {}) {
+export function parseSurveyInput(
+  { title, description, fieldsJson, closesOn, requireName },
+  { today = localDateString(), currentClosesOn, currentRequireName = false, t = englishT } = {},
+) {
   const errors = [];
   const cleanTitle = String(title ?? '').trim();
   const cleanDescription = String(description ?? '').trim();
@@ -138,6 +148,8 @@ export function parseSurveyInput({ title, description, fieldsJson, closesOn }, {
   }
   if (!isValidDate(cleanClosesOn)) errors.push(t('validation.closingDateInvalid'));
   else if (cleanClosesOn < today && cleanClosesOn !== currentClosesOn) errors.push(t('validation.closingDatePast'));
+  const cleanRequireName = requireName === undefined ? currentRequireName : requireName;
+  if (typeof cleanRequireName !== 'boolean') errors.push(t('validation.requireNameInvalid'));
 
   let raw;
   try {
@@ -203,7 +215,10 @@ export function parseSurveyInput({ title, description, fieldsJson, closesOn }, {
     errors.push(...duplicateQuestionErrors);
   }
 
-  return { value: { title: cleanTitle, description: cleanDescription, closesOn: cleanClosesOn, fields }, errors };
+  return {
+    value: { title: cleanTitle, description: cleanDescription, closesOn: cleanClosesOn, requireName: cleanRequireName === true, fields },
+    errors,
+  };
 }
 
 /**

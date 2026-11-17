@@ -21,9 +21,10 @@ describe('respondents', () => {
     const { survey } = await surveyOf(app.base, 'read@corp.local', [{ label: 'Pick', type: 'radio', options: ['A', 'B'], required: true }]);
     const res = await device(app.base).request(`/public/surveys/${survey.publicToken}`);
     assert.equal(res.status, 200);
-    assert.deepEqual(Object.keys(res.json.survey).sort(), ['alreadyAnswered', 'closesOn', 'description', 'fields', 'status', 'title']);
+    assert.deepEqual(Object.keys(res.json.survey).sort(), ['alreadyAnswered', 'closesOn', 'description', 'fields', 'requireName', 'status', 'title']);
     assert.equal(res.json.survey.status, 'open');
     assert.equal(res.json.survey.alreadyAnswered, false);
+    assert.equal(res.json.survey.requireName, false);
     assert.deepEqual(res.json.survey.fields, survey.fields);
 
     const missing = await device(app.base).request('/public/surveys/no-such-token');
@@ -77,6 +78,42 @@ describe('respondents', () => {
     assert.equal((await answer(app.base, survey.publicToken, { answers: { [field.id]: 'y' } })).status, 201);
     const names = (await c.request(`/surveys/${survey.id}/responses`)).json.responses.map((r) => r.respondentName);
     assert.deepEqual(names, [null, 'Marta Gómez']);
+  });
+
+  test('a survey that requires the name rejects answers without one and uses up no number', async () => {
+    const c = new Client(app.base);
+    assert.equal((await c.register('required-name@corp.local')).status, 201);
+    const survey = await c.createSurvey([{ label: 'Q', type: 'text' }], 'Named survey', { requireName: true });
+    const [field] = survey.fields;
+    const read = await device(app.base).request(`/public/surveys/${survey.publicToken}`);
+    assert.equal(read.json.survey.requireName, true);
+
+    for (const respondentName of [undefined, '', '   ']) {
+      const res = await answer(app.base, survey.publicToken, { respondentName, answers: { [field.id]: 'x' } });
+      assert.equal(res.status, 422, JSON.stringify(respondentName));
+      assert.equal(res.json.error.code, 'validation_failed');
+      assert.deepEqual(res.json.error.fields, {
+        respondentName: { code: 'respondent_name_required', params: {}, message: 'Name is required.' },
+      });
+    }
+    // Too long still reports the length problem.
+    const long = await answer(app.base, survey.publicToken, { respondentName: 'a'.repeat(101), answers: {} });
+    assert.equal(long.json.error.fields.respondentName.code, 'respondent_name_too_long');
+    assert.equal((await c.request(`/surveys/${survey.id}/responses`)).json.responses.length, 0, 'nothing was stored');
+
+    const ok = await answer(app.base, survey.publicToken, { respondentName: ' Ana ', answers: { [field.id]: 'x' } });
+    assert.equal(ok.status, 201);
+    assert.equal(ok.json.number, 1);
+    const [stored] = (await c.request(`/surveys/${survey.id}/responses`)).json.responses;
+    assert.equal(stored.respondentName, 'Ana');
+  });
+
+  test('a survey that does not require the name still accepts anonymous answers', async () => {
+    const { survey } = await surveyOf(app.base, 'optional-name@corp.local');
+    const [field] = survey.fields;
+    assert.equal(survey.requireName, false);
+    assert.equal((await answer(app.base, survey.publicToken, { answers: { [field.id]: 'x' } })).status, 201);
+    assert.equal((await answer(app.base, survey.publicToken, { respondentName: '  ', answers: { [field.id]: 'y' } })).status, 201);
   });
 
   test('yes/no accepts only the canonical values yes and no', async () => {

@@ -9,6 +9,7 @@ function hydrateSurvey(row) {
     fields: JSON.parse(row.fields_json),
     isOpen: row.is_open === 1,
     closesOn: row.closes_on,
+    requireName: row.require_name === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     responseCount: row.response_count ?? undefined,
@@ -64,9 +65,9 @@ export function createRepo(db) {
         ORDER BY s.created_at DESC, s.id DESC
       `).all(ownerId).map(hydrateSurvey);
     },
-    createSurvey({ ownerId, publicToken, title, description, closesOn, fields }) {
-      const r = q('INSERT INTO surveys (owner_id, public_token, title, description, closes_on, fields_json) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(ownerId, publicToken, title, description, closesOn, JSON.stringify(fields));
+    createSurvey({ ownerId, publicToken, title, description, closesOn, requireName = false, fields }) {
+      const r = q('INSERT INTO surveys (owner_id, public_token, title, description, closes_on, require_name, fields_json) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(ownerId, publicToken, title, description, closesOn, requireName ? 1 : 0, JSON.stringify(fields));
       return Number(r.lastInsertRowid);
     },
     getOwnedSurvey(id, ownerId) {
@@ -78,9 +79,9 @@ export function createRepo(db) {
     getSurveyByToken(token) {
       return hydrateSurvey(q('SELECT * FROM surveys WHERE public_token = ?').get(token));
     },
-    updateSurvey(id, ownerId, { title, description, closesOn, fields }) {
-      q(`UPDATE surveys SET title = ?, description = ?, closes_on = ?, fields_json = ?, updated_at = datetime('now')
-         WHERE id = ? AND owner_id = ?`).run(title, description, closesOn, JSON.stringify(fields), id, ownerId);
+    updateSurvey(id, ownerId, { title, description, closesOn, requireName = false, fields }) {
+      q(`UPDATE surveys SET title = ?, description = ?, closes_on = ?, require_name = ?, fields_json = ?, updated_at = datetime('now')
+         WHERE id = ? AND owner_id = ?`).run(title, description, closesOn, requireName ? 1 : 0, JSON.stringify(fields), id, ownerId);
     },
     setSurveyOpen(id, ownerId, isOpen) {
       q(`UPDATE surveys SET is_open = ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?`)

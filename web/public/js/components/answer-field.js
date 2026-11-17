@@ -147,11 +147,18 @@ export function answerField(field, index, { t }, limits) {
   }
 }
 
-/** The optional respondent name, visually set apart from the questions. */
-export const respondentNameField = ({ t }, limits) => h('div', { class: 'field respondent-name' },
-  h('label', { for: 'respondent_name' }, `${t('respond.yourName')} `, h('span', { class: 'muted' }, t('respond.optional'))),
-  h('span', { class: 'hint' }, t('respond.anonymousHint')),
-  h('input', { id: 'respondent_name', name: 'respondent_name', maxlength: limits.respondentName, autocomplete: 'name' }));
+/**
+ * The respondent name, visually set apart from the questions. Optional by default; when the survey
+ * requires it (`required`), it is marked like a required question.
+ */
+export const respondentNameField = ({ t }, limits, { required = false } = {}) => h('div', { class: 'field respondent-name', 'data-required': required },
+  h('label', { for: 'respondent_name' }, `${t('respond.yourName')} `,
+    required ? h('span', { class: 'req', 'aria-hidden': 'true' }, '*') : h('span', { class: 'muted' }, t('respond.optional'))),
+  h('span', { class: 'hint' }, t(required ? 'respond.nameRequiredHint' : 'respond.anonymousHint')),
+  h('input', {
+    id: 'respondent_name', name: 'respondent_name', maxlength: limits.respondentName, autocomplete: 'name',
+    required, 'aria-required': required ? 'true' : undefined,
+  }));
 
 /** Error message markup, shared by client checks and API errors. */
 export const fieldError = (id, message) => h('p', { class: 'field-error', id }, icon('alert'), ` ${message}`);

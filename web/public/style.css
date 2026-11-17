@@ -170,6 +170,8 @@ label { font-weight: 500; }
 .hint { display: block; font-weight: 400; color: var(--muted); font-size: .875rem; }
 .stack { display: flex; flex-direction: column; gap: 1rem; }
 .stack > label { display: flex; flex-direction: column; gap: .35rem; }
+.stack > label.choice { flex-direction: row; align-items: flex-start; gap: .75rem; }
+.stack > label.choice > input { margin-top: .2rem; }
 .field > label { display: block; margin-bottom: .2rem; }
 .inline { display: inline; }
 

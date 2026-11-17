@@ -12,6 +12,7 @@ export const ERROR_CODES = {
   'validation.descriptionTooLong': 'description_too_long',
   'validation.closingDateInvalid': 'closing_date_invalid',
   'validation.closingDatePast': 'closing_date_past',
+  'validation.requireNameInvalid': 'require_name_invalid',
   'validation.fieldsInvalid': 'fields_invalid',
   'validation.fieldsEmpty': 'fields_empty',
   'validation.fieldsTooMany': 'fields_too_many',
@@ -30,6 +31,7 @@ export const ERROR_CODES = {
   'validation.isOpenInvalid': 'is_open_invalid',
   // Answers (validateAnswers, parseRespondentName)
   'validation.answersInvalid': 'answers_invalid',
+  'validation.respondentNameRequired': 'respondent_name_required',
   'validation.respondentNameTooLong': 'respondent_name_too_long',
   'validation.required': 'required',
   'validation.invalidOption': 'invalid_option',

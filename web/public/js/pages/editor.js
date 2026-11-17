@@ -23,12 +23,16 @@ export async function editorPage(app, { params, signal }) {
   const description = h('textarea', { name: 'description', rows: 3, maxlength: limits.description });
   description.value = survey?.description ?? '';
   const closesOn = h('input', { type: 'date', name: 'closes_on', value: survey?.closesOn ?? addDays(today, meta.defaultOpenDays), min: minDate, required: true });
+  // Unchecked for new surveys: the respondent name is optional unless the creator asks for it.
+  const requireName = h('input', { type: 'checkbox', name: 'require_name', checked: survey?.requireName === true });
 
   const basicsSection = h('section', { class: 'panel stack editor-basics' },
     h('h2', {}, t('editor.basics')),
     h('label', {}, `${t('editor.titleLabel')} `, title),
     h('label', {}, `${t('editor.description')} `, h('span', { class: 'hint' }, t('editor.descriptionHint')), description),
-    h('label', {}, `${t('editor.closingDate')} `, h('span', { class: 'hint' }, t('editor.closingDateHint')), closesOn));
+    h('label', {}, `${t('editor.closingDate')} `, h('span', { class: 'hint' }, t('editor.closingDateHint')), closesOn),
+    h('label', { class: 'choice switch' }, requireName,
+      h('span', {}, t('editor.requireName'), h('span', { class: 'hint' }, t('editor.requireNameHint')))));
 
   const submit = h('button', { type: 'submit', class: 'big' }, icon('check'), ` ${editing ? t('editor.save') : t('editor.create')}`);
   const form = h('form', { class: 'stack editor-form', id: 'survey-form', noValidate: true }, basicsSection);
@@ -76,7 +80,7 @@ export async function editorPage(app, { params, signal }) {
     }
     submit.disabled = true;
     try {
-      const body = { title: title.value, description: description.value, closesOn: closesOn.value, fields: builder.value() };
+      const body = { title: title.value, description: description.value, closesOn: closesOn.value, requireName: requireName.checked, fields: builder.value() };
       const saved = editing ? await app.api.put(`/surveys/${survey.id}`, body) : await app.api.post('/surveys', body);
       await app.navigate(`/surveys/${saved.survey.id}?msg=${editing ? 'saved' : 'created'}`);
     } catch (err) {

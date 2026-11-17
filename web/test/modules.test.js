@@ -129,6 +129,16 @@ describe('respondent validation (same rules as the API)', () => {
     assert.equal(checkRespondentName(` ${'x'.repeat(100)} `, LIMITS), undefined);
   });
 
+  test('the name may be left empty unless the survey requires it', () => {
+    for (const empty of ['', '   ', undefined]) {
+      assert.equal(checkRespondentName(empty, LIMITS), undefined);
+      assert.equal(checkRespondentName(empty, LIMITS, { required: false }), undefined);
+      assert.deepEqual(checkRespondentName(empty, LIMITS, { required: true }), { key: 'validation.respondentNameRequired', params: {} });
+    }
+    assert.equal(checkRespondentName(' Ana ', LIMITS, { required: true }), undefined);
+    assert.deepEqual(checkRespondentName('x'.repeat(101), LIMITS, { required: true }), { key: 'validation.respondentNameTooLong', params: { max: 100 } });
+  });
+
   test('isValidDate rejects impossible dates', () => {
     assert.equal(isValidDate('2028-02-29'), true);
     assert.equal(isValidDate('2027-02-29'), false);

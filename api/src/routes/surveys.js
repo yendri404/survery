@@ -43,6 +43,7 @@ export function registerSurveyRoutes({ route, repo, config, today, live }) {
       isOpen: survey.isOpen,
       status: surveyStatus(survey, today()),
       closesOn: survey.closesOn,
+      requireName: survey.requireName,
       responseCount: survey.responseCount ?? 0,
       publicToken: survey.publicToken,
       shareUrl: shareUrl(ctx, survey),
@@ -53,16 +54,22 @@ export function registerSurveyRoutes({ route, repo, config, today, live }) {
 
   const sendSurvey = (ctx, status, id) => sendJson(ctx.res, status, { survey: surveyJson(ctx, repo.getOwnedSurvey(id, ctx.user.id)) });
 
-  /** Validates a survey definition body ({ title, description, closesOn, fields }) with the domain rules. */
-  async function readDefinition(ctx, currentClosesOn) {
+  /**
+   * Validates a survey definition body ({ title, description, closesOn, requireName, fields }) with the
+   * domain rules. `current` is the stored survey when editing: a body without requireName keeps its value.
+   */
+  async function readDefinition(ctx, current) {
     const body = await readJson(ctx.req);
     const input = {
       title: body.title ?? '',
       description: body.description ?? '',
       fieldsJson: JSON.stringify(body.fields ?? []),
       closesOn: body.closesOn ?? '',
+      requireName: body.requireName, // undefined (left out) keeps the current value
     };
-    const { value, errors } = parseSurveyInput(input, { today: today(), currentClosesOn, t: coded });
+    const { value, errors } = parseSurveyInput(input, {
+      today: today(), currentClosesOn: current?.closesOn, currentRequireName: current?.requireName, t: coded,
+    });
     if (errors.length) throw validationFailed({ errors });
     return value;
   }
@@ -85,7 +92,7 @@ export function registerSurveyRoutes({ route, repo, config, today, live }) {
 
   authed('PUT', '/surveys/:id', async (ctx) => {
     const survey = ownedSurvey(ctx);
-    const value = await readDefinition(ctx, survey.closesOn);
+    const value = await readDefinition(ctx, survey);
     repo.updateSurvey(survey.id, ctx.user.id, value);
     live.surveyChanged(survey);
     sendSurvey(ctx, 200, survey.id);

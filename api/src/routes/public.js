@@ -61,6 +61,7 @@ export function registerPublicRoutes({ route, repo, config, today, live }) {
         title: survey.title,
         description: survey.description,
         closesOn: survey.closesOn,
+        requireName: survey.requireName,
         status: surveyStatus(survey, today()),
         fields: survey.fields,
         alreadyAnswered: alreadyAnswered(survey, deviceId),
@@ -68,7 +69,7 @@ export function registerPublicRoutes({ route, repo, config, today, live }) {
     });
   });
 
-  /** Body: { respondentName?: string, answers: { [fieldId]: string | string[] } }. */
+  /** Body: { respondentName?: string, answers: { [fieldId]: string | string[] } }. The survey's requireName makes the name required. */
   route('POST', '/public/surveys/:token/responses', async (ctx) => {
     const survey = surveyByToken(ctx);
     const existingDeviceId = readDeviceId(ctx);
@@ -83,7 +84,7 @@ export function registerPublicRoutes({ route, repo, config, today, live }) {
     const rawAnswers = body.answers ?? {};
     if (!isPlainObject(rawAnswers)) throw validationFailed({ errors: [coded('validation.answersInvalid')] });
     const { answers, errors } = validateAnswers(survey.fields, answersForm(rawAnswers), { t: coded });
-    const respondent = parseRespondentName(typeof body.respondentName === 'string' ? body.respondentName : '', { t: coded });
+    const respondent = parseRespondentName(typeof body.respondentName === 'string' ? body.respondentName : '', { required: survey.requireName, t: coded });
     if (respondent.error) errors.respondentName = respondent.error;
     if (Object.keys(errors).length) throw validationFailed({ fields: errors });
 

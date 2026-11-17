@@ -96,6 +96,43 @@ describe('creator surveys', () => {
     assert.deepEqual((await c.request('/surveys')).json.surveys, [], 'nothing was stored');
   });
 
+  test('requireName: false by default, stored on create, kept when a save omits it, cleared with false', async () => {
+    const c = await creator(app.base, 'require-name@corp.local');
+    const fields = [{ label: 'Q', type: 'text' }];
+    const plain = await c.createSurvey(fields);
+    assert.equal(plain.requireName, false);
+
+    const named = await c.createSurvey(fields, 'Named', { requireName: true });
+    assert.equal(named.requireName, true);
+    assert.equal((await c.request(`/surveys/${named.id}`)).json.survey.requireName, true);
+
+    const put = (body) => c.request(`/surveys/${named.id}`, { method: 'PUT', body: { title: 'Named', closesOn: named.closesOn, fields: named.fields, ...body } });
+    const kept = await put({});
+    assert.equal(kept.status, 200);
+    assert.equal(kept.json.survey.requireName, true, 'an older client that omits it does not reset it');
+    const cleared = await put({ requireName: false });
+    assert.equal(cleared.json.survey.requireName, false);
+    assert.equal((await put({ requireName: true })).json.survey.requireName, true);
+    assert.equal((await c.request(`/surveys/${named.id}`)).json.survey.requireName, true);
+  });
+
+  test('requireName must be true or false', async () => {
+    const c = await creator(app.base, 'require-name-invalid@corp.local');
+    for (const requireName of ['yes', 1, null, 'true']) {
+      const res = await c.request('/surveys', { method: 'POST', body: { title: '', requireName, fields: [] } });
+      assert.equal(res.status, 422, JSON.stringify(requireName));
+      assert.deepEqual(res.json.error.errors.map((e) => e.code), ['title_required', 'require_name_invalid', 'fields_empty']);
+      assert.equal(res.json.error.errors[1].message, 'requireName must be true or false.');
+    }
+    assert.deepEqual((await c.request('/surveys')).json.surveys, [], 'nothing was stored');
+
+    const survey = await c.createSurvey([{ label: 'Q', type: 'text' }], 'Kept', { requireName: true });
+    const bad = await c.request(`/surveys/${survey.id}`, { method: 'PUT', body: { title: 'Kept', closesOn: survey.closesOn, fields: survey.fields, requireName: 'no' } });
+    assert.equal(bad.status, 422);
+    assert.deepEqual(bad.json.error.errors.map((e) => e.code), ['require_name_invalid']);
+    assert.equal((await c.request(`/surveys/${survey.id}`)).json.survey.requireName, true);
+  });
+
   test('repeated options or repeated questions are rejected', async () => {
     const c = await creator(app.base, 'dupes@corp.local');
     const res = await c.request('/surveys', {

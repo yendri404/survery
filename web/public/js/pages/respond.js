@@ -57,7 +57,7 @@ function attachValidation(form, entries, app, limits) {
   /** The message for one entry's current value, or undefined when it is valid. */
   function check(entry) {
     const problem = entry.type === 'name'
-      ? checkRespondentName(entry.control.value, limits)
+      ? checkRespondentName(entry.control.value, limits, { required: entry.required })
       : checkAnswer({ type: entry.type, required: entry.required, value: valueOf(entry), options: entry.options, min: entry.min, max: entry.max }, limits);
     return problem ? t(problem.key, problem.params) : undefined;
   }
@@ -137,14 +137,17 @@ export async function respondPage(app, { params, signal }) {
   if (survey.alreadyAnswered) return { title: survey.title, body: [alreadyAnsweredPanel(survey, app.i18n)] };
 
   const { limits } = app.meta;
-  const nameField = respondentNameField(app.i18n, limits);
+  const nameField = respondentNameField(app.i18n, limits, { required: survey.requireName === true });
   const questions = survey.fields.map((field, i) => answerField(field, i, app.i18n, limits));
   const submit = h('button', { type: 'submit', class: 'big block' }, icon('check'), ` ${t('respond.submit')}`);
   // The browser's own bubbles would compete with the inline messages.
   const form = h('form', { class: 'stack respondent-form', noValidate: true }, nameField, questions, submit);
 
   const entries = [
-    { key: 'respondentName', wrap: nameField, type: 'name', control: nameField.querySelector('#respondent_name'), label: t('respond.yourName') },
+    {
+      key: 'respondentName', wrap: nameField, type: 'name', required: survey.requireName === true,
+      control: nameField.querySelector('#respondent_name'), label: t('respond.yourName'),
+    },
     ...survey.fields.map((field, i) => ({
       key: field.id,
       wrap: questions[i],
@@ -187,7 +190,7 @@ export async function respondPage(app, { params, signal }) {
     }
   });
 
-  const hasRequired = survey.fields.some((f) => f.required);
+  const hasRequired = survey.requireName === true || survey.fields.some((f) => f.required);
   return {
     title: survey.title,
     body: [
