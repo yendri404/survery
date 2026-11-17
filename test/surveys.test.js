@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createI18n } from '../src/i18n.js';
 import {
-  addDays, csvCell, localDateString, parseSurveyInput, surveyStatus, toCsv, validateAnswers,
+  FIELD_TYPES, addDays, csvCell, localDateString, parseSurveyInput, summarize, surveyStatus, toCsv, validateAnswers,
 } from '../src/surveys.js';
 
 const form = (pairs) => new URLSearchParams(pairs);
@@ -141,4 +142,35 @@ test('toCsv writes header and rows in submission order', () => {
     { id: 1, submittedAt: '2026-01-01 00:00:00', respondentName: null, answers: { name0001: 'Ana' } },
   ]);
   assert.equal(csv, 'Response ID,Submitted at (UTC),Name,Name\r\n1,2026-01-01 00:00:00,,Ana\r\n2,2026-01-02 00:00:00,Bo B.,Bo\r\n');
+});
+
+test('yes/no questions need no options and accept only yes or no', () => {
+  assert.equal(FIELD_TYPES.yesno, 'Yes / No');
+  const { value, errors } = parseSurveyInput({
+    title: 'x',
+    fieldsJson: JSON.stringify([{ label: 'Remote?', type: 'yesno', required: true, options: ['Maybe'] }]),
+  });
+  assert.deepEqual(errors, []);
+  assert.deepEqual(value.fields[0].options, []);
+
+  const yesno = [{ id: 'yn000001', label: 'Remote?', type: 'yesno', required: true, options: [] }];
+  assert.deepEqual(validateAnswers(yesno, form([['f_yn000001', 'yes']])), { answers: { yn000001: 'yes' }, errors: {} });
+  assert.deepEqual(validateAnswers(yesno, form([['f_yn000001', 'no']])).errors, {});
+  assert.deepEqual(validateAnswers(yesno, form([['f_yn000001', 'Yes']])).errors, { yn000001: 'Invalid option selected.' });
+  assert.deepEqual(validateAnswers(yesno, form([])).errors, { yn000001: 'This field is required.' });
+  assert.deepEqual(validateAnswers([{ ...yesno[0], required: false }], form([])).errors, {});
+});
+
+test('yes/no answers are counted as two options and exported in the creator language', () => {
+  const yesno = [{ id: 'yn000001', label: 'Remote?', type: 'yesno', required: false, options: [] }];
+  const responses = [
+    { id: 1, submittedAt: '2026-01-01 00:00:00', respondentName: null, answers: { yn000001: 'yes' } },
+    { id: 2, submittedAt: '2026-01-02 00:00:00', respondentName: null, answers: { yn000001: 'no' } },
+    { id: 3, submittedAt: '2026-01-03 00:00:00', respondentName: null, answers: { yn000001: 'yes' } },
+  ];
+  const [summary] = summarize(yesno, responses, { t: createI18n('es').t });
+  assert.equal(summary.answered, 3);
+  assert.deepEqual(summary.counts, [{ option: 'yes', label: 'Sí', count: 2 }, { option: 'no', label: 'No', count: 1 }]);
+  assert.match(toCsv(yesno, responses), /\r\n1,2026-01-01 00:00:00,,Yes\r\n2,2026-01-02 00:00:00,,No\r\n/);
+  assert.match(toCsv(yesno, responses, ',', { t: createI18n('es').t }), /\r\n1,2026-01-01 00:00:00,,Sí\r\n/);
 });

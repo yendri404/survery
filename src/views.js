@@ -1,5 +1,5 @@
 import { SUPPORTED_LANGUAGES, clientMessages, createI18n, defaultI18n } from './i18n.js';
-import { LIMITS, daysBetween, fieldTypeLabels, formatAnswer, summarize, surveyStatus } from './surveys.js';
+import { LIMITS, YES_NO, answerText, daysBetween, fieldTypeLabels, summarize, surveyStatus } from './surveys.js';
 
 export const APP_NAME = 'Sharevy';
 
@@ -299,21 +299,21 @@ const DONUT_GAP = 0.6; // surface gap between slices, in percent of the circle
 const fixed = (n) => Number(n.toFixed(2));
 const percent = (count, answered) => (answered ? Math.round((count / answered) * 100) : 0);
 
-/** Single choice (radio, select): every answer picks one option, so the shares add up to 100%. */
+/** Single choice (radio, select, yes/no): every answer picks one option, so the shares add up to 100%. */
 function donutChart(counts, answered) {
   const drawn = counts.filter(({ count }) => count > 0).length; // the empty track shows only when nothing was chosen
   let start = 0;
-  const slices = counts.map(({ option, count }, i) => {
+  const slices = counts.map(({ label, count }, i) => {
     const share = answered ? (count / answered) * 100 : 0;
     const from = start;
     start += share;
     if (!count) return '';
     const length = Math.max(share - (drawn > 1 ? DONUT_GAP : 0), 0.01);
     // r = 15.9155 makes the circumference 100, so dash lengths are percentages; the offset of 25 starts at 12 o'clock.
-    return `<circle class="donut-slice slice-${i + 1}" cx="21" cy="21" r="15.9155" stroke-dasharray="${fixed(length)} ${fixed(100 - length)}" stroke-dashoffset="${fixed(25 - from)}"><title>${esc(option)}: ${count} (${percent(count, answered)}%)</title></circle>`;
+    return `<circle class="donut-slice slice-${i + 1}" cx="21" cy="21" r="15.9155" stroke-dasharray="${fixed(length)} ${fixed(100 - length)}" stroke-dashoffset="${fixed(25 - from)}"><title>${esc(label)}: ${count} (${percent(count, answered)}%)</title></circle>`;
   }).join('');
-  const legend = counts.map(({ option, count }, i) =>
-    `<li><span class="swatch slice-${i + 1}"></span><span class="legend-label">${esc(option)}</span><span class="legend-value">${count} (${percent(count, answered)}%)</span></li>`).join('');
+  const legend = counts.map(({ label, count }, i) =>
+    `<li><span class="swatch slice-${i + 1}"></span><span class="legend-label">${esc(label)}</span><span class="legend-value">${count} (${percent(count, answered)}%)</span></li>`).join('');
   return `<div class="donut-chart"><svg class="donut" viewBox="0 0 42 42" aria-hidden="true" focusable="false">${drawn ? '' : '<circle class="donut-track" cx="21" cy="21" r="15.9155"/>'}${slices}<text class="donut-total" x="21" y="21">${answered}</text></svg><ul class="legend">${legend}</ul></div>`;
 }
 
@@ -323,15 +323,15 @@ function donutChart(counts, answered) {
  * pie would wrongly present them as parts of one whole.
  */
 function barChart(counts, answered) {
-  return `<ul class="hbars">${counts.map(({ option, count }) => {
+  return `<ul class="hbars">${counts.map(({ label, count }) => {
     const pct = percent(count, answered);
-    const fill = count ? `<rect class="hbar-fill" width="${fixed(answered ? (count / answered) * 100 : 0)}%" height="12"><title>${esc(option)}: ${count} (${pct}%)</title></rect>` : '';
-    return `<li><span class="bar-label">${esc(option)}</span><svg class="hbar" width="100%" height="12" aria-hidden="true" focusable="false"><rect class="hbar-track" width="100%" height="12"/>${fill}</svg><span class="bar-value">${count} (${pct}%)</span></li>`;
+    const fill = count ? `<rect class="hbar-fill" width="${fixed(answered ? (count / answered) * 100 : 0)}%" height="12"><title>${esc(label)}: ${count} (${pct}%)</title></rect>` : '';
+    return `<li><span class="bar-label">${esc(label)}</span><svg class="hbar" width="100%" height="12" aria-hidden="true" focusable="false"><rect class="hbar-track" width="100%" height="12"/>${fill}</svg><span class="bar-value">${count} (${pct}%)</span></li>`;
   }).join('')}</ul>`;
 }
 
 function summaryHtml(fields, responses, i18n) {
-  const items = summarize(fields, responses);
+  const items = summarize(fields, responses, { t: i18n.t });
   if (!items.length || !responses.length) return '';
   return `<h3>${esc(i18n.t('detail.summary'))}</h3><div class="charts">${items.map(({ field, answered, counts }) => {
     const multiple = field.type === 'checkbox';
@@ -372,7 +372,7 @@ export function surveyDetailPage({ user, csrf, survey, responses, shareUrl, qrSv
     <td data-label="${esc(t('detail.columnResponse'))}">#${r.id}</td>
     <td data-label="${esc(t('detail.columnSent'))}" class="nowrap">${esc(r.submittedAt)}</td>
     <td data-label="${esc(t('detail.columnName'))}">${r.respondentName ? esc(r.respondentName) : `<span class="muted">${esc(t('detail.anonymous'))}</span>`}</td>
-    ${survey.fields.map((f) => `<td data-label="${esc(f.label)}">${esc(formatAnswer(r.answers[f.id])) || '<span class="muted">-</span>'}</td>`).join('')}
+    ${survey.fields.map((f) => `<td data-label="${esc(f.label)}">${esc(answerText(f, r.answers[f.id], t)) || '<span class="muted">-</span>'}</td>`).join('')}
     <td class="row-actions"><form method="post" action="/surveys/${survey.id}/responses/${r.id}/delete" data-confirm="${esc(t('detail.deleteResponseConfirm', { id: r.id }))}">${csrfInput(csrf)}
       <button type="submit" class="icon-button danger" aria-label="${esc(t('detail.deleteResponseLabel', { id: r.id }))}" title="${esc(t('detail.deleteResponseTitle'))}">${icon('trash')}</button></form></td>
   </tr>`).join('');
@@ -473,6 +473,13 @@ function renderField(field, value, error, index, i18n) {
         <input type="${field.type}" name="${name}" value="${esc(option)}"${selected.includes(option) ? ' checked' : ''}${field.type === 'radio' && i === 0 ? required : ''}>
         <span>${esc(option)}</span></label>`).join('');
       return wrap(`<fieldset id="${id}"${described}><legend>${number}${esc(field.label)}${mark}</legend>${hint}<div class="choices">${inputs}</div></fieldset>`);
+    }
+    case 'yesno': {
+      // Two fixed choices; the stored value is always "yes" or "no", the text follows the language.
+      const inputs = YES_NO.map((option, i) => `<label class="choice">
+        <input type="radio" name="${name}" value="${option}"${value === option ? ' checked' : ''}${i === 0 ? required : ''}>
+        <span>${esc(t(`answer.${option}`))}</span></label>`).join('');
+      return wrap(`<fieldset id="${id}"${described}><legend>${number}${esc(field.label)}${mark}</legend><div class="choices yesno">${inputs}</div></fieldset>`);
     }
     case 'select': {
       const options = field.options.map((o) => `<option value="${esc(o)}"${o === value ? ' selected' : ''}>${esc(o)}</option>`).join('');

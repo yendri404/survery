@@ -89,6 +89,7 @@
   "fieldType.date": "Date (calendar)",
   "fieldType.select": "Dropdown list",
   "fieldType.radio": "Choose one option",
+  "fieldType.yesno": "Yes / No",
   "fieldType.checkbox": "Choose several options",
 
   "detail.back": "My surveys",
@@ -136,6 +137,9 @@
   "detail.deleteResponseLabel": "Delete response #{id}",
   "detail.deleteResponseTitle": "Delete response",
   "detail.noAnswers": "No answers yet. Share the link above to start collecting them.",
+
+  "answer.yes": "Yes",
+  "answer.no": "No",
 
   "csv.responseId": "Response ID",
   "csv.submittedAt": "Submitted at (UTC)",

@@ -4,7 +4,7 @@ import { defaultI18n } from './i18n.js';
 // User-facing messages come from a translator `t` passed in by the caller; English by default.
 const englishT = defaultI18n.t;
 
-const FIELD_TYPE_IDS = ['text', 'textarea', 'number', 'email', 'date', 'select', 'radio', 'checkbox'];
+const FIELD_TYPE_IDS = ['text', 'textarea', 'number', 'email', 'date', 'select', 'radio', 'yesno', 'checkbox'];
 
 /** Field type id -> label shown in the editor, in the translator's language. */
 export const fieldTypeLabels = (t = englishT) => Object.fromEntries(FIELD_TYPE_IDS.map((type) => [type, t(`fieldType.${type}`)]));
@@ -12,7 +12,23 @@ export const fieldTypeLabels = (t = englishT) => Object.fromEntries(FIELD_TYPE_I
 /** Field type id -> English label. */
 export const FIELD_TYPES = fieldTypeLabels();
 
+/** Types whose options the creator writes. */
 export const CHOICE_TYPES = new Set(['select', 'radio', 'checkbox']);
+
+/**
+ * Stored values of a yes/no question. They never depend on the language: the respondent form,
+ * the results and the CSV show them translated ("answer.yes" / "answer.no").
+ */
+export const YES_NO = ['yes', 'no'];
+
+/** The values a single or multiple choice question accepts; yes/no has fixed ones. */
+export const fieldOptions = (field) => (field.type === 'yesno' ? YES_NO : field.options);
+
+/** Text shown for an answer: yes/no in the reader's language, arrays as "a, b". */
+export function answerText(field, value, t = englishT) {
+  if (field.type === 'yesno' && YES_NO.includes(value)) return t(`answer.${value}`);
+  return formatAnswer(value);
+}
 
 export const LIMITS = {
   title: 200,
@@ -225,7 +241,8 @@ export function validateAnswers(fields, form, { t = englishT } = {}) {
         break;
       case 'select':
       case 'radio':
-        if (!field.options.includes(value)) errors[field.id] = t('validation.invalidOption');
+      case 'yesno':
+        if (!fieldOptions(field).includes(value)) errors[field.id] = t('validation.invalidOption');
         break;
     }
   }
@@ -238,12 +255,15 @@ export function formatAnswer(value) {
   return value == null ? '' : String(value);
 }
 
-/** Per-option counts for choice fields. */
-export function summarize(fields, responses) {
+/**
+ * Per-option counts for choice fields (yes/no included). Each count carries the stored `option`
+ * and the `label` to show, in the translator's language for yes/no.
+ */
+export function summarize(fields, responses, { t = englishT } = {}) {
   return fields
-    .filter((f) => CHOICE_TYPES.has(f.type))
+    .filter((f) => CHOICE_TYPES.has(f.type) || f.type === 'yesno')
     .map((field) => {
-      const counts = new Map(field.options.map((o) => [o, 0]));
+      const counts = new Map(fieldOptions(field).map((o) => [o, 0]));
       let answered = 0;
       for (const { answers } of responses) {
         const value = answers[field.id];
@@ -251,7 +271,11 @@ export function summarize(fields, responses) {
         if (values.length) answered += 1;
         for (const v of values) if (counts.has(v)) counts.set(v, counts.get(v) + 1);
       }
-      return { field, answered, counts: [...counts.entries()].map(([option, count]) => ({ option, count })) };
+      return {
+        field,
+        answered,
+        counts: [...counts.entries()].map(([option, count]) => ({ option, label: answerText(field, option, t), count })),
+      };
     });
 }
 
@@ -268,6 +292,6 @@ export function toCsv(fields, responses, delimiter = ',', { t = englishT } = {})
   const rows = responses
     .slice()
     .sort((a, b) => a.id - b.id)
-    .map((r) => [r.id, r.submittedAt, r.respondentName ?? '', ...fields.map((f) => r.answers[f.id])]);
+    .map((r) => [r.id, r.submittedAt, r.respondentName ?? '', ...fields.map((f) => answerText(f, r.answers[f.id], t))]);
   return [header, ...rows].map((row) => row.map((c) => csvCell(c, delimiter)).join(delimiter)).join('\r\n') + '\r\n';
 }

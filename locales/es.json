@@ -89,6 +89,7 @@
   "fieldType.date": "Fecha (calendario)",
   "fieldType.select": "Lista desplegable",
   "fieldType.radio": "Elegir una opción",
+  "fieldType.yesno": "Sí / No",
   "fieldType.checkbox": "Elegir varias opciones",
 
   "detail.back": "Mis encuestas",
@@ -136,6 +137,9 @@
   "detail.deleteResponseLabel": "Eliminar la respuesta #{id}",
   "detail.deleteResponseTitle": "Eliminar respuesta",
   "detail.noAnswers": "Todavía no hay respuestas. Comparte el enlace de arriba para empezar a recibirlas.",
+
+  "answer.yes": "Sí",
+  "answer.no": "No",
 
   "csv.responseId": "ID de respuesta",
   "csv.submittedAt": "Enviada el (UTC)",

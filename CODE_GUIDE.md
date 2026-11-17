@@ -407,9 +407,10 @@ The heart of the app. It has no database, no HTTP and no HTML, which is why it c
 
 | Export | Content |
 |--------|---------|
-| `FIELD_TYPES` | `text`, `textarea`, `number`, `email`, `date`, `select`, `radio`, `checkbox` → English display label |
+| `FIELD_TYPES` | `text`, `textarea`, `number`, `email`, `date`, `select`, `radio`, `yesno`, `checkbox` → English display label |
 | `fieldTypeLabels(t)` | The same map with labels in the translator's language (used by the editor) |
-| `CHOICE_TYPES` | `select`, `radio`, `checkbox` (the types that have options) |
+| `CHOICE_TYPES` | `select`, `radio`, `checkbox` (the types whose options the creator writes) |
+| `YES_NO` | `['yes', 'no']`: the fixed, language-independent values stored for a `yesno` question |
 | `LIMITS` | Maximum lengths and counts (title 200, 100 fields, 100 options, text answers 1 000, long text 10 000…) |
 
 **Field definition** (one item of `fields_json`):
@@ -431,9 +432,11 @@ The heart of the app. It has no database, no HTTP and no HTML, which is why it c
 | `daysBetween(from, to)` | → whole days | Days from one `YYYY-MM-DD` to another; the "days left" figure on the results page |
 | `parseRespondentName(value, { t })` | → `{ name, error }` | Optional respondent name: trimmed, max. 100 characters, empty means anonymous |
 | `formatAnswer(value)` | → `string` | Arrays become `"a, b"` |
-| `summarize(fields, responses)` | → per choice field: `answered`, counts per option | Feeds the summary section of the detail page |
+| `answerText(field, value, t)` | → `string` | What the results table and CSV show: `yes`/`no` translated (`answer.yes`, `answer.no`), anything else through `formatAnswer` |
+| `fieldOptions(field)` | → `string[]` | Accepted values of a choice question: `YES_NO` for `yesno`, otherwise the creator's options |
+| `summarize(fields, responses, { t })` | → per choice field (yes/no included): `answered`, counts per option (`option` stored value, `label` text to show) | Feeds the summary section of the detail page |
 | `csvCell(value, delimiter)` | → escaped cell | Quotes when needed. Prefixes `'` to values starting with `= + - @` (formula injection), except plain numbers like `-5` |
-| `toCsv(fields, responses, delimiter, { t })` | → full CSV text | Header (fixed columns in the translator's language) + rows in submission order, `\r\n` line endings |
+| `toCsv(fields, responses, delimiter, { t })` | → full CSV text | Header (fixed columns in the translator's language) + rows in submission order (yes/no answers translated), `\r\n` line endings |
 
 **Validation per type**
 
@@ -445,6 +448,7 @@ The heart of the app. It has no database, no HTTP and no HTML, which is why it c
 | `email` | `x@y.z` shape, up to 254 characters |
 | `date` | `YYYY-MM-DD` that is a real calendar date (`2026-02-30` is rejected) |
 | `select`, `radio` | Exactly one of the options |
+| `yesno` | `yes` or `no` (the creator writes no options; the form shows them translated) |
 | `checkbox` | Any subset of the options; `required` means at least one |
 
 ---
@@ -545,7 +549,7 @@ Server-rendered template strings. Every page is plain HTML forms, so it works wi
 | `surveyListPage` | "My surveys" | Status badge + response count |
 | `surveyEditorPage` | New/edit | Hidden `fields_json` + `#builder` container; warns when editing a survey with responses. `public/builder.js` shows repeated questions and options as inline messages while the creator types and blocks submitting until they are fixed |
 | `surveyDetailPage` | Results | Share link with copy button, open/close/delete actions, CSV links, key figures, charts, responses table |
-| `publicFormPage` | Respondent form | `renderField` per type; per-field errors; values kept after an error |
+| `publicFormPage` | Respondent form | `renderField` per type (`yesno`: two large side-by-side radios, `.choices.yesno`); per-field errors; values kept after an error |
 | `thanksPage`, `closedPage` | Respondent states | |
 | `errorPage` | Any error | `respondent: true` hides creator navigation |
 
@@ -596,7 +600,7 @@ The respondent form stays narrow (720px) on purpose: short lines are easier to r
 
 | Question type | Chart | Why |
 |---------------|-------|-----|
-| `radio`, `select` (up to 6 options) | Donut (`donutChart`) + legend with count and % | One answer per person: the shares add up to 100% |
+| `radio`, `select` (up to 6 options), `yesno` | Donut (`donutChart`) + legend with count and % | One answer per person: the shares add up to 100% |
 | `checkbox` | Horizontal bars (`barChart`) + a note | Several answers per person: the % add up to more than 100%, so a pie would mislead |
 | `radio`, `select` with more than 6 options | Bars | Categorical colors are never repeated |
 

@@ -460,6 +460,40 @@ describe('survey app', () => {
     assert.match(res.text, /Fields 1 and 2 ask the same question. Each question must be different./);
   });
 
+  test('yes/no questions show two fixed choices and their answers in the reader language', async () => {
+    const c = new Client(app.base);
+    await c.register('yesno@corp.local');
+    const id = await c.createSurvey([{ label: 'Work remotely?', type: 'yesno', required: true }]);
+    const token = await c.shareToken(id);
+
+    const form = (await new Client(app.base).request(`/s/${token}`)).text;
+    const name = form.match(/name="(f_[a-z0-9]+)"/)[1];
+    const choices = [...form.matchAll(/<input type="radio" name="f_[a-z0-9]+" value="(\w+)"[^>]*>\s*<span>([^<]+)<\/span>/g)].map((m) => [m[1], m[2]]);
+    assert.deepEqual(choices, [['yes', 'Yes'], ['no', 'No']]);
+    const spanishForm = (await new Client(app.base, { language: 'es' }).request(`/s/${token}`)).text;
+    assert.match(spanishForm, /value="yes"[^>]*>\s*<span>Sí<\/span>/);
+
+    const missing = await new Client(app.base).request(`/s/${token}`, { method: 'POST', form: {} });
+    assert.equal(missing.status, 422);
+    assert.match(missing.text, /This field is required/);
+    const wrong = await new Client(app.base).request(`/s/${token}`, { method: 'POST', form: { [name]: 'maybe' } });
+    assert.equal(wrong.status, 422);
+    assert.match(wrong.text, /Invalid option selected/);
+    assert.equal((await new Client(app.base).request(`/s/${token}`, { method: 'POST', form: { [name]: 'yes' } })).status, 303);
+
+    const detail = (await c.request(`/surveys/${id}`)).text;
+    assert.match(detail, /<td data-label="Work remotely\?">Yes<\/td>/);
+    assert.match(detail, /<span class="legend-label">Yes<\/span><span class="legend-value">1 \(100%\)<\/span>/);
+    assert.match(detail, /<span class="legend-label">No<\/span><span class="legend-value">0 \(0%\)<\/span>/);
+    assert.match((await c.request(`/surveys/${id}/export.csv`)).text, /,Yes\r\n$/);
+
+    c.language = 'es';
+    const spanishDetail = (await c.request(`/surveys/${id}`)).text;
+    assert.match(spanishDetail, /<td data-label="Work remotely\?">Sí<\/td>/);
+    assert.match(spanishDetail, /<span class="legend-label">Sí<\/span>/);
+    assert.match((await c.request(`/surveys/${id}/export.csv`)).text, /,Sí\r\n$/);
+  });
+
   test('pages carry the Sharevy brand and a mobile viewport', async () => {
     const home = await new Client(app.base).request('/');
     assert.match(home.text, /<title>Sharevy<\/title>/);
