@@ -142,7 +142,7 @@ test('toCsv writes header and rows in submission order, numbered per survey', ()
     { id: 12, number: 2, submittedAt: '2026-01-02 00:00:00', respondentName: 'Bo B.', answers: { name0001: 'Bo' } },
     { id: 11, number: 1, submittedAt: '2026-01-01 00:00:00', respondentName: null, answers: { name0001: 'Ana' } },
   ]);
-  assert.equal(csv, 'Response ID,Submitted at (UTC),Name,Name\r\n1,2026-01-01 00:00:00,,Ana\r\n2,2026-01-02 00:00:00,Bo B.,Bo\r\n');
+  assert.equal(csv, 'Response #,Submitted at (UTC),Name,Name\r\n1,2026-01-01 00:00:00,,Ana\r\n2,2026-01-02 00:00:00,Bo B.,Bo\r\n');
 });
 
 test('yes/no questions need no options and accept only yes or no', () => {

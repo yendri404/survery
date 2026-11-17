@@ -363,7 +363,7 @@ For `yesno`, `option` is `yes` / `no`: translate it in the client.
 Content-Type: text/csv; charset=utf-8
 Content-Disposition: attachment; filename="sharevy-survey-7-responses.csv"
 
-﻿Response ID,Submitted at (UTC),Name,Department,Work remotely?\r\n
+﻿Response #,Submitted at (UTC),Name,Department,Work remotely?\r\n
 3,2026-11-17 10:05:00,Marta Gómez,HR,Yes\r\n
 ```
 

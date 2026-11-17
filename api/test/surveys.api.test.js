@@ -236,14 +236,14 @@ describe('creator surveys', () => {
     assert.match(csv.headers.get('content-disposition'), new RegExp(`attachment; filename="sharevy-survey-${survey.id}-responses.csv"`));
     assert.deepEqual([...csv.bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
     const lines = csv.text.slice(1).split('\r\n');
-    assert.equal(lines[0], 'Response ID,Submitted at (UTC),Name,Your name,Department,Tools,Remote?');
+    assert.equal(lines[0], 'Response #,Submitted at (UTC),Name,Your name,Department,Tools,Remote?');
     assert.match(lines[1], /,"'=Luis, ""Lu""",HR,"Mail, Chat",Yes$/);
 
     const es = await c.request(`/surveys/${survey.id}/export.csv?delimiter=semicolon&lang=es`, { raw: true });
-    assert.equal(es.text.slice(1).split('\r\n')[0], 'ID de respuesta;Enviada el (UTC);Nombre;Your name;Department;Tools;Remote?');
+    assert.equal(es.text.slice(1).split('\r\n')[0], 'N.º de respuesta;Enviada el (UTC);Nombre;Your name;Department;Tools;Remote?');
     assert.match(es.text, /;Sí\r\n$/);
     const negotiated = await c.request(`/surveys/${survey.id}/export.csv`, { raw: true, headers: { 'accept-language': 'es-MX' } });
-    assert.match(negotiated.text, /^﻿ID de respuesta,/);
+    assert.match(negotiated.text, /^﻿N\.º de respuesta,/);
 
     const bad = await c.request(`/surveys/${survey.id}/export.csv?delimiter=tab`);
     assert.equal(bad.status, 400);

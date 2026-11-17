@@ -1,7 +1,7 @@
 {
   "answer.yes": "Sí",
   "answer.no": "No",
-  "csv.responseId": "ID de respuesta",
+  "csv.responseNumber": "N.º de respuesta",
   "csv.submittedAt": "Enviada el (UTC)",
   "csv.name": "Nombre"
 }

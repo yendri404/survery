@@ -284,7 +284,7 @@ export function csvCell(value, delimiter = ',') {
 }
 
 export function toCsv(fields, responses, delimiter = ',', { t = englishT } = {}) {
-  const header = [t('csv.responseId'), t('csv.submittedAt'), t('csv.name'), ...fields.map((f) => f.label)];
+  const header = [t('csv.responseNumber'), t('csv.submittedAt'), t('csv.name'), ...fields.map((f) => f.label)];
   const rows = responses
     .slice()
     .sort((a, b) => a.id - b.id)

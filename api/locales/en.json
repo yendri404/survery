@@ -9,7 +9,7 @@
   "register.emailTaken": "An account with this email already exists.",
   "answer.yes": "Yes",
   "answer.no": "No",
-  "csv.responseId": "Response ID",
+  "csv.responseNumber": "Response #",
   "csv.submittedAt": "Submitted at (UTC)",
   "csv.name": "Name",
   "respond.alreadyAnswered": "You already answered this survey from this device. Thank you!",
