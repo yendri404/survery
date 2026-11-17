@@ -100,9 +100,12 @@ export async function detailPage(app, { params, signal }) {
   ];
   const slots = stateParts.map((build) => slot(build(current)));
   const [headingSlot, closingSlot, descriptionSlot, noticeSlot, toggleSlot] = slots;
+  // Green while the survey accepts answers, blue once it is closed or expired (kept live).
+  const toneOf = (survey) => (survey.status === 'open' ? 'open' : undefined);
   const showSurvey = (survey) => {
     current = survey;
     stateParts.forEach((build, i) => slots[i].set(build(survey)));
+    app.setTone(toneOf(survey));
   };
 
   // ---------- Layout ----------
@@ -124,6 +127,7 @@ export async function detailPage(app, { params, signal }) {
 
   return {
     title: current.title,
+    tone: toneOf(current),
     body: [
       backLink('/surveys', t('detail.back')),
       headingSlot.node,

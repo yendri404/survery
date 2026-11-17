@@ -28,7 +28,7 @@ async function fetchLocale(lang) {
 
 /**
  * The application shell: language, theme, session, router and the container that renders pages.
- * Pages (pages/*.js) are async functions `(app, route) -> { title, body, respondent?, redirect? }`.
+ * Pages (pages/*.js) are async functions `(app, route) -> { title, body, respondent?, redirect?, tone? }`.
  */
 export async function startApp() {
   const root = document.documentElement;
@@ -222,6 +222,7 @@ export async function startApp() {
     const respondent = Boolean(page.respondent ?? match?.route.respondent);
     const flashKey = FLASH_MESSAGES[url.searchParams.get('msg')];
     const swap = () => {
+      setTone(page.tone);
       document.title = page.title && page.title !== APP_NAME ? `${page.title} · ${APP_NAME}` : APP_NAME;
       document.body.classList.toggle('respondent', respondent);
       renderTopbar(respondent);
@@ -239,6 +240,15 @@ export async function startApp() {
       swap();
     }
   }
+
+  /**
+   * Color tone of the page content (style.css .tone-open): pages of an open survey return
+   * `tone: 'open'`; anything else keeps the blue brand. The topbar never changes.
+   */
+  function setTone(tone) {
+    main.classList.toggle('tone-open', tone === 'open');
+  }
+  app.setTone = setTone;
 
   function navigate(to, { replace = false } = {}) {
     const url = new URL(to, location.href);

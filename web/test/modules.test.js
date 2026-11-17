@@ -379,6 +379,9 @@ describe('survey cards', () => {
       'Reopen "Parking" (accept answers again)', 'Delete "Parking"',
     ]);
     assert.deepEqual(buttons.map((b) => b.textContent.trim()), ['Close', 'Delete', 'Reopen', 'Delete']);
+    // Open surveys wear the "open" colors; closed (and expired) ones keep the blue brand.
+    const cardClasses = findAll(list, (n) => n.attrs.class?.includes('survey-card')).map((c) => c.attrs.class.includes('tone-open'));
+    assert.deepEqual(cardClasses, [true, false]);
     buttons[0].listeners.click();
     buttons[2].listeners.click();
     buttons[3].listeners.click();

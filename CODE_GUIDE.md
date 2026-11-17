@@ -740,7 +740,7 @@ Every request sends `Authorization: Bearer <token>` when logged in and `X-Device
 
 ### Pages (containers)
 
-A page is `async (app, { params, query, signal }) → { title, body, respondent?, redirect?, status?, mounted? }`. It fetches with `app.api` (passing `signal`, so a newer navigation cancels it), composes components, and attaches action handlers. `mounted()` runs after the DOM is on screen (live streams, QR image).
+A page is `async (app, { params, query, signal }) → { title, body, respondent?, redirect?, status?, tone?, mounted? }`. It fetches with `app.api` (passing `signal`, so a newer navigation cancels it), composes components, and attaches action handlers. `mounted()` runs after the DOM is on screen (live streams, QR image). `tone: 'open'` turns the content's brand accents green (`.tone-open` on `<main>`) while a survey accepts answers; `app.setTone()` changes it live.
 
 | File | Pages | What they do |
 |------|-------|--------------|

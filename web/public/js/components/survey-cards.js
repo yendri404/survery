@@ -5,7 +5,7 @@ import { closingText, emptyState, statusBadge } from './layout.js';
 /**
  * Presentational: the creator's surveys as cards, or the empty state. Each card opens the survey and
  * has Edit (a link to its editor), Close or Reopen (`onToggle(survey)`) and Delete (`onDelete(survey)`;
- * the container confirms and deletes).
+ * the container confirms and deletes). Open surveys wear the green "open" tone (style.css).
  */
 export function surveyCards(surveys, i18n, { onToggle, onDelete } = {}) {
   const { t, tn } = i18n;
@@ -13,7 +13,7 @@ export function surveyCards(surveys, i18n, { onToggle, onDelete } = {}) {
     return emptyState(t('list.empty'), h('a', { class: 'button big', href: '/surveys/new' }, icon('plus'), ` ${t('list.createFirst')}`));
   }
   return h('ul', { class: 'cards' }, surveys.map((survey) => h('li', {},
-    h('div', { class: 'card card-link survey-card' },
+    h('div', { class: `card card-link survey-card${survey.status === 'open' ? ' tone-open' : ''}` },
       h('a', { class: 'card-main', href: `/surveys/${survey.id}` },
         h('span', { class: 'card-title' }, survey.title),
         statusBadge(survey.status, t),

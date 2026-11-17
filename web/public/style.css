@@ -417,6 +417,18 @@ td { font-variant-numeric: tabular-nums; }
 .live-updated { animation: live-flash 1s ease-out; }
 @media (prefers-reduced-motion: reduce) { .live-updated { animation: none; } }
 
+/* ---------- Survey state tone ----------
+   Content of an open survey (its page, its card) turns the brand accents green: it still accepts
+   answers. Closed and expired surveys keep the blue brand. Text pairs are >= 4.5:1 and the bar fill
+   passed the dataviz validator (>= 3:1 on the panel) in both themes. Categorical donut colors never
+   change: they name answers, not the survey's state. */
+.tone-open { --brand: #2f6b45; --brand-dark: #245536; --brand-soft: #e7f0ea; --brand-text: #2f6b45; --bar-fill: #3d8a5a; }
+:root[data-theme="dark"] .tone-open { --brand: #3d7a52; --brand-dark: #336846; --brand-soft: #1d2f24; --brand-text: #8cc5a0; --bar-fill: #5aa877; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .tone-open { --brand: #3d7a52; --brand-dark: #336846; --brand-soft: #1d2f24; --brand-text: #8cc5a0; --bar-fill: #5aa877; }
+}
+.survey-card { border-top-color: var(--brand); }
+
 /* ---------- Charts and key figures (survey detail) ----------
    Categorical colors: a muted order checked with the dataviz validator (lightness band, chroma
    floor, colorblind separation, >= 3:1 on the panel surface) for each theme. Never cycled;
