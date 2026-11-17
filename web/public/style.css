@@ -26,13 +26,20 @@
 
 /* ---------- Design tokens ----------
    Every color and the corner radius live here. Text pairs meet WCAG AA (>= 4.5:1) in both
-   themes; --border-strong (form controls) is >= 3:1 against --surface. */
+   themes; --border-strong (form controls) is >= 3:1 against --surface.
+   60-30-10: neutrals (--bg, --surface) carry most of the page, the blue brand the structure
+   (topbar, borders, links, secondary buttons), and the copper --accent, the blue's complement,
+   only the primary actions and the stripe under the topbar. */
 :root {
   --font: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
   --brand: #2b4a6f;          /* primary buttons, accents */
   --brand-dark: #1f3753;     /* primary hover */
   --brand-soft: #e6ecf3;     /* selected / hover tint */
   --brand-text: #2b4a6f;     /* brand-colored text and links */
+  --accent: #a65d16;         /* 10%: primary actions (complement of the blue) */
+  --accent-dark: #8a4b12;    /* primary hover */
+  --on-accent: #fff;
+  --accent-line: #c27a2c;    /* stripe under the topbar */
   --topbar: #1e2a3a;
   --text: #1c232c;
   --muted: #56606c;
@@ -66,6 +73,10 @@
   --brand-dark: #2f5079;
   --brand-soft: #22303f;
   --brand-text: #9fbbdc;
+  --accent: #d9954a;
+  --accent-dark: #e0a25a;
+  --on-accent: #12171e;
+  --accent-line: #d9954a;
   --topbar: #1b2633;
   --text: #e4e8ee;
   --muted: #a0aab6;
@@ -92,6 +103,10 @@
     --brand-dark: #2f5079;
     --brand-soft: #22303f;
     --brand-text: #9fbbdc;
+    --accent: #d9954a;
+    --accent-dark: #e0a25a;
+    --on-accent: #12171e;
+    --accent-line: #d9954a;
     --topbar: #1b2633;
     --text: #e4e8ee;
     --muted: #a0aab6;
@@ -137,7 +152,7 @@ strong { font-weight: 600; }
 :focus-visible { outline: 2px solid var(--brand-text); outline-offset: 2px; }
 
 /* ---------- Top bar ---------- */
-.topbar { background: var(--topbar); color: var(--on-topbar); border-bottom: 1px solid rgba(255, 255, 255, .08); }
+.topbar { background: var(--topbar); color: var(--on-topbar); border-bottom: 3px solid var(--accent-line); }
 .topbar-inner { max-width: 960px; margin: 0 auto; padding: .4rem 1rem; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .25rem 1rem; min-height: 56px; }
 .brand { color: var(--on-topbar); font-weight: 600; font-size: 1.15rem; letter-spacing: .03em; text-decoration: none; display: inline-flex; align-items: center; gap: .6rem; min-height: var(--tap); }
 .brand-logo { width: 28px; height: 28px; flex: none; }
@@ -181,13 +196,13 @@ button, .button {
   min-height: var(--tap);
   padding: .5rem 1.1rem;
   font: inherit; font-weight: 500; font-size: .95rem; letter-spacing: .01em;
-  border: 1px solid var(--brand);
+  border: 1px solid var(--accent);
   border-radius: var(--radius);
-  background: var(--brand); color: #fff;
+  background: var(--accent); color: var(--on-accent);
   text-decoration: none; cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-button:hover, .button:hover { background: var(--brand-dark); border-color: var(--brand-dark); }
+button:hover, .button:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
 button.secondary, .button.secondary { background: var(--surface); color: var(--brand-text); border-color: var(--border-strong); }
 button.secondary:hover, .button.secondary:hover { background: var(--brand-soft); border-color: var(--brand-text); }
 button.danger, .button.danger { background: var(--surface); color: var(--danger); border-color: var(--danger); }
@@ -312,7 +327,7 @@ fieldset { border: none; padding: 0; margin: 0; min-width: 0; }
 legend { font-weight: 500; padding: 0; }
 
 /* ---------- Respondent form ---------- */
-.intro { border-top: 3px solid var(--brand); }
+.intro { border-top: 3px solid var(--accent); }
 .intro h1 { margin-top: 0; }
 .respondent-form .field { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; display: flex; flex-direction: column; gap: .35rem; }
 .respondent-form .field.has-error { border-color: var(--danger); box-shadow: inset 3px 0 0 var(--danger); }
