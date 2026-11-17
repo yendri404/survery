@@ -3,7 +3,7 @@ import { errorPanel, flash, languageMenu, themeToggle, topbar, APP_NAME } from '
 import { h } from './dom.js';
 import { errorMessage } from './errors.js';
 import { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, createI18n, pickLanguage } from './i18n.js';
-import { followEvents } from './sse.js';
+import { coalesce, followEvents } from './sse.js';
 import { KEYS, deviceId, load, save } from './storage.js';
 import { matchRoute } from './routes.js';
 
@@ -86,15 +86,13 @@ export async function startApp() {
   };
 
   /**
-   * Keeps `region` up to date: on each change event, `build()` makes fresh content; when it differs
+   * Keeps `region` up to date: after change events, `build()` makes fresh content; when it differs
    * from what is shown, it replaces it, flashes a highlight ring and announces it to screen readers.
+   * A burst of events (many answers at once) costs one refresh, and refreshes never overlap.
    */
   app.liveRegion = (region, url, build, signal) => {
-    let running = false;
-    let queued = false;
-    const refresh = async () => {
-      if (running) { queued = true; return; }
-      running = true;
+    const refresh = coalesce(async () => {
+      if (signal.aborted) return;
       try {
         const fresh = h('div', {}, await build());
         if (signal.aborted || fresh.innerHTML === region.innerHTML) return;
@@ -105,11 +103,8 @@ export async function startApp() {
         app.announce(app.t('client.resultsUpdated'));
       } catch {
         // Network hiccup: the next event or reconnection triggers another refresh.
-      } finally {
-        running = false;
-        if (queued && !signal.aborted) { queued = false; refresh(); }
       }
-    };
+    });
     followEvents({ url: `/api/v1${url}`, headers: app.api.authHeaders, onChange: refresh, onUnauthorized: () => app.api.get('/me').catch(() => {}), signal });
   };
 

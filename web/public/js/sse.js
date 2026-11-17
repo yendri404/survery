@@ -85,3 +85,34 @@ export function followEvents({ url, headers = () => ({}), onChange, onUnauthoriz
     }
   })();
 }
+
+/**
+ * Wraps a refresh so bursts of change events cost one run: `task` starts after `delayMs` without
+ * new calls, runs never overlap, and calls made while it runs queue exactly one more run.
+ */
+export function coalesce(task, delayMs = 200) {
+  let timer;
+  let running = false;
+  let queued = false;
+  const schedule = () => {
+    clearTimeout(timer);
+    timer = setTimeout(run, delayMs);
+  };
+  async function run() {
+    if (running) {
+      queued = true;
+      return;
+    }
+    running = true;
+    try {
+      await task();
+    } finally {
+      running = false;
+      if (queued) {
+        queued = false;
+        schedule();
+      }
+    }
+  }
+  return schedule;
+}

@@ -72,7 +72,7 @@ web/                         Browser client (port 3000), no dependencies, no bui
 │   │   ├── routes.js        Path -> page
 │   │   ├── api.js           The only door to the API (fetch + Bearer + X-Device-Id)
 │   │   ├── errors.js        API error code -> message key
-│   │   ├── sse.js           Event streams read with fetch (parser + reconnection)
+│   │   ├── sse.js           Event streams read with fetch (parser + reconnection), refresh coalescing
 │   │   ├── storage.js       localStorage keys, device id
 │   │   ├── dom.js           h()/s() DOM builders, withParts(), setErrorBox(), slot()
 │   │   ├── i18n.js          Language choice, t/tn, dates
@@ -689,7 +689,7 @@ Reads `PORT` (3000), `HOST` (`0.0.0.0`) and `API_URL` (`http://127.0.0.1:3001`),
 
 **Router (`render`)**: aborts the previous page's `AbortController` (stops its event streams), matches the path, redirects `auth` pages to `/login?next=...` without a user, calls the page, and swaps `<main>` inside a View Transition (skipped for reduced motion or a hidden tab). It also sets `document.title` (`<page> · Sharevy`), toggles `body.respondent`, redraws the top bar and shows a flash message for known `?msg=` keys (`created`, `saved`, `closed`, `opened`, `deleted`, `response-deleted`; the query value is never reflected). A page error becomes an error panel; a 401 goes to the login page through `onUnauthorized`. Clicks on same-origin links (not `/api/`, `/public/`, downloads or new tabs) are intercepted and use `pushState`.
 
-**Live regions (`liveRegion`)**: `followEvents` keeps a stream open on `/api/v1<url>`; each `change` calls `build()` again, and only when the new DOM differs from the shown one it replaces the region, restarts the `.live-updated` highlight and announces "results updated". Refreshes never overlap (one queued at most).
+**Live regions (`liveRegion`)**: `followEvents` keeps a stream open on `/api/v1<url>`; each `change` calls `build()` again, and only when the new DOM differs from the shown one it replaces the region, restarts the `.live-updated` highlight and announces "results updated". Refreshes go through `coalesce` (`sse.js`): a burst of events costs one refresh, and refreshes never overlap (one queued at most).
 
 **Theme and language**: the theme button toggles `data-theme` on `<html>` and saves `sharevy-theme`; without a choice, `prefers-color-scheme` decides and labels follow OS changes. The language menu saves `sharevy-lang`, loads the locale and re-renders the current page without reloading; it closes on an outside click or Escape.
 
@@ -722,9 +722,10 @@ Every request sends `Authorization: Bearer <token>` when logged in and `X-Device
 
 | Export | What it does |
 |--------|--------------|
-| `createSseParser(onMessage)` | Incremental parser: joins chunks, skips comments (`: ping`), reads `event`, `data`, `retry` |
+| `createSseParser(onMessage)` | Incremental parser: joins chunks (a CRLF split between two chunks is one line break), skips comments (`: ping`), reads `event`, `data`, `retry` |
 | `backoffDelay(attempt, retryMs)` | Reconnection wait: doubles each attempt, at most 30 s |
-| `followEvents({ url, headers, onChange, onUnauthorized, signal })` | Keeps one stream open until `signal` aborts; calls `onChange` per `change` and once after each reconnection (events may have been missed); a 401 stops it |
+| `followEvents({ url, headers, onChange, onUnauthorized, signal })` | Keeps one stream open until `signal` aborts; calls `onChange` per `change` and once after each reconnection (events may have been missed); a 401 stops it; a stream that ends or fails is reopened after `backoffDelay` |
+| `coalesce(task, delayMs = 200)` | Returns a trigger: `task` runs after `delayMs` without new calls, runs never overlap, and calls during a run queue one more. A burst of answers costs one refresh |
 
 #### `storage.js` — what the browser remembers
 

@@ -7,7 +7,7 @@ import { ERROR_KEYS, errorMessage } from '../public/js/errors.js';
 import { addDays, formatTimestamp, safeNext } from '../public/js/format.js';
 import { SUPPORTED_LANGUAGES, createI18n, pickLanguage } from '../public/js/i18n.js';
 import { NUMBER_TEXT, normalizeNumberText, numberInsert, stepNumber } from '../public/js/number-input.js';
-import { backoffDelay, createSseParser, followEvents } from '../public/js/sse.js';
+import { backoffDelay, coalesce, createSseParser, followEvents } from '../public/js/sse.js';
 import { checkAnswer, checkRespondentName, isValidDate } from '../public/js/validation.js';
 
 const locale = (lang) => JSON.parse(readFileSync(new URL(`../locales/${lang}.json`, import.meta.url), 'utf8'));
@@ -203,6 +203,30 @@ describe('server-sent events', () => {
     assert.equal(calls.length, 4);
     // Connection 1: its event. Connection 3: the catch-up refresh plus its event.
     assert.ok(changes >= 3, `changes: ${changes}`);
+  });
+
+  test('a burst of change events makes one refresh, and refreshes never overlap', async () => {
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    let runs = 0;
+    let active = 0;
+    let overlapped = false;
+    const refresh = coalesce(async () => {
+      runs += 1;
+      active += 1;
+      if (active > 1) overlapped = true;
+      await sleep(60);
+      active -= 1;
+    }, 20);
+    for (let i = 0; i < 10; i++) refresh(); // ten events at once
+    await sleep(120);
+    assert.equal(runs, 1);
+    refresh(); // starts a second run...
+    await sleep(40);
+    refresh(); // ...events while it runs queue exactly one more
+    refresh();
+    await sleep(250);
+    assert.equal(runs, 3);
+    assert.equal(overlapped, false);
   });
 
   test('reconnection waits longer after each failure, up to a ceiling', () => {
