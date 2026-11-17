@@ -94,7 +94,7 @@ Both run hidden in the background and log to `data/*.log`. Overrides: `SHAREVY_D
 
 ## Features
 
-- Question types: short text, long text, number, email, date, dropdown, single choice, yes/no, multiple choice. Each can be required. Yes/no needs no options: respondents see "Yes" and "No" in their language, and results show them in yours.
+- Question types: short text, long text, number, scale (slider), email, date, dropdown, single choice, yes/no, multiple choice. Each can be required. A scale goes from 1 to 10 unless the creator picks another range (for example 1 to 5); respondents move a slider, and an untouched slider counts as no answer. Yes/no needs no options: respondents see "Yes" and "No" in their language, and results show them in yours.
 - Respondents can optionally leave their name; otherwise the response is anonymous.
 - Number questions accept only numbers: letters and symbols cannot be typed or pasted, and a decimal comma becomes a point.
 - Answers are checked in the browser before sending, with the same rules and messages as the API: mistakes show next to each question at once. The API checks everything again.
@@ -104,7 +104,7 @@ Both run hidden in the background and log to `data/*.log`. Overrides: `SHAREVY_D
 - Every survey has a closing date (picked with a calendar; 10 days from creation by default). It accepts answers until the end of that day, server time.
 - Open/close a survey manually at any time.
 - Results update live while you watch: new answers appear without reloading the page.
-- Results page with key figures (responses, named vs anonymous, last response, days left), charts for choice questions (a donut for single choice, bars for multiple choice), the full results table, and deleting individual responses.
+- Results page with key figures (responses, named vs anonymous, last response, days left), charts for choice questions (a donut for single choice, bars for multiple choice) and a histogram with the average and median for scale questions, the full results table, and deleting individual responses.
 - Phone-first layout; on wide screens (1100px and up) pages use two columns: results next to a sticky share panel, questions next to the survey settings.
 - Light and dark theme (follows the device setting until changed with the theme button).
 - Corporate look: IBM Plex Sans, square corners and a muted slate palette, with WCAG AA text contrast in both themes.

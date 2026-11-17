@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createI18n } from '../src/i18n.js';
 import {
-  FIELD_TYPE_IDS, addDays, csvCell, localDateString, parseSurveyInput, summarize, surveyStatus, toCsv, validateAnswers,
+  FIELD_TYPE_IDS, SCALE, addDays, csvCell, localDateString, parseSurveyInput, summarize, surveyStatus, toCsv, validateAnswers,
 } from '../src/surveys.js';
 
 const form = (pairs) => new URLSearchParams(pairs);
@@ -174,4 +174,67 @@ test('yes/no answers are counted as two options and exported in the creator lang
   assert.deepEqual(summary.counts, [{ option: 'yes', label: 'Sí', count: 2 }, { option: 'no', label: 'No', count: 1 }]);
   assert.match(toCsv(yesno, responses), /\r\n1,2026-01-01 00:00:00,,Yes\r\n2,2026-01-02 00:00:00,,No\r\n/);
   assert.match(toCsv(yesno, responses, ',', { t: createI18n('es').t }), /\r\n1,2026-01-01 00:00:00,,Sí\r\n/);
+});
+
+const scaleInput = (fields) => parseSurveyInput({ title: 'x', fieldsJson: JSON.stringify(fields) });
+
+test('scale questions default to 1-10, keep integer limits and other types carry no min/max', () => {
+  assert.ok(FIELD_TYPE_IDS.includes('scale'));
+  assert.deepEqual(SCALE, { defaultMin: 1, defaultMax: 10, lowest: -1000, highest: 1000, maxSteps: 100 });
+  const { value, errors } = scaleInput([
+    { label: 'Default', type: 'scale', options: ['x'] },
+    { label: 'Mood', type: 'scale', min: 1, max: 5 },
+    { label: 'Text limits', type: 'scale', min: '-3', max: ' 3 ' },
+    { label: 'Name', type: 'text', min: 1, max: 5 },
+  ]);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(value.fields.map(({ type, min, max, options }) => ({ type, min, max, options })), [
+    { type: 'scale', min: 1, max: 10, options: [] },
+    { type: 'scale', min: 1, max: 5, options: [] },
+    { type: 'scale', min: -3, max: 3, options: [] },
+    { type: 'text', min: undefined, max: undefined, options: [] },
+  ]);
+  assert.ok(!('min' in value.fields[3]) && !('max' in value.fields[3]));
+});
+
+test('scale limits must be whole numbers in bounds, ordered, and at most 100 steps apart', () => {
+  const codes = (fields) => parseSurveyInput({ title: 'x', fieldsJson: JSON.stringify(fields) }, { t: (key, params) => [key, params] }).errors;
+  assert.deepEqual(codes([{ label: 'A', type: 'scale', min: 1.5, max: 5 }]), [['validation.scaleBoundInvalid', { n: 1, lowest: -1000, highest: 1000 }]]);
+  assert.deepEqual(codes([{ label: 'A', type: 'scale', min: 1, max: 'ten' }]), [['validation.scaleBoundInvalid', { n: 1, lowest: -1000, highest: 1000 }]]);
+  assert.deepEqual(codes([{ label: 'A', type: 'scale', min: -1001, max: 0 }]), [['validation.scaleBoundInvalid', { n: 1, lowest: -1000, highest: 1000 }]]);
+  assert.deepEqual(codes([{ label: 'A', type: 'scale', min: 5, max: 5 }]), [['validation.scaleOrder', { n: 1 }]]);
+  assert.deepEqual(codes([{ label: 'A', type: 'scale', min: 10, max: 1 }]), [['validation.scaleOrder', { n: 1 }]]);
+  assert.deepEqual(codes([{ label: 'A', type: 'scale', min: 0, max: 101 }]), [['validation.scaleTooWide', { n: 1, maxSteps: 100 }]]);
+  assert.deepEqual(codes([{ label: 'A', type: 'scale', min: -50, max: 50 }]), []);
+  assert.deepEqual(parseSurveyInput({ title: 'x', fieldsJson: JSON.stringify([{ label: 'A', type: 'scale', min: 3, max: 2 }]) }).errors,
+    ['Field 1: the scale must start at a lower number than it ends.']);
+});
+
+const scaleFields = [
+  { id: 'scal0001', label: 'Mood', type: 'scale', required: true, options: [], min: 1, max: 5 },
+  { id: 'scal0002', label: 'Score', type: 'scale', required: false, options: [], min: -2, max: 2 },
+];
+
+test('scale answers are whole numbers within the range, stored as text like number answers', () => {
+  assert.deepEqual(validateAnswers(scaleFields, form([['f_scal0001', ' 04 '], ['f_scal0002', '-2']])), { answers: { scal0001: '4', scal0002: '-2' }, errors: {} });
+  assert.deepEqual(validateAnswers(scaleFields, form([['f_scal0001', '5']])), { answers: { scal0001: '5', scal0002: '' }, errors: {} }, 'empty optional');
+  const rangeError = 'Choose a whole number from 1 to 5.';
+  assert.deepEqual(validateAnswers(scaleFields, form([])).errors, { scal0001: 'This field is required.' });
+  assert.deepEqual(validateAnswers(scaleFields, form([['f_scal0001', '6']])).errors, { scal0001: rangeError });
+  assert.deepEqual(validateAnswers(scaleFields, form([['f_scal0001', '0']])).errors, { scal0001: rangeError });
+  assert.deepEqual(validateAnswers(scaleFields, form([['f_scal0001', '2.5']])).errors, { scal0001: rangeError });
+  assert.deepEqual(validateAnswers(scaleFields, form([['f_scal0001', 'abc']])).errors, { scal0001: rangeError });
+  assert.deepEqual(validateAnswers(scaleFields, form([['f_scal0001', '3'], ['f_scal0002', '3']])).errors, { scal0002: 'Choose a whole number from -2 to 2.' });
+});
+
+test('scale summaries count every value of the range and give the average and median', () => {
+  const responses = ['1', '5', '5', '2', '', '9'].map((v, i) => ({ id: i + 1, number: i + 1, submittedAt: '2026-01-01 00:00:00', respondentName: null, answers: { scal0001: v } }));
+  const [summary] = summarize(scaleFields.slice(0, 1), responses);
+  assert.equal(summary.answered, 5);
+  assert.deepEqual(summary.counts.map(({ option, label, count }) => [option, label, count]), [['1', '1', 1], ['2', '2', 1], ['3', '3', 0], ['4', '4', 0], ['5', '5', 2]]);
+  assert.deepEqual(summary.scale, { min: 1, max: 5, average: 4.4, median: 5, outOfRange: 1 });
+  const even = summarize(scaleFields.slice(0, 1), responses.slice(0, 4))[0].scale;
+  assert.deepEqual([even.average, even.median], [3.3, 3.5]);
+  assert.deepEqual(summarize(scaleFields.slice(0, 1), [])[0].scale, { min: 1, max: 5, average: null, median: null, outOfRange: 0 });
+  assert.match(toCsv(scaleFields, responses.slice(0, 1)), /,1,\r\n$/);
 });

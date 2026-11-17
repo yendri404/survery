@@ -5,7 +5,7 @@ import { defaultI18n } from './i18n.js';
 const englishT = defaultI18n.t;
 
 /** Question types, in the order editors offer them. Clients name them in their own language. */
-export const FIELD_TYPE_IDS = ['text', 'textarea', 'number', 'email', 'date', 'select', 'radio', 'yesno', 'checkbox'];
+export const FIELD_TYPE_IDS = ['text', 'textarea', 'number', 'scale', 'email', 'date', 'select', 'radio', 'yesno', 'checkbox'];
 
 /** Types whose options the creator writes. */
 export const CHOICE_TYPES = new Set(['select', 'radio', 'checkbox']);
@@ -36,6 +36,35 @@ export const LIMITS = {
   textarea: 10000,
   respondentName: 100,
 };
+
+/**
+ * Scale (slider) questions: whole numbers from `min` to `max`, in steps of 1. The creator picks the
+ * range; it defaults to 1-10, both ends stay within lowest..highest and at most maxSteps apart.
+ */
+export const SCALE = { defaultMin: 1, defaultMax: 10, lowest: -1000, highest: 1000, maxSteps: 100 };
+
+const WHOLE_NUMBER = /^-?\d+$/;
+
+/** A whole number written as a number or as text ("3", " -2 "); undefined otherwise. */
+function wholeNumber(value) {
+  if (typeof value === 'number') return Number.isSafeInteger(value) ? value : undefined;
+  if (typeof value === 'string' && WHOLE_NUMBER.test(value.trim())) return Number(value.trim());
+  return undefined;
+}
+
+/** The range of a scale question; a missing end (undefined, null or '') takes its default. */
+function parseScaleRange(input, n, t) {
+  const read = (value, fallback) => (value === undefined || value === null || value === '' ? fallback : wholeNumber(value));
+  const min = read(input.min, SCALE.defaultMin);
+  const max = read(input.max, SCALE.defaultMax);
+  const inBounds = (v) => v !== undefined && v >= SCALE.lowest && v <= SCALE.highest;
+  if (!inBounds(min) || !inBounds(max)) {
+    return { error: t('validation.scaleBoundInvalid', { n, lowest: SCALE.lowest, highest: SCALE.highest }) };
+  }
+  if (min >= max) return { error: t('validation.scaleOrder', { n }) };
+  if (max - min > SCALE.maxSteps) return { error: t('validation.scaleTooWide', { n, maxSteps: SCALE.maxSteps }) };
+  return { min, max };
+}
 
 /** Days a survey stays open when the creator does not pick a closing date. */
 export const DEFAULT_OPEN_DAYS = 10;
@@ -162,7 +191,14 @@ export function parseSurveyInput({ title, description, fieldsJson, closesOn }, {
         }
       }
 
-      fields.push({ id, label, type, required: input.required === true, options });
+      const field = { id, label, type, required: input.required === true, options };
+      // Only scale questions carry min/max; other types drop them.
+      if (type === 'scale') {
+        const range = parseScaleRange(input, n, t);
+        if (range.error) errors.push(range.error);
+        else Object.assign(field, { min: range.min, max: range.max });
+      }
+      fields.push(field);
     });
     errors.push(...duplicateQuestionErrors);
   }
@@ -232,6 +268,13 @@ export function validateAnswers(fields, form, { t = englishT } = {}) {
       case 'number':
         if (!Number.isFinite(Number(value))) errors[field.id] = t('validation.number');
         break;
+      case 'scale': {
+        // Stored as text like number answers, written the usual way ("04" -> "4").
+        const n = WHOLE_NUMBER.test(value) ? Number(value) : NaN;
+        if (n >= field.min && n <= field.max) answers[field.id] = String(n);
+        else errors[field.id] = t('validation.scaleRange', { min: field.min, max: field.max });
+        break;
+      }
       case 'email':
         if (!isEmail(value)) errors[field.id] = t('validation.email');
         break;
@@ -257,25 +300,57 @@ function formatAnswer(value) {
 /**
  * Per-option counts for choice fields (yes/no included). Each count carries the stored `option`
  * and the `label` to show, in the translator's language for yes/no.
+ *
+ * Scale questions count every whole number from min to max (zeros included) and add `scale`:
+ * the range, the average (1 decimal) and the median of the answers, or null without answers.
+ * Answers left outside the range by a later range change count in `answered`, the average and the
+ * median, but have no bar: `outOfRange` says how many.
  */
 export function summarize(fields, responses, { t = englishT } = {}) {
   return fields
-    .filter((f) => CHOICE_TYPES.has(f.type) || f.type === 'yesno')
-    .map((field) => {
-      const counts = new Map(fieldOptions(field).map((o) => [o, 0]));
-      let answered = 0;
-      for (const { answers } of responses) {
-        const value = answers[field.id];
-        const values = Array.isArray(value) ? value : value ? [value] : [];
-        if (values.length) answered += 1;
-        for (const v of values) if (counts.has(v)) counts.set(v, counts.get(v) + 1);
-      }
-      return {
-        field,
-        answered,
-        counts: [...counts.entries()].map(([option, count]) => ({ option, label: answerText(field, option, t), count })),
-      };
-    });
+    .filter((f) => CHOICE_TYPES.has(f.type) || f.type === 'yesno' || f.type === 'scale')
+    .map((field) => (field.type === 'scale' ? summarizeScale(field, responses) : summarizeChoices(field, responses, t)));
+}
+
+function summarizeChoices(field, responses, t) {
+  const counts = new Map(fieldOptions(field).map((o) => [o, 0]));
+  let answered = 0;
+  for (const { answers } of responses) {
+    const value = answers[field.id];
+    const values = Array.isArray(value) ? value : value ? [value] : [];
+    if (values.length) answered += 1;
+    for (const v of values) if (counts.has(v)) counts.set(v, counts.get(v) + 1);
+  }
+  return {
+    field,
+    answered,
+    counts: [...counts.entries()].map(([option, count]) => ({ option, label: answerText(field, option, t), count })),
+  };
+}
+
+function summarizeScale(field, responses) {
+  const { min, max } = field;
+  const counts = new Map();
+  for (let v = min; v <= max; v += 1) counts.set(v, 0);
+  const values = [];
+  for (const { answers } of responses) {
+    const text = String(answers[field.id] ?? '').trim();
+    if (!WHOLE_NUMBER.test(text)) continue;
+    const v = Number(text);
+    values.push(v);
+    if (counts.has(v)) counts.set(v, counts.get(v) + 1);
+  }
+  values.sort((a, b) => a - b);
+  const middle = Math.floor(values.length / 2);
+  const median = !values.length ? null : values.length % 2 ? values[middle] : (values[middle - 1] + values[middle]) / 2;
+  const average = values.length ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10 : null;
+  const drawn = [...counts.values()].reduce((a, b) => a + b, 0);
+  return {
+    field,
+    answered: values.length,
+    counts: [...counts.entries()].map(([v, count]) => ({ option: String(v), label: String(v), count })),
+    scale: { min, max, average, median, outOfRange: values.length - drawn },
+  };
 }
 
 /** Escapes a CSV cell and neutralizes spreadsheet formula injection. */

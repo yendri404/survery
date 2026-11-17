@@ -38,6 +38,7 @@ export async function editorPage(app, { params, signal }) {
     fields: survey?.fields ?? [],
     types: meta.fieldTypes.map((type) => [type, t(`fieldType.${type}`)]),
     choiceTypes: meta.choiceTypes,
+    scale: meta.scale,
     limits,
     t,
     basics: [

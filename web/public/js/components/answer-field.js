@@ -54,6 +54,51 @@ function numberOnly(input) {
   return input;
 }
 
+// Keys that move a slider; pressing one at an end changes nothing but still counts as an answer.
+const SLIDER_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown']);
+
+/**
+ * Scale questions: a native slider from min to max (step 1) that starts unanswered. A range input
+ * always holds a value, so it has no name and is never sent: the hidden input `name` gets its value
+ * only once the person moves it (pointer, touch or keyboard). Until then the answer is empty and
+ * screen readers hear "Move the slider to choose" as the value.
+ */
+function scaleControl(field, id, name, t) {
+  const { min, max } = field;
+  const answer = h('input', { type: 'hidden', name, value: '' });
+  const current = h('span', { class: 'scale-value', 'aria-hidden': 'true' }, '–');
+  const status = h('p', { class: 'hint scale-status', 'aria-hidden': 'true' }, t('respond.scaleUnanswered'));
+  const range = h('input', {
+    id, type: 'range', class: 'scale-range', min, max, step: 1, value: Math.round((min + max) / 2),
+    'aria-valuetext': t('respond.scaleUnanswered'),
+  });
+  const box = h('div', { class: 'scale-control is-unset' },
+    h('span', { class: 'scale-end', 'aria-hidden': 'true' }, String(min)),
+    range,
+    h('span', { class: 'scale-end', 'aria-hidden': 'true' }, String(max)),
+    current);
+
+  const commit = () => {
+    const first = !answer.value;
+    answer.value = range.value;
+    current.textContent = range.value;
+    range.setAttribute('aria-valuetext', range.value);
+    if (!first) return;
+    box.classList.remove('is-unset');
+    status.hidden = true;
+    // A press or click that did not move the thumb fires no input event: report the new answer.
+    range.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  range.addEventListener('input', commit);
+  range.addEventListener('change', commit);
+  range.addEventListener('pointerup', commit);
+  range.addEventListener('keyup', (event) => { if (SLIDER_KEYS.has(event.key)) commit(); });
+  return [box, status, answer];
+}
+
+/** The answer of a scale question: '' until the slider was moved. */
+export const scaleAnswer = (wrap) => wrap.querySelector('input[type="hidden"]')?.value ?? '';
+
 /** The control(s) of question `field` (number `index` + 1). */
 export function answerField(field, index, { t }, limits) {
   const name = `f_${field.id}`;
@@ -86,6 +131,8 @@ export function answerField(field, index, { t }, limits) {
       return wrap(
         h('label', { for: id }, number, field.label, mark),
         h('textarea', { id, name, rows: 4, maxlength: limits.textarea, required: field.required }));
+    case 'scale':
+      return wrap(h('label', { for: id }, number, field.label, mark), scaleControl(field, id, name, t));
     case 'number':
       return wrap(
         h('label', { for: id }, number, field.label, mark),

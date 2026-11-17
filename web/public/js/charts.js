@@ -1,6 +1,7 @@
 /*
  * Chart math for the survey summary (the API counts; the client only draws): a donut for
- * single-choice questions with up to MAX_DONUT_SLICES options, horizontal bars otherwise. Colors come from CSS classes (.slice-1 to .slice-6), never inline styles.
+ * single-choice questions with up to MAX_DONUT_SLICES options, horizontal bars otherwise, a histogram for
+ * scale questions. Colors come from CSS classes (.slice-1 to .slice-6), never inline styles.
  */
 export const MAX_DONUT_SLICES = 6; // categorical colors are never cycled; more options use bars
 const DONUT_GAP = 0.6; // surface gap between slices, in percent of the circle
@@ -31,3 +32,6 @@ export function donutSlices(counts, answered) {
 
 /** Width of a bar, in percent of the track. */
 export const barWidth = (count, answered) => fixed(answered ? (count / answered) * 100 : 0);
+
+/** Height of a histogram column (scale questions), in percent of the tallest one (`peak`). */
+export const columnHeight = (count, peak) => fixed(peak ? (count / peak) * 100 : 0);

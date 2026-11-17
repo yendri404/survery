@@ -145,7 +145,7 @@ export function registerSurveyRoutes({ route, repo, config, today, live }) {
         // Whole days until the closing date while open (0 = last day); null when closed or expired.
         daysLeft: status === 'open' ? daysBetween(today(), survey.closesOn) : null,
       },
-      questions: summarize(survey.fields, responses).map(({ field, answered, counts }) => ({
+      questions: summarize(survey.fields, responses).map(({ field, answered, counts, scale }) => ({
         fieldId: field.id,
         label: field.label,
         type: field.type,
@@ -153,6 +153,8 @@ export function registerSurveyRoutes({ route, repo, config, today, live }) {
         multiple: field.type === 'checkbox',
         answered,
         counts: counts.map(({ option, count }) => ({ option, count, percent: percent(count, answered) })),
+        // Scale questions: { min, max, average, median, outOfRange }.
+        ...(scale ? { scale } : {}),
       })),
     });
   });

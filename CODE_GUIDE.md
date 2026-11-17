@@ -78,7 +78,7 @@ web/                         Browser client (port 3000), no dependencies, no bui
 │   │   ├── i18n.js          Language choice, t/tn, dates
 │   │   ├── validation.js    Respondent answer checks (mirror of the API rules)
 │   │   ├── number-input.js  Number question typing filter
-│   │   ├── charts.js        Donut and bar math
+│   │   ├── charts.js        Donut, bar and histogram math
 │   │   ├── format.js        Timestamps, addDays, safeNext
 │   │   ├── pages/           Containers: home, auth, surveys, editor, detail, respond
 │   │   └── components/      Presentational: layout, icons, builder, answer-field, results, survey-cards, survey-detail
@@ -408,7 +408,7 @@ Every route file exports `register*Routes(deps)` and only registers handlers. No
 | Method | Path | Result |
 |--------|------|--------|
 | GET | `/health` | `{ status: 'ok' }` |
-| GET | `/meta` | Field types, choice types, yes/no values, `LIMITS`, `defaultOpenDays`, the server's `today`, CSV options, `allowRegistration`, `deviceIdPattern` |
+| GET | `/meta` | Field types, choice types, yes/no values, `LIMITS`, `SCALE`, `defaultOpenDays`, the server's `today`, CSV options, `allowRegistration`, `deviceIdPattern` |
 
 `/meta` exists so clients **never hard-code** rules: the editor and the respondent form read their limits and types from it. `today` is the server's date because closing dates are compared with it, not with the client's clock.
 
@@ -496,16 +496,18 @@ The heart of the API. It has no database, no HTTP and no JSON output, which is w
 
 | Export | Content |
 |--------|---------|
-| `FIELD_TYPE_IDS` | `text`, `textarea`, `number`, `email`, `date`, `select`, `radio`, `yesno`, `checkbox`, in menu order. Clients name them (`fieldType.<id>` in `web/locales`) |
+| `FIELD_TYPE_IDS` | `text`, `textarea`, `number`, `scale`, `email`, `date`, `select`, `radio`, `yesno`, `checkbox`, in menu order. Clients name them (`fieldType.<id>` in `web/locales`) |
 | `CHOICE_TYPES` | `select`, `radio`, `checkbox` (the types whose options the creator writes) |
 | `YES_NO` | `['yes', 'no']`: the fixed, language-independent values stored for a `yesno` question |
 | `LIMITS` | title 200, description 2 000, label 300, fields 100, options 100, option 200, text 1 000, textarea 10 000, respondentName 100 |
 | `DEFAULT_OPEN_DAYS` | 10 |
+| `SCALE` | `{ defaultMin: 1, defaultMax: 10, lowest: -1000, highest: 1000, maxSteps: 100 }`: the range a `scale` question gets when `min` / `max` are missing, the bounds of both ends and the most steps between them (step is always 1). Served as `/meta`'s `scale` |
 
 **Field definition** (one item of `fields_json`):
 
 ```js
 { id: 'a1b2c3d4e5f6', label: 'Department', type: 'select', required: true, options: ['IT', 'HR'] }
+{ id: 'f6e5d4c3b2a1', label: 'Mood', type: 'scale', required: false, options: [], min: 1, max: 5 } // only scale has min/max
 ```
 
 **Messages:** functions take a translator `t` in their options. The routes pass `coded` (from `errors.js`), so each problem becomes `{ code, params, message }`; CSV uses the real translator of the requested language; unit tests can omit it (English).
@@ -514,14 +516,14 @@ The heart of the API. It has no database, no HTTP and no JSON output, which is w
 
 | Function | Input → Output | Notes |
 |----------|----------------|-------|
-| `parseSurveyInput({ title, description, fieldsJson, closesOn }, { today, currentClosesOn, t })` | → `{ value, errors[] }` | Empty `closesOn` defaults to `today` + `DEFAULT_OPEN_DAYS`. A past date is rejected unless it is the survey's current date (editing an expired survey). Trims, enforces limits, ignores blank options. **Rejects repeated options in one question and two questions with the same text** (equal after trimming, ignoring case): multiple-choice answers are stored by option text, so repeats could not be told apart. **Keeps a valid existing `id`** so edits do not orphan answers; generates a new one when it is missing, invalid or duplicated |
+| `parseSurveyInput({ title, description, fieldsJson, closesOn }, { today, currentClosesOn, t })` | → `{ value, errors[] }` | Empty `closesOn` defaults to `today` + `DEFAULT_OPEN_DAYS`. A past date is rejected unless it is the survey's current date (editing an expired survey). Trims, enforces limits, ignores blank options. **Rejects repeated options in one question and two questions with the same text** (equal after trimming, ignoring case): multiple-choice answers are stored by option text, so repeats could not be told apart. **Scale questions** get `min` / `max` (whole numbers, defaults from `SCALE`; errors `scale_bound_invalid`, `scale_order`, `scale_too_wide`); other types drop them. **Keeps a valid existing `id`** so edits do not orphan answers; generates a new one when it is missing, invalid or duplicated |
 | `validateAnswers(fields, form, { t })` | → `{ answers, errors{fieldId: problem} }` | Reads only defined fields (`f_<id>`), so extra keys are ignored. Checks type, required, and that choices are among the options. Checkbox values are returned in option order |
 | `surveyStatus(survey, today)` | → `'open' \| 'closed' \| 'expired'` | `closed` = switched off by the creator; `expired` = `today` is after `closesOn`. Only `open` accepts answers |
 | `localDateString(date)`, `addDays(date, n)`, `daysBetween(from, to)` | → `YYYY-MM-DD` / whole days | Server-local calendar date; calendar math without time zones; "days left" |
 | `parseRespondentName(value, { t })` | → `{ name, error }` | Optional, trimmed, max 100 characters, empty means anonymous |
 | `answerText(field, value, t)` | → `string` | Arrays become `"a, b"`; `yes`/`no` translated (CSV) |
 | `isEmail(value)` | → `boolean` | The one email rule (at most 254 characters), for email questions and creator registration |
-| `summarize(fields, responses, { t })` | → per choice field (yes/no included): `answered`, counts per option | Feeds `/summary`, which adds percentages |
+| `summarize(fields, responses, { t })` | → per choice field (yes/no included): `answered`, counts per option; per scale field: a count for every value from `min` to `max` plus `scale: { min, max, average, median, outOfRange }` | Feeds `/summary`, which adds percentages. Scale answers outside the current range (after a range change) count in `answered`/average/median, not in a bar |
 | `csvCell(value, delimiter)` | → escaped cell | Quotes when needed. Prefixes `'` to values starting with `= + - @` (formula injection), except plain numbers like `-5` |
 | `toCsv(fields, responses, delimiter, { t })` | → full CSV text | Header (fixed columns in the requested language) + rows in submission order, first column = per-survey `number`, `\r\n` line endings |
 
@@ -532,6 +534,7 @@ The heart of the API. It has no database, no HTTP and no JSON output, which is w
 | `text` | Up to 1 000 characters | `too_long` |
 | `textarea` | Up to 10 000 characters | `too_long` |
 | `number` | Anything `Number()` parses as finite | `invalid_number` |
+| `scale` | A whole number from the question's `min` to `max`; stored as text like `number` (`"04"` → `"4"`), `""` when unanswered | `invalid_scale_value` (`min`, `max`) |
 | `email` | `x@y.z` shape, up to 254 characters | `invalid_email` |
 | `date` | `YYYY-MM-DD` that is a real calendar date (`2026-02-30` is rejected) | `invalid_date` |
 | `select`, `radio` | Exactly one of the options | `invalid_option` |
@@ -752,6 +755,7 @@ A page is `async (app, { params, query, signal }) → { title, body, respondent?
 |----------|--------|
 | Checks before sending | On submit, every answer is checked with `checkAnswer` / `checkRespondentName` (`validation.js`). Invalid → nothing is sent; errors appear under each question (`.has-error`, `.field-error`, `aria-invalid` / `aria-describedby`), plus the `.errors` summary with a link to each, and the first invalid question gets the focus. A question's error clears as soon as its answer is valid. The form sets `noValidate` so browser bubbles do not compete |
 | Server errors | A 422 `fields` map is translated with `errors.js` and shown with the same markup; `already_answered`, `survey_closed`, `survey_expired` switch to their panels. Any other failure (network down, `api_unavailable`, `too_many_responses`...) shows its translated message in the `.errors` box above the form; the form and its answers stay, so the respondent can send again |
+| Scale questions | A native `<input type="range">` (min, max, step 1) with both ends labelled and the value shown big. It starts **unanswered**: the range has no `name` and is never sent; a hidden input `f_<id>` gets the value only after the person moves it (pointer, touch, or arrows/Home/End/PageUp/PageDown, also when a press does not change the value). Until then the thumb is faded, the value shows "–" and `aria-valuetext` says "Move the slider to choose" |
 | Number questions | A text input with `inputmode="decimal"` (a number input hides the typed text and cursor from scripts). Only digits, one point and a leading `-` can be typed, pasted or dropped (`beforeinput`, with an `input` safety net); a comma becomes a point; Up/Down add or subtract 1 (`number-input.js`) |
 
 ---
@@ -764,7 +768,7 @@ Pure functions from data (and callbacks) to DOM. They never fetch or navigate on
 |------|---------|-------|
 | `layout.js` | `APP_NAME`, `topbar`, `themeToggle`, `languageMenu`, `flash`, `errorList`, `notice`, `backLink`, `emptyState`, `statusBadge`, `statusKey`, `closingText`, `resultPanel`, `errorPanel` | The language menu is a native `<details class="lang-menu">`: a globe and the current code, one link per language named in its own language, `aria-current` on the current one; on phones it opens under the whole top bar |
 | `icons.js` | `icon(name, extraClass)` | Stroke icons on a 24×24 grid, built with `s()`. Icon-only buttons always carry an `aria-label` and a `title` |
-| `builder.js` | `createBuilder({ fields, types, choiceTypes, limits, t, basics })` → `{ element, validate(), value() }` | Question editor: add, move, duplicate, delete. Warns about repeated questions and options **while typing**; empty question text, missing options, title and closing date (`basics`) **after a submit attempt**. Same rule as the API: equal after trimming, ignoring case. Keeps field ids so edits do not orphan answers |
+| `builder.js` | `createBuilder({ fields, types, choiceTypes, scale, limits, t, basics })` → `{ element, validate(), value() }` | Question editor: add, move, duplicate, delete. Warns about repeated questions and options **while typing**; empty question text, missing options, title and closing date (`basics`) **after a submit attempt**. Same rule as the API: equal after trimming, ignoring case. Scale questions show "From" / "To" (prefilled from `/meta` `scale`), a live warning for a wrong range (`checkScaleRange`) and a slider preview. Keeps field ids so edits do not orphan answers |
 | `answer-field.js` | `answerField(field, index, i18n, limits)`, `respondentNameField`, `fieldError` | One control per type (`yesno`: two large side-by-side radios, `.choices.yesno`; choices in a `fieldset` + `legend`); control id `fld_<question id>` |
 | `results.js` | `kpiTiles`, `summaryCharts`, `responsesTable` | Key figures (`<dl class="kpis">`), charts, and the table (one card per response on phones, via each cell's `data-label`). Yes/no shown translated |
 | `survey-detail.js` | `surveyHeading`, `closingLine`, `surveyDescription`, `statusNotice`, `openCloseButton`, `sharePanel`, `managePanel`, `resultsContent` | The parts of one survey's page. The state parts are rebuilt by `pages/detail.js` on each live update (through `slot`); the panels take their actions as callbacks |
@@ -777,6 +781,7 @@ Pure functions from data (and callbacks) to DOM. They never fetch or navigate on
 | `radio`, `select` (up to 6 options), `yesno` | Donut + legend with count and % | One answer per person: the shares add up to 100% |
 | `checkbox` | Horizontal bars + a note | Several answers per person: the % add up to more than 100%, so a pie would mislead |
 | `radio`, `select` with more than 6 options | Bars | Categorical colors are never repeated |
+| `scale` | Histogram (one column per value from min to max, count above, value below, scaled to the tallest) + average and median | An ordered numeric scale: the shape of the distribution matters, and zeros stay visible |
 
 The SVG is `aria-hidden`; the legend and bar labels carry every number as text. Colors come from classes (`.slice-1`…`.slice-6` → `--cat-1`…`--cat-6`, `--bar-fill`), defined for light and dark in `style.css` from a muted palette checked with a colorblind validator (lightness band, chroma floor, CVD separation, >= 3:1 against the panel), so no inline `style` is needed.
 
@@ -801,9 +806,9 @@ All tested in `web/test/modules.test.js` with `node --test`, no browser.
 | File | Exports | Notes |
 |------|---------|-------|
 | `i18n.js` | `SUPPORTED_LANGUAGES`, `DEFAULT_LANGUAGE`, `pickLanguage(saved, preferred)`, `createI18n(lang, messages, fallback)` → `{ lang, t, tn, formatDate }`, `interpolate` | Saved choice, then `navigator.languages` (region ignored), then English. `tn` picks `<key>.one` / `<key>.other` with `Intl.PluralRules`. Missing keys fall back to English, then the key. `formatDate` (UTC): `Nov 26, 2026` / `26 nov 2026` (`DATE_LOCALES`) |
-| `validation.js` | `checkAnswer`, `checkRespondentName`, `isValidDate` | Mirror of `validateAnswers` / `parseRespondentName`; returns `{ key, params }` or `undefined` |
+| `validation.js` | `checkAnswer`, `checkRespondentName`, `checkScaleRange`, `isValidDate` | Mirror of `validateAnswers` / `parseRespondentName` and of the scale range rules of `parseSurveyInput`; returns `{ key, params }` or `undefined` |
 | `number-input.js` | `NUMBER_TEXT`, `normalizeNumberText`, `numberInsert`, `stepNumber` | Rules of the number filter |
-| `charts.js` | `MAX_DONUT_SLICES`, `percent`, `donutSlices`, `barWidth` | Donut dash arrays (circumference 100, small gap between slices, starts at 12 o'clock) and bar widths |
+| `charts.js` | `MAX_DONUT_SLICES`, `percent`, `donutSlices`, `barWidth`, `columnHeight` | Donut dash arrays (circumference 100, small gap between slices, starts at 12 o'clock), bar widths and histogram column heights |
 | `format.js` | `formatTimestamp`, `addDays`, `safeNext` | ISO → `YYYY-MM-DD HH:MM:SS` (UTC); calendar math; `safeNext` keeps only same-site paths (no `//x`, no `/\x`), preventing open redirects after login |
 
 **Locale file format** (`web/locales/<code>.json`, flat keys)

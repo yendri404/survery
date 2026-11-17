@@ -2,13 +2,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 import { ERROR_CODES } from '../../api/src/errors.js';
-import { barWidth, donutSlices, percent } from '../public/js/charts.js';
+import { barWidth, columnHeight, donutSlices, percent } from '../public/js/charts.js';
 import { ERROR_KEYS, errorMessage } from '../public/js/errors.js';
 import { addDays, formatTimestamp, safeNext } from '../public/js/format.js';
 import { SUPPORTED_LANGUAGES, createI18n, pickLanguage } from '../public/js/i18n.js';
 import { NUMBER_TEXT, normalizeNumberText, numberInsert, stepNumber } from '../public/js/number-input.js';
 import { backoffDelay, coalesce, createSseParser, followEvents } from '../public/js/sse.js';
-import { checkAnswer, checkRespondentName, isValidDate } from '../public/js/validation.js';
+import { checkAnswer, checkRespondentName, checkScaleRange, isValidDate } from '../public/js/validation.js';
 
 const locale = (lang) => JSON.parse(readFileSync(new URL(`../locales/${lang}.json`, import.meta.url), 'utf8'));
 const en = locale('en');
@@ -110,6 +110,16 @@ describe('respondent validation (same rules as the API)', () => {
     assert.equal(check({ type: 'radio', options: ['IT'] }, 'IT'), undefined);
     assert.equal(check({ type: 'yesno' }, 'yes'), undefined);
     assert.deepEqual(check({ type: 'yesno' }, 'maybe'), { key: 'validation.invalidOption', params: {} });
+  });
+
+  test('scale answers are whole numbers within the range; untouched optional ones pass', () => {
+    const scale = { type: 'scale', min: 1, max: 5 };
+    assert.equal(check(scale, ''), undefined);
+    assert.deepEqual(check({ ...scale, required: true }, ''), { key: 'validation.required', params: {} });
+    assert.equal(check(scale, '1'), undefined);
+    assert.equal(check(scale, '5'), undefined);
+    for (const bad of ['0', '6', '2.5', 'x']) assert.deepEqual(check(scale, bad), { key: 'validation.scaleRange', params: { min: 1, max: 5 } }, bad);
+    assert.equal(check({ type: 'scale', min: -2, max: 2 }, '-2'), undefined);
   });
 
   test('the optional name has a maximum length', () => {
@@ -236,7 +246,28 @@ describe('server-sent events', () => {
   });
 });
 
+describe('scale range in the builder (same rules as the API)', () => {
+  const RULES = { defaultMin: 1, defaultMax: 10, lowest: -1000, highest: 1000, maxSteps: 100 };
+  test('whole numbers within the bounds, "from" below "to", at most maxSteps apart', () => {
+    assert.equal(checkScaleRange('1', '10', RULES), undefined);
+    assert.equal(checkScaleRange(-50, 50, RULES), undefined);
+    for (const [min, max] of [['', '5'], ['1.5', '5'], ['1', 'x'], ['-1001', '0'], ['0', '1001']]) {
+      assert.deepEqual(checkScaleRange(min, max, RULES), { key: 'client.builder.scaleBoundInvalid', params: { lowest: -1000, highest: 1000 } }, `${min}..${max}`);
+    }
+    assert.deepEqual(checkScaleRange('5', '5', RULES), { key: 'client.builder.scaleOrder', params: {} });
+    assert.deepEqual(checkScaleRange('10', '1', RULES), { key: 'client.builder.scaleOrder', params: {} });
+    assert.deepEqual(checkScaleRange('0', '101', RULES), { key: 'client.builder.scaleTooWide', params: { maxSteps: 100 } });
+  });
+});
+
 describe('charts', () => {
+  test('histogram columns are scaled to the tallest count', () => {
+    assert.equal(columnHeight(4, 4), 100);
+    assert.equal(columnHeight(1, 3), 33.33);
+    assert.equal(columnHeight(0, 3), 0);
+    assert.equal(columnHeight(0, 0), 0);
+  });
+
   test('percent is rounded and 0 without answers', () => {
     assert.equal(percent(2, 3), 67);
     assert.equal(percent(0, 0), 0);

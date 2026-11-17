@@ -87,11 +87,12 @@ Rules clients must not hard-code. No auth.
 ```json
 200
 {
-  "fieldTypes": ["text", "textarea", "number", "email", "date", "select", "radio", "yesno", "checkbox"],
+  "fieldTypes": ["text", "textarea", "number", "scale", "email", "date", "select", "radio", "yesno", "checkbox"],
   "choiceTypes": ["select", "radio", "checkbox"],
   "yesNoValues": ["yes", "no"],
   "limits": { "title": 200, "description": 2000, "label": 300, "fields": 100, "options": 100, "option": 200,
               "text": 1000, "textarea": 10000, "respondentName": 100 },
+  "scale": { "defaultMin": 1, "defaultMax": 10, "lowest": -1000, "highest": 1000, "maxSteps": 100 },
   "defaultOpenDays": 10,
   "today": "2026-11-17",
   "csv": { "delimiters": ["comma", "semicolon"], "languages": ["en", "es"] },
@@ -101,6 +102,8 @@ Rules clients must not hard-code. No auth.
 ```
 
 - `choiceTypes`: the types whose options the creator writes. `yesno` has the fixed values `yesNoValues`.
+- `scale`: rules of `scale` (slider) questions: the range a new one gets (`defaultMin`..`defaultMax`), the bounds
+  both ends must stay within (`lowest`..`highest`) and the most steps between them (`maxSteps`). Steps are always 1.
 - `today`: the server's date. Closing dates are compared with it, so use it for "default closing date" (`today + defaultOpenDays`) and "not in the past" checks.
 
 ---
@@ -179,7 +182,8 @@ A creator only sees their own surveys: another creator's survey answers `404 not
   "description": "Internal",
   "fields": [
     { "id": "3f9a0c1b2d4e", "label": "Department", "type": "radio", "required": true, "options": ["IT", "HR"] },
-    { "id": "8b1c2d3e4f50", "label": "Work remotely?", "type": "yesno", "required": false, "options": [] }
+    { "id": "8b1c2d3e4f50", "label": "Work remotely?", "type": "yesno", "required": false, "options": [] },
+    { "id": "c0ffee123456", "label": "How satisfied are you?", "type": "scale", "required": true, "options": [], "min": 1, "max": 5 }
   ],
   "isOpen": true,
   "status": "open",
@@ -197,6 +201,7 @@ A creator only sees their own surveys: another creator's survey answers `404 not
 | `status` | `open` accepts answers; `closed` was closed by the creator; `expired` passed `closesOn`. A survey accepts answers during its whole closing day (server time). |
 | `shareUrl` | Link for respondents, in the **web client**: `${WEB_BASE_URL}/s/<publicToken>`. Without `WEB_BASE_URL`, the base is the address the client used, from `X-Forwarded-Proto` + `X-Forwarded-Host` (only with `TRUST_PROXY`; the host must be `hostname[:port]`), else `http://localhost:3000`. |
 | `options` | Written by the creator for `select`, `radio`, `checkbox`; always `[]` for the others (`yesno` uses `yes` / `no`). |
+| `min`, `max` | Only on `scale` questions: the whole numbers at both ends of the slider (step 1). Other types never carry them. |
 
 ### `GET /surveys`
 
@@ -215,7 +220,8 @@ Newest first. Items are survey objects **without** `fields`.
   "closesOn": "2026-11-27",
   "fields": [
     { "label": "Department", "type": "radio", "required": true, "options": ["IT", "HR"] },
-    { "label": "Work remotely?", "type": "yesno" }
+    { "label": "Work remotely?", "type": "yesno" },
+    { "label": "How satisfied are you?", "type": "scale", "min": 1, "max": 5 }
   ]
 }
 ```
@@ -239,10 +245,16 @@ Rules (`422 validation_failed` with `errors`, in this order):
 | `type_unknown` | `n` | `type` not in `fieldTypes` |
 | `option_duplicate` | `n`, `option` | The same option twice in question `n` (trimmed, ignoring case) |
 | `options_empty` / `options_too_many` / `option_too_long` | `n`, `max` | Choice question without options / too many / one too long |
+| `scale_bound_invalid` | `n`, `lowest`, `highest` | Scale question `n`: `min` or `max` is not a whole number within `scale.lowest`..`scale.highest` |
+| `scale_order` | `n` | Scale question `n`: `min` is not lower than `max` |
+| `scale_too_wide` | `n`, `maxSteps` | Scale question `n`: `max - min` is over `scale.maxSteps` |
 | `label_duplicate` | `first`, `second` | Two questions with the same text (trimmed, ignoring case); listed after the other problems |
 
 `options` may be an array or one string with one option per line; blank options are dropped.
 `required` is true only when it is exactly `true`.
+For `scale`, `min` and `max` may be numbers or whole-number strings (`"3"`); a missing (or `null` / `""`) end takes
+`scale.defaultMin` / `scale.defaultMax`, so a scale is 1 to 10 by default. Other types drop `min` / `max`.
+Changing a scale's range later does not rewrite existing answers: they are shown and exported as stored.
 
 ```json
 422
@@ -299,6 +311,8 @@ Newest first. `id` identifies the response across the whole API (use it to delet
 survey: 1, 2, 3... in arrival order, never reused after a deletion (the next response gets the next number), so a number
 always names the same response, also in CSVs already exported. Show `number` to people.
 `answers` maps question id to text, or to a list of options for `checkbox` (in the survey's option order).
+Like `number` answers, `scale` answers are stored as text: the chosen whole number written plainly (`"4"`, `"-2"`;
+`"04"` is stored as `"4"`), or `""` when unanswered.
 Unanswered questions are `""` (or `[]`). `respondentName` is `null` for anonymous answers. Yes/no answers are `"yes"` / `"no"`.
 
 ```json
@@ -335,7 +349,12 @@ Key figures and chart data. The server counts; clients only draw.
     { "fieldId": "3f9a0c1b2d4e", "label": "Department", "type": "radio", "multiple": false, "answered": 3,
       "counts": [ { "option": "IT", "count": 2, "percent": 67 }, { "option": "HR", "count": 1, "percent": 33 } ] },
     { "fieldId": "8b1c2d3e4f50", "label": "Work remotely?", "type": "yesno", "multiple": false, "answered": 1,
-      "counts": [ { "option": "yes", "count": 1, "percent": 100 }, { "option": "no", "count": 0, "percent": 0 } ] }
+      "counts": [ { "option": "yes", "count": 1, "percent": 100 }, { "option": "no", "count": 0, "percent": 0 } ] },
+    { "fieldId": "c0ffee123456", "label": "How satisfied are you?", "type": "scale", "multiple": false, "answered": 3,
+      "counts": [ { "option": "1", "count": 0, "percent": 0 }, { "option": "2", "count": 1, "percent": 33 },
+                  { "option": "3", "count": 0, "percent": 0 }, { "option": "4", "count": 0, "percent": 0 },
+                  { "option": "5", "count": 2, "percent": 67 } ],
+      "scale": { "min": 1, "max": 5, "average": 4, "median": 5, "outOfRange": 0 } }
   ]
 }
 ```
@@ -344,12 +363,17 @@ Key figures and chart data. The server counts; clients only draw.
 |-------|---------|
 | `lastResponseAt` | Newest response, or `null` |
 | `daysLeft` | While `open`: whole days until `closesOn` (`0` = last day). `null` when closed or expired. |
-| `questions` | Only choice questions (`select`, `radio`, `checkbox`, `yesno`), in survey order |
+| `questions` | Only choice and scale questions (`select`, `radio`, `checkbox`, `yesno`, `scale`), in survey order |
 | `answered` | Responses that answered this question |
 | `percent` | `round(count / answered * 100)`; `0` when nobody answered |
 | `multiple` | `true` for `checkbox`: one person can pick several options, so percentages can add up to more than 100 |
 
 For `yesno`, `option` is `yes` / `no`: translate it in the client.
+
+For `scale`, `counts` has one entry per whole number from `min` to `max` (as text, zeros included), and `scale` adds
+`average` (rounded to 1 decimal) and `median` (the mean of the two middle answers when their number is even), both
+`null` without answers. An answer left outside the range by a later range change counts in `answered`, `average` and
+`median` but in no `counts` entry; `outOfRange` says how many there are.
 
 ### `GET /surveys/:id/export.csv`
 
@@ -434,6 +458,8 @@ A malformed value answers `400 invalid_device_id`. A new id counts as a new devi
 
 `respondentName` is optional (trimmed; empty means anonymous). Each answer is a string, or a list of strings for
 `checkbox`. Unknown question ids are ignored. Yes/no answers must be exactly `yes` or `no`.
+A `scale` answer is a whole number from the question's `min` to `max`, sent as a number (`4`) or a string (`"4"`);
+leave it out or send `""` when the person did not move the slider (allowed only when the question is not required).
 
 ```json
 201 { "id": 12, "number": 3 }
@@ -466,6 +492,7 @@ Checks, in this order:
 | `invalid_number` | | `number` is not a finite number |
 | `invalid_email` | | `email` is not an address (max 254) |
 | `invalid_date` | | `date` is not a real `YYYY-MM-DD` date |
+| `invalid_scale_value` | `min`, `max` | `scale` is not a whole number from `min` to `max` |
 | `respondent_name_too_long` (key `respondentName`) | `max` | Name over `limits.respondentName` |
 
 `answers` that is not an object answers `422` with `errors: [{ "code": "answers_invalid" }]`.
@@ -530,6 +557,6 @@ Validation codes (inside `fields` / `errors`): `name_invalid`, `email_invalid`, 
 `password_mismatch`, `email_taken`, `title_required`, `title_too_long`, `description_too_long`,
 `closing_date_invalid`, `closing_date_past`, `fields_invalid`, `fields_empty`, `fields_too_many`,
 `field_invalid`, `label_required`, `label_too_long`, `type_unknown`, `options_empty`, `options_too_many`,
-`option_too_long`, `option_duplicate`, `label_duplicate`, `is_open_invalid`, `answers_invalid`,
-`respondent_name_too_long`, `required`, `invalid_option`, `too_long`, `invalid_number`, `invalid_email`,
-`invalid_date`. Their English texts live in `api/locales/en.json`; the key-to-code table is `api/src/errors.js`.
+`option_too_long`, `option_duplicate`, `scale_bound_invalid`, `scale_order`, `scale_too_wide`,
+`label_duplicate`, `is_open_invalid`, `answers_invalid`, `respondent_name_too_long`, `required`, `invalid_option`,
+`too_long`, `invalid_number`, `invalid_email`, `invalid_date`, `invalid_scale_value`. Their English texts live in `api/locales/en.json`; the key-to-code table is `api/src/errors.js`.

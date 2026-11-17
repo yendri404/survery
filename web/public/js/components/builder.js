@@ -1,26 +1,35 @@
 import { h } from '../dom.js';
+import { checkScaleRange } from '../validation.js';
 import { icon } from './icons.js';
 
 /*
  * Question builder for the survey editor: add, move, duplicate and delete questions, with the
- * same live warnings as the API's rules (repeated questions and options while typing; empty
- * question text and missing options after a submit attempt). The API checks everything again.
+ * same live warnings as the API's rules (repeated questions and options, and scale ranges, while
+ * typing; empty question text and missing options after a submit attempt). The API checks again.
  */
 
 // Same rule as the API (api/src/surveys.js): equal after trimming, ignoring case.
 const sameTextKey = (text) => text.trim().toLocaleLowerCase();
 const optionLines = (text) => text.split('\n').map((o) => o.trim()).filter(Boolean);
-const blank = () => ({ id: '', label: '', type: 'text', required: false, options: '' });
+/** Scale rules when /meta gives none (an older API): the API's defaults. */
+const SCALE_RULES = { defaultMin: 1, defaultMax: 10, lowest: -1000, highest: 1000, maxSteps: 100 };
 
 /**
  * `fields`: the survey's questions (API shape). `types`: [[type, label], ...] in menu order.
  * `basics`: [{ control, check() -> message | undefined }] for the title and closing date, checked
- * together with the questions. Returns the element and `validate()` / `value()` for the form.
+ * together with the questions. `scale`: /meta's scale rules (default range and bounds).
+ * Returns the element and `validate()` / `value()` for the form.
  */
-export function createBuilder({ fields: initial = [], types, choiceTypes, limits = {}, t, basics = [] }) {
+export function createBuilder({ fields: initial = [], types, choiceTypes, scale = SCALE_RULES, limits = {}, t, basics = [] }) {
   const CHOICE_TYPES = new Set(choiceTypes);
   const typeIds = new Set(types.map(([type]) => type));
   const tb = (key, params) => t(`client.builder.${key}`, params);
+  // Scale ends are kept as typed (text) and only sent as numbers.
+  const blank = () => ({ id: '', label: '', type: 'text', required: false, options: '', min: String(scale.defaultMin), max: String(scale.defaultMax) });
+  const scaleProblem = (field) => {
+    const problem = field.type === 'scale' ? checkScaleRange(field.min, field.max, scale) : undefined;
+    return problem ? t(problem.key, problem.params) : undefined;
+  };
 
   let fields = initial.map((f) => ({
     id: typeof f.id === 'string' ? f.id : '',
@@ -28,6 +37,8 @@ export function createBuilder({ fields: initial = [], types, choiceTypes, limits
     type: typeIds.has(f.type) ? f.type : 'text',
     required: f.required === true,
     options: Array.isArray(f.options) ? f.options.join('\n') : String(f.options ?? ''),
+    min: String(f.min ?? scale.defaultMin),
+    max: String(f.max ?? scale.defaultMax),
   }));
   if (!fields.length) fields.push(blank());
 
@@ -49,12 +60,16 @@ export function createBuilder({ fields: initial = [], types, choiceTypes, limits
   // After the first blocked submit, missing answers are flagged too, and update while typing.
   let submitted = false;
 
-  /** Problems of each question, by index: { label?: message, options?: message }. */
+  /** Problems of each question, by index: { label?, options?, scale? } (messages). */
   function fieldProblems() {
-    const problems = fields.map((field) => (submitted ? {
-      label: field.label.trim() ? undefined : t('validation.required'),
-      options: CHOICE_TYPES.has(field.type) && !optionLines(field.options).length ? tb('optionsRequired') : undefined,
-    } : {}));
+    const problems = fields.map((field) => ({
+      ...(submitted ? {
+        label: field.label.trim() ? undefined : t('validation.required'),
+        options: CHOICE_TYPES.has(field.type) && !optionLines(field.options).length ? tb('optionsRequired') : undefined,
+      } : {}),
+      // A wrong range shows while typing: it never waits for a submit attempt.
+      scale: scaleProblem(field),
+    }));
     const byText = new Map();
     fields.forEach((field, index) => {
       const key = sameTextKey(field.label);
@@ -110,7 +125,10 @@ export function createBuilder({ fields: initial = [], types, choiceTypes, limits
       if (!item) return;
       setMessage(item.label, item.labelError, problem.label);
       setMessage(item.options, item.optionsError, problem.options);
-      first ??= (problem.label && item.label) || (problem.options && item.options) || undefined;
+      setMessage(item.scaleFrom, item.scaleError, problem.scale);
+      if (problem.scale) item.scaleTo.setAttribute('aria-invalid', 'true');
+      else item.scaleTo.removeAttribute('aria-invalid');
+      first ??= (problem.label && item.label) || (problem.options && item.options) || (problem.scale && item.scaleFrom) || undefined;
     });
     return first;
   }
@@ -169,11 +187,43 @@ export function createBuilder({ fields: initial = [], types, choiceTypes, limits
       h('label', {}, `${tb('options')} `, h('span', { class: 'hint' }, tb('optionsHint')), options),
       h('span', { class: 'hint' }, tb('noRepeatedOptions')),
       optionsError);
-    items[index] = { label, options, labelError, optionsError };
+
+    // Scale (slider): the two ends of the range and a preview of the slider respondents will see.
+    const previewRange = h('input', { type: 'range', disabled: true, tabindex: -1, 'aria-hidden': 'true' });
+    const previewMin = h('span');
+    const previewMax = h('span');
+    const preview = h('div', { class: 'scale-preview' },
+      h('span', { class: 'hint' }, tb('scalePreview')),
+      h('div', { class: 'scale-track' }, previewMin, previewRange, previewMax));
+    const updatePreview = () => {
+      const valid = !checkScaleRange(field.min, field.max, scale);
+      preview.hidden = !valid;
+      if (!valid) return;
+      const [min, max] = [Number(field.min), Number(field.max)];
+      Object.assign(previewRange, { min, max, step: 1, value: Math.round((min + max) / 2) });
+      previewMin.textContent = String(min);
+      previewMax.textContent = String(max);
+    };
+    const scaleEnd = (key) => {
+      const input = h('input', { type: 'number', inputmode: 'numeric', step: 1, min: scale.lowest, max: scale.highest, value: field[key], required: true });
+      input.addEventListener('input', () => { field[key] = input.value; updatePreview(); refreshMessages(); });
+      return input;
+    };
+    const scaleFrom = scaleEnd('min');
+    const scaleTo = scaleEnd('max');
+    const scaleError = messageSlot();
+    const scaleWrap = h('div', { class: 'scale-settings', hidden: field.type !== 'scale' },
+      h('div', { class: 'scale-ends' }, h('label', {}, tb('scaleFrom'), scaleFrom), h('label', {}, tb('scaleTo'), scaleTo)),
+      h('span', { class: 'hint' }, tb('scaleHint')),
+      scaleError,
+      preview);
+    updatePreview();
+    items[index] = { label, options, labelError, optionsError, scaleFrom, scaleTo, scaleError };
 
     type.addEventListener('change', () => {
       field.type = type.value;
       optionsWrap.hidden = !CHOICE_TYPES.has(field.type);
+      scaleWrap.hidden = field.type !== 'scale';
       if (!optionsWrap.hidden && !options.value.trim()) options.focus();
       refreshMessages();
     });
@@ -193,7 +243,8 @@ export function createBuilder({ fields: initial = [], types, choiceTypes, limits
       h('div', { class: 'field-settings' },
         h('label', {}, tb('answerType'), type),
         h('label', { class: 'choice switch' }, required, h('span', {}, tb('required')))),
-      optionsWrap);
+      optionsWrap,
+      scaleWrap);
   }
 
   // Re-render the list; optionally keep the focus on the item that just moved or was added.
@@ -223,6 +274,8 @@ export function createBuilder({ fields: initial = [], types, choiceTypes, limits
       type: f.type,
       required: f.required,
       options: CHOICE_TYPES.has(f.type) ? f.options.split('\n') : [],
+      // Only scale questions send a range; validate() has already checked it holds whole numbers.
+      ...(f.type === 'scale' ? { min: Number(f.min), max: Number(f.max) } : {}),
     })),
   };
 }

@@ -22,6 +22,9 @@ export const ERROR_KEYS = {
   option_too_long: 'validation.optionTooLong',
   option_duplicate: 'validation.optionDuplicate',
   label_duplicate: 'validation.labelDuplicate',
+  scale_bound_invalid: 'validation.scaleBoundInvalid',
+  scale_order: 'validation.scaleOrder',
+  scale_too_wide: 'validation.scaleTooWide',
   is_open_invalid: 'validation.isOpenInvalid',
   // Answers
   answers_invalid: 'validation.answersInvalid',
@@ -32,6 +35,7 @@ export const ERROR_KEYS = {
   invalid_number: 'validation.number',
   invalid_email: 'validation.email',
   invalid_date: 'validation.date',
+  invalid_scale_value: 'validation.scaleRange',
   // Accounts
   name_invalid: 'register.nameInvalid',
   email_invalid: 'register.emailInvalid',

@@ -1,4 +1,4 @@
-import { MAX_DONUT_SLICES, barWidth, donutSlices, percent } from '../charts.js';
+import { MAX_DONUT_SLICES, barWidth, columnHeight, donutSlices, percent } from '../charts.js';
 import { h, s } from '../dom.js';
 import { formatTimestamp } from '../format.js';
 import { icon } from './icons.js';
@@ -46,15 +46,49 @@ function barChart(counts, answered) {
   }));
 }
 
+/**
+ * Scale questions: a histogram, one column per value from min to max on a shared baseline, scaled
+ * to the tallest column, with the count above and the value below each one, plus the average and
+ * the median. Each column carries its full text ("4: 2 (40%)") for screen readers and as a tooltip.
+ */
+function scaleChart(q, { t, lang }) {
+  const { min, max, average, median, outOfRange } = q.scale;
+  const peak = Math.max(0, ...q.counts.map((c) => c.count));
+  const number = new Intl.NumberFormat(lang, { maximumFractionDigits: 1 });
+  const stat = (key, value) => h('div', {}, h('dt', {}, t(key)), h('dd', {}, value === null ? '—' : number.format(value)));
+  return [
+    h('dl', { class: 'scale-stats' }, stat('detail.scale.average', average), stat('detail.scale.median', median)),
+    h('ul', { class: 'vbars', 'aria-label': t('detail.scale.chartLabel', { min, max }) }, q.counts.map(({ option, count }) => {
+      const text = t('detail.scale.column', { value: option, count, percent: percent(count, q.answered) });
+      const height = columnHeight(count, peak);
+      return h('li', { title: text },
+        h('span', { class: 'visually-hidden' }, text),
+        h('span', { class: 'vbar-count', 'aria-hidden': 'true' }, String(count)),
+        s('svg', { class: 'vbar', width: '100%', height: '100%', 'aria-hidden': 'true', focusable: 'false' },
+          count ? s('rect', { class: 'vbar-fill', y: `${fixedPercent(100 - height)}%`, width: '100%', height: `${height}%` }) : null),
+        h('span', { class: 'vbar-label', 'aria-hidden': 'true' }, option));
+    })),
+    outOfRange ? h('p', { class: 'hint' }, t('detail.scale.outOfRange', { count: outOfRange })) : null,
+  ];
+}
+
+const fixedPercent = (n) => Number(n.toFixed(2));
+
 /** Text of one option or answer: yes/no in the reader's language. */
 const optionText = (type, value, t) => (type === 'yesno' && (value === 'yes' || value === 'no') ? t(`answer.${value}`) : value);
 
 /** One chart per choice question. Nothing when there are no answers yet. */
-export function summaryCharts(summary, { t }) {
+export function summaryCharts(summary, i18n) {
+  const { t } = i18n;
   if (!summary.questions.length || !summary.kpis.total) return [];
   return [
     h('h3', {}, t('detail.summary')),
     h('div', { class: 'charts' }, summary.questions.map((q) => {
+      if (q.type === 'scale' && q.scale) {
+        return h('section', { class: 'panel summary' },
+          h('h4', {}, `${q.label} `, h('span', { class: 'muted' }, t('detail.answered', { count: q.answered }))),
+          scaleChart(q, i18n));
+      }
       const counts = q.counts.map(({ option, count }) => ({ label: optionText(q.type, option, t), count }));
       const chart = !q.multiple && counts.length <= MAX_DONUT_SLICES ? donutChart(counts, q.answered) : barChart(counts, q.answered);
       return h('section', { class: 'panel summary' },

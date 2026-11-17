@@ -1,5 +1,5 @@
 import { ApiError } from '../api.js';
-import { answerField, fieldError, respondentNameField } from '../components/answer-field.js';
+import { answerField, fieldError, respondentNameField, scaleAnswer } from '../components/answer-field.js';
 import { icon } from '../components/icons.js';
 import { errorList, resultPanel } from '../components/layout.js';
 import { h, setErrorBox, withParts } from '../dom.js';
@@ -50,6 +50,7 @@ function attachValidation(form, entries, app, limits) {
     const inputs = [...entry.wrap.querySelectorAll('input, select, textarea')];
     if (entry.type === 'checkbox') return inputs.filter((i) => i.checked).map((i) => i.value);
     if (entry.type === 'radio' || entry.type === 'yesno') return inputs.find((i) => i.checked)?.value ?? '';
+    if (entry.type === 'scale') return scaleAnswer(entry.wrap);
     return entry.control.value;
   };
 
@@ -57,7 +58,7 @@ function attachValidation(form, entries, app, limits) {
   function check(entry) {
     const problem = entry.type === 'name'
       ? checkRespondentName(entry.control.value, limits)
-      : checkAnswer({ type: entry.type, required: entry.required, value: valueOf(entry), options: entry.options }, limits);
+      : checkAnswer({ type: entry.type, required: entry.required, value: valueOf(entry), options: entry.options, min: entry.min, max: entry.max }, limits);
     return problem ? t(problem.key, problem.params) : undefined;
   }
 
@@ -150,6 +151,8 @@ export async function respondPage(app, { params, signal }) {
       type: field.type,
       required: field.required,
       options: field.options,
+      min: field.min,
+      max: field.max,
       label: field.label,
       control: questions[i].querySelector(`[id="fld_${field.id}"]`),
     })),

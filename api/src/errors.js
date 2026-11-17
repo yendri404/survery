@@ -24,6 +24,9 @@ export const ERROR_CODES = {
   'validation.optionTooLong': 'option_too_long',
   'validation.optionDuplicate': 'option_duplicate',
   'validation.labelDuplicate': 'label_duplicate',
+  'validation.scaleBoundInvalid': 'scale_bound_invalid',
+  'validation.scaleOrder': 'scale_order',
+  'validation.scaleTooWide': 'scale_too_wide',
   'validation.isOpenInvalid': 'is_open_invalid',
   // Answers (validateAnswers, parseRespondentName)
   'validation.answersInvalid': 'answers_invalid',
@@ -34,6 +37,7 @@ export const ERROR_CODES = {
   'validation.number': 'invalid_number',
   'validation.email': 'invalid_email',
   'validation.date': 'invalid_date',
+  'validation.scaleRange': 'invalid_scale_value',
   // Accounts
   'register.nameInvalid': 'name_invalid',
   'register.emailInvalid': 'email_invalid',

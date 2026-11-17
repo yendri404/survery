@@ -273,6 +273,26 @@ button:disabled { opacity: .35; cursor: not-allowed; }
 /* Yes / No: two large side-by-side choices, even on phones. */
 .choices.yesno { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
 .choices.yesno .choice { min-height: 56px; justify-content: center; font-size: 1.1rem; font-weight: 500; }
+/* Scale (slider): the native range with its ends labelled and the chosen value shown big. Until the
+   person moves it, the thumb is faded and the value shows a dash (no answer yet). */
+input[type=range] { padding: 0; border: none; background: none; accent-color: var(--brand); cursor: pointer; min-width: 0; }
+input[type=range]:focus { outline: none; }
+input[type=range]:focus-visible { outline: 2px solid var(--brand-text); outline-offset: 4px; }
+input[type=range]:disabled { cursor: default; }
+.scale-control { display: grid; grid-template-columns: auto minmax(0, 1fr) auto 3.5rem; align-items: center; gap: .75rem; margin-top: .35rem; }
+.scale-range { height: var(--tap); }
+.scale-end { color: var(--muted); font-size: .9rem; font-variant-numeric: tabular-nums; }
+.scale-value { font-size: 1.75rem; font-weight: 600; line-height: 1; text-align: center; font-variant-numeric: tabular-nums; color: var(--brand-text); }
+.scale-control.is-unset .scale-value { color: var(--muted); }
+.scale-control.is-unset .scale-range { accent-color: var(--border-strong); }
+.scale-control.is-unset .scale-range::-webkit-slider-thumb { opacity: .45; }
+.scale-control.is-unset .scale-range::-moz-range-thumb { opacity: .45; }
+.scale-status { margin: 0; }
+.field-item .scale-settings { display: flex; flex-direction: column; gap: .5rem; }
+.scale-ends { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+.scale-ends > label { display: flex; flex-direction: column; gap: .35rem; }
+.scale-track { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .75rem; color: var(--muted); font-size: .9rem; font-variant-numeric: tabular-nums; }
+.scale-preview { display: flex; flex-direction: column; gap: .2rem; }
 fieldset { border: none; padding: 0; margin: 0; min-width: 0; }
 legend { font-weight: 500; padding: 0; }
 
@@ -438,6 +458,19 @@ td { font-variant-numeric: tabular-nums; }
 .hbar-track { fill: var(--chart-track); }
 .hbar-fill { fill: var(--bar-fill); }
 
+/* Scale histogram: one column per value on a shared baseline, a 2px gap between columns, the count
+   above and the value below. Wide ranges scroll inside the chart, never the page. */
+.scale-stats { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; margin: 0 0 1rem; }
+.scale-stats dt { font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.scale-stats dd { margin: 0; font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.vbars { list-style: none; padding: 0 0 .25rem; margin: 0; display: flex; gap: 2px; overflow-x: auto; }
+.vbars li { flex: 1 1 0; min-width: 1.6rem; display: grid; grid-template-rows: auto 120px auto; justify-items: center; gap: .25rem; }
+.vbar { display: block; border-bottom: 1px solid var(--border-strong); overflow: visible; }
+.vbar-fill { fill: var(--bar-fill); }
+.vbar-count, .vbar-label { font-size: .8rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.vbar-count { color: var(--muted); }
+.vbar-label { color: var(--text); }
+
 .kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; margin: 0 0 1rem; }
 .kpi { background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--brand); border-radius: var(--radius); padding: .75rem 1rem; min-width: 0; }
 .kpi dt { font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
@@ -507,6 +540,7 @@ main > :nth-child(n+4) { animation-delay: .09s; }
 .cards > li:nth-child(n+4), .kpi:nth-child(n+4), .charts > :nth-child(n+4) { animation-delay: .09s; }
 .donut { animation: fade .25s var(--ease) .05s both; }
 .hbar-fill { transform-box: fill-box; transform-origin: left center; animation: grow-x .25s var(--ease) .05s both; }
+.vbar-fill { animation: fade .25s var(--ease) .05s both; }
 
 /* A live update swaps fresh HTML in: no entrance cascade there, only the highlight ring. */
 .live-updated * { animation: none; }

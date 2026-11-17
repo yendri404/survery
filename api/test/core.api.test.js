@@ -26,7 +26,7 @@ describe('API basics', () => {
   test('meta describes field types, limits and CSV options for clients', async () => {
     const res = await new Client(app.base).request('/meta');
     assert.equal(res.status, 200);
-    assert.deepEqual(res.json.fieldTypes, ['text', 'textarea', 'number', 'email', 'date', 'select', 'radio', 'yesno', 'checkbox']);
+    assert.deepEqual(res.json.fieldTypes, ['text', 'textarea', 'number', 'scale', 'email', 'date', 'select', 'radio', 'yesno', 'checkbox']);
     assert.deepEqual(res.json.choiceTypes, ['select', 'radio', 'checkbox']);
     assert.deepEqual(res.json.yesNoValues, ['yes', 'no']);
     assert.deepEqual(res.json.limits, LIMITS);
