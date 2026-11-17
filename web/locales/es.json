@@ -251,5 +251,14 @@
   "client.builder.scaleOrder": "\"Desde\" debe ser menor que \"Hasta\".",
   "client.builder.scaleTooWide": "Como máximo {maxSteps} pasos entre \"Desde\" y \"Hasta\".",
   "update.available": "Hay una versión nueva de Sharevy. Se carga al cambiar de página, o recarga ahora.",
-  "update.reload": "Recargar"
+  "update.reload": "Recargar",
+  "list.edit": "Editar",
+  "list.delete": "Eliminar",
+  "list.editSurvey": "Editar \"{title}\"",
+  "list.deleteSurvey": "Eliminar \"{title}\"",
+  "list.deleteConfirm": "¿Eliminar \"{title}\" y TODAS sus respuestas? Esta acción no se puede deshacer.",
+  "list.close": "Cerrar",
+  "list.reopen": "Reabrir",
+  "list.closeSurvey": "Cerrar \"{title}\" (dejar de aceptar respuestas)",
+  "list.reopenSurvey": "Reabrir \"{title}\" (volver a aceptar respuestas)"
 }

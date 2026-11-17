@@ -296,7 +296,7 @@ describe('results table', () => {
   class FakeNode {
     constructor(tag) { this.tag = tag; this.attrs = {}; this.children = []; }
     setAttribute(name, value) { this.attrs[name] = value; }
-    addEventListener() {}
+    addEventListener(name, fn) { (this.listeners ??= {})[name] = fn; }
     append(child) { this.children.push(child); }
     get textContent() { return this.children.map((c) => (c instanceof FakeNode ? c.textContent : c.text)).join(''); }
   }
@@ -334,6 +334,56 @@ describe('results table', () => {
     assert.deepEqual(firstCells, ['#2', '#1']);
     const labels = findAll(wrap, (n) => n.tag === 'button').map((b) => b.attrs['aria-label']);
     assert.deepEqual(labels, ['Delete response #2', 'Delete response #1']);
+  });
+});
+
+describe('survey cards', () => {
+  test('each card links to the survey and has Edit, Close or Reopen, and Delete for that survey', async (t) => {
+    class Node {
+      constructor(tag) { this.tag = tag; this.attrs = {}; this.children = []; }
+      setAttribute(name, value) { this.attrs[name] = value; }
+      addEventListener(name, fn) { (this.listeners ??= {})[name] = fn; }
+      append(child) { this.children.push(child); }
+      get textContent() { return this.children.map((c) => (c instanceof Node ? c.textContent : c.text)).join(''); }
+    }
+    const findAll = (node, pred, out = []) => {
+      if (node instanceof Node) {
+        if (pred(node)) out.push(node);
+        for (const child of node.children) findAll(child, pred, out);
+      }
+      return out;
+    };
+    const saved = { Node: globalThis.Node, SVGElement: globalThis.SVGElement, document: globalThis.document };
+    Object.assign(globalThis, {
+      Node,
+      SVGElement: class extends Node {},
+      document: { createElement: (tag) => new Node(tag), createElementNS: (_ns, tag) => new Node(tag), createTextNode: (text) => ({ text }) },
+    });
+    t.after(() => Object.assign(globalThis, saved));
+    const { surveyCards } = await import('../public/js/components/survey-cards.js');
+    const i18n = createI18n('en', en, en);
+    const surveys = [
+      { id: 7, title: 'Lunch', status: 'open', isOpen: true, responseCount: 2, closesOn: '2026-12-01' },
+      { id: 9, title: 'Parking', status: 'closed', isOpen: false, responseCount: 0, closesOn: '2026-12-05' },
+    ];
+    const deleted = [];
+    const toggled = [];
+    const list = surveyCards(surveys, i18n, { onToggle: (s) => toggled.push(s.id), onDelete: (s) => deleted.push(s.id) });
+    const hrefs = findAll(list, (n) => n.tag === 'a').map((a) => a.attrs.href);
+    assert.deepEqual(hrefs, ['/surveys/7', '/surveys/7/edit', '/surveys/9', '/surveys/9/edit']);
+    const editLabels = findAll(list, (n) => n.tag === 'a' && n.attrs.href.endsWith('/edit')).map((a) => a.attrs['aria-label']);
+    assert.deepEqual(editLabels, ['Edit "Lunch"', 'Edit "Parking"']);
+    const buttons = findAll(list, (n) => n.tag === 'button');
+    assert.deepEqual(buttons.map((b) => b.attrs['aria-label']), [
+      'Close "Lunch" (stop accepting answers)', 'Delete "Lunch"',
+      'Reopen "Parking" (accept answers again)', 'Delete "Parking"',
+    ]);
+    assert.deepEqual(buttons.map((b) => b.textContent.trim()), ['Close', 'Delete', 'Reopen', 'Delete']);
+    buttons[0].listeners.click();
+    buttons[2].listeners.click();
+    buttons[3].listeners.click();
+    assert.deepEqual(toggled, [7, 9]);
+    assert.deepEqual(deleted, [9]);
   });
 });
 

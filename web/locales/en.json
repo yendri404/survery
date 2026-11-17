@@ -251,5 +251,14 @@
   "client.builder.scaleOrder": "\"From\" must be lower than \"To\".",
   "client.builder.scaleTooWide": "At most {maxSteps} steps between \"From\" and \"To\".",
   "update.available": "A new version of Sharevy is available. It loads when you change page, or reload now.",
-  "update.reload": "Reload"
+  "update.reload": "Reload",
+  "list.edit": "Edit",
+  "list.delete": "Delete",
+  "list.editSurvey": "Edit \"{title}\"",
+  "list.deleteSurvey": "Delete \"{title}\"",
+  "list.deleteConfirm": "Delete \"{title}\" and ALL its answers? This cannot be undone.",
+  "list.close": "Close",
+  "list.reopen": "Reopen",
+  "list.closeSurvey": "Close \"{title}\" (stop accepting answers)",
+  "list.reopenSurvey": "Reopen \"{title}\" (accept answers again)"
 }
