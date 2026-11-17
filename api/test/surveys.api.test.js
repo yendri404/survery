@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -315,8 +315,10 @@ describe('summary: key figures and chart data', () => {
 });
 
 describe('existing database', () => {
-  test('a database from the first version opens with all its data, served by the API', async () => {
+  test('a database from the first version opens with all its data, served by the API', async (t) => {
     const dir = mkdtempSync(join(tmpdir(), 'sharevy-api-v1-'));
+    // Runs after the server closed (finally below), so the database file is no longer open.
+    t.after(() => rmSync(dir, { recursive: true, force: true }));
     const path = join(dir, 'old.db');
     const old = new DatabaseSync(path);
     old.exec(`
