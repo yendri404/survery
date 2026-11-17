@@ -302,18 +302,18 @@ The database file (`data/surveys.db`) is the same one the single-server version 
 
 #### `config.js` — configuration
 
-**Exports:** `loadConfig(env = process.env)` → plain object; `REPO_ROOT`.
+**Exports:** `loadConfig(env = process.env)` → plain object; `REPO_ROOT`; `isLoopback(host)` (also used by the start-up warning in `server.js`).
 
 | Key | Env var | Default | Used by |
 |-----|---------|---------|---------|
 | `port` | `PORT` | `3001` | `server.js` |
-| `host` | `HOST` | `0.0.0.0` (use `127.0.0.1` behind the web proxy) | `server.js` |
+| `host` | `HOST` | `127.0.0.1` (only the web proxy reaches the API; `0.0.0.0` exposes it) | `server.js` |
 | `dbPath` | `DB_PATH` | `data/surveys.db`, relative to the repository root | `server.js`, `scripts/create-user.js` |
 | `webBaseUrl` | `WEB_BASE_URL` (fallback `BASE_URL`) | `http://localhost:3000` | `routes/surveys.js` share link and QR |
 | `corsOrigins` | `CORS_ORIGINS` (comma-separated, `*` = any) | `['http://localhost:3000']` | `app.js` → `applyCors` |
 | `allowRegistration` | `ALLOW_REGISTRATION` | `true` | `routes/auth.js`, `/meta` |
 | `sessionTtlMs` | — | 7 days | `routes/auth.js` |
-| `trustProxy` | `TRUST_PROXY` | `false` | `rate-limit.js` → `clientIp` |
+| `trustProxy` | `TRUST_PROXY` | `true` on a loopback host (`isLoopback`), else `false`; an explicit value wins | `rate-limit.js` → `clientIp` |
 | `loginMaxFailures` | `LOGIN_MAX_FAILURES` | `10` | `routes/auth.js` |
 | `loginWindowMs` | — | 15 min | `routes/auth.js` |
 | `submissionLimit` | `SUBMISSION_LIMIT` | `60` (`0` = off) | `routes/public.js` |
@@ -579,14 +579,14 @@ The heart of the API. It has no database, no HTTP and no JSON output, which is w
 | Export | What it does |
 |--------|--------------|
 | `createRateLimiter({ limit, windowMs, now?, maxKeys? })` | Fixed-window counter per key: `isLimited`, `hit`, `reset`, `retryAfterSeconds`. `limit: 0` disables it |
-| `clientIp(req, trustProxy)` | Socket address, or the first `X-Forwarded-For` entry **only** when `TRUST_PROXY=true` |
+| `clientIp(req, trustProxy)` | Socket address, or the first `X-Forwarded-For` entry **only** when `trustProxy` is on |
 
 | Choice | Consequence |
 |--------|-------------|
 | In memory | Zero setup; counters reset when the process restarts and are not shared between processes |
 | Fixed window | Simple and predictable; allows a short burst at window edges |
 | `maxKeys` cap (10 000) | Memory stays bounded: expired keys are pruned first, then the oldest |
-| `X-Forwarded-For` opt-in | Otherwise any client could fake its IP. Behind the web proxy every request comes from `127.0.0.1`, so the API needs `TRUST_PROXY=true` to count people; the proxy always overwrites the header, so it cannot be faked through it |
+| `X-Forwarded-For` opt-in | Otherwise any client could fake its IP. Behind the web proxy every request comes from `127.0.0.1`, so on a loopback host `trustProxy` is on by default to count people; the proxy always overwrites the header, so it cannot be faked through it |
 
 ---
 

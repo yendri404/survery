@@ -42,10 +42,10 @@ npm run start:web          # terminal 2: web client on port 3000
 1. Open `http://localhost:3000`, register a creator account, and create a survey.
 2. Other people on the same network open the share link shown on the survey page (`http://<server-ip>:3000/s/<token>`).
 
-For LAN use, start the API with the settings below so share links, QR codes and rate limits are right:
+By default the API listens on `127.0.0.1` and trusts the `X-Forwarded-For` header the web proxy sets, so its rate limits count each person. To pin the address used in share links and QR codes, also set `WEB_BASE_URL`:
 
 ```bash
-HOST=127.0.0.1 TRUST_PROXY=true WEB_BASE_URL=http://<server-ip>:3000 npm run start:api
+WEB_BASE_URL=http://<server-ip>:3000 npm run start:api
 ```
 
 | Root script | What it does |
@@ -75,12 +75,12 @@ Both run hidden in the background and log to `data/*.log`. Overrides: `SHAREVY_D
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `3001` | HTTP port. |
-| `HOST` | `0.0.0.0` | Interface to bind. Behind the web proxy, use `127.0.0.1` so the API is not reachable from the network. |
+| `HOST` | `127.0.0.1` | Interface to bind. The default keeps the API reachable only through the web proxy. To expose it to other clients, set `HOST=0.0.0.0` (then `TRUST_PROXY` defaults to `false`). |
 | `DB_PATH` | `data/surveys.db` | SQLite file. Relative paths are resolved from the repository root. Back this file up. |
 | `WEB_BASE_URL` | `http://localhost:3000` | Address of the web client; share links and QR codes point to `<WEB_BASE_URL>/s/<token>`. Set it to the address people use (e.g. `http://192.168.1.20:3000`). `BASE_URL` is read as a fallback. |
 | `CORS_ORIGINS` | `http://localhost:3000` | Comma-separated browser origins allowed to call the API directly; `*` allows any. Not needed for the web client, which goes through its proxy. |
 | `ALLOW_REGISTRATION` | `true` | `false` disables self-registration of creators (use `npm run create-user`). |
-| `TRUST_PROXY` | `false` | `true` reads the client IP from `X-Forwarded-For`. Set it when the API runs behind the web proxy (see [Security notes](#security-notes)). |
+| `TRUST_PROXY` | `true` on a loopback `HOST`, else `false` | `true` reads the client IP from `X-Forwarded-For`, which the web proxy always overwrites. An explicit value always wins; never set `true` on an API reachable directly (see [Security notes](#security-notes)). |
 | `LOGIN_MAX_FAILURES` | `10` | Failed logins allowed per email + IP every 15 minutes before answering 429. |
 | `SUBMISSION_LIMIT` | `60` | Responses accepted per survey + IP every 10 minutes (`0` disables). Raise it if many people answer from one shared PC. |
 
@@ -140,7 +140,7 @@ The API sends stable error **codes**; the client translates them. To add a langu
 | Sessions | `Authorization: Bearer <token>`. The API stores only the SHA-256 of each token; tokens last 7 days and "Log out" ends them on the server. |
 | Token in the browser | Kept in `localStorage` (`sharevy-token`), so any script on this origin could read it. Kept small on purpose: the CSP allows only this origin's scripts, the page loads no third-party code, and the DOM is built without `innerHTML`. |
 | Content-Security-Policy | Strict on every web page (only this origin's scripts and styles, nothing inline); the API answers `default-src 'none'`. Plus `nosniff`, `X-Frame-Options: DENY`, `no-referrer`. |
-| Network exposure | The API binds to `127.0.0.1`; only the web proxy reaches it. The proxy always overwrites `X-Forwarded-For` with the address it really sees, so the API runs with `TRUST_PROXY=true` and its rate limits count each person, not the proxy. Never set `TRUST_PROXY=true` on an API reachable directly: clients could fake their IP. |
+| Network exposure | The API binds to `127.0.0.1`; only the web proxy reaches it. The proxy always overwrites `X-Forwarded-For` with the address it really sees, so the API (on a loopback host `TRUST_PROXY` is on by default) counts each person in its rate limits, not the proxy. Never set `TRUST_PROXY=true` on an API reachable directly: clients could fake their IP. |
 | Rate limits | Failed logins per email + IP, and submissions per survey + IP, counted in memory (reset on restart). Answers 429 with `Retry-After`. |
 | Ownership | Creators only see their own surveys; another creator's survey answers 404, like a missing one. Ownership is also enforced in SQL. |
 | Share links | 144-bit random tokens; anyone holding the link can answer. |
@@ -161,7 +161,7 @@ Everything the web client does goes through the documented API, so a new client 
 
 1. Read [docs/API.md](docs/API.md): endpoints, request/response examples, error codes.
 2. Call `GET /api/v1/meta` at start-up for the rules (question types, limits, default closing days, the server's date, device id format) instead of hard-coding them.
-3. Call the API directly (add your origin to `CORS_ORIGINS` if it runs in a browser on another origin), or through the web server's `/api` proxy.
+3. Call the API through the web server's `/api` proxy, or directly: to expose the API to other clients set `HOST=0.0.0.0` (then `TRUST_PROXY` defaults to `false`), and add your origin to `CORS_ORIGINS` if it runs in a browser on another origin.
 
 ## Project structure
 

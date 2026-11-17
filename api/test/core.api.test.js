@@ -120,6 +120,18 @@ describe('CORS', () => {
     assert.deepEqual(custom.corsOrigins, ['https://a.local', 'https://b.local']);
     assert.equal(loadConfig({ BASE_URL: 'https://legacy.local' }).webBaseUrl, 'https://legacy.local', 'BASE_URL still works as a fallback');
   });
+
+  test('by default the API listens on loopback behind the web proxy and trusts its X-Forwarded-For', () => {
+    const defaults = loadConfig({});
+    assert.equal(defaults.host, '127.0.0.1');
+    assert.equal(defaults.trustProxy, true, 'per-IP limits must count people, not the proxy');
+    assert.equal(loadConfig({ HOST: '::1' }).trustProxy, true);
+    assert.equal(loadConfig({ HOST: 'localhost' }).trustProxy, true);
+    // Exposed to other clients: they could fake the header, so it is not trusted unless asked for.
+    assert.equal(loadConfig({ HOST: '0.0.0.0' }).trustProxy, false);
+    assert.equal(loadConfig({ HOST: '0.0.0.0', TRUST_PROXY: 'true' }).trustProxy, true, 'an explicit setting wins');
+    assert.equal(loadConfig({ TRUST_PROXY: 'false' }).trustProxy, false, 'an explicit setting wins');
+  });
 });
 
 describe('creator accounts', () => {
