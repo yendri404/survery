@@ -8,7 +8,11 @@ const i18n = (() => {
     return {};
   }
 })();
-const t = (key) => i18n[key] ?? key;
+const t = (key, params = {}) => (i18n[key] ?? key)
+  .replace(/\{(\w+)\}/g, (match, name) => (Object.hasOwn(params, name) ? String(params[name]) : match));
+/** Plural form: "<key>.one" or "<key>.other", like i18n.tn on the server. */
+const tn = (key, count) =>
+  t(`${key}.${new Intl.PluralRules(document.documentElement.lang || 'en').select(count) === 'one' ? 'one' : 'other'}`, { count });
 
 function flashButton(btn, text) {
   const label = btn.querySelector('span') ?? btn;
@@ -215,6 +219,165 @@ document.addEventListener('click', (event) => {
     // Some browsers refuse outside a direct user gesture; the native picker still works.
   }
 });
+
+/** The alert icon, built like icon('alert') in src/views.js. */
+function alertIcon() {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('class', 'icon');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', 'M12 3l10 18H2L12 3zM12 10v5M12 18h.01');
+  svg.append(path);
+  return svg;
+}
+
+/*
+ * Respondent form: answers are checked here with the same rules and messages as validateAnswers()
+ * and parseRespondentName() in src/surveys.js, so a mistake shows at once, without sending the
+ * form and reloading the page. Errors use the server's markup (a .field-error under the question,
+ * the .errors summary above the form). The server still checks everything; without JavaScript the
+ * browser's own checks and the server's error page work as before.
+ */
+{
+  const form = document.querySelector('form.respondent-form');
+  if (form) {
+    let limits = {};
+    try { limits = JSON.parse(form.dataset.limits || '{}'); } catch { /* keep server-only checks */ }
+    const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const isValidDate = (value) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+      const d = new Date(`${value}T00:00:00Z`);
+      return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
+    };
+    const tooLong = (value, max) => max !== undefined && value.length > max;
+
+    // One entry per question (plus the optional name), in page order.
+    const nameWrap = form.querySelector('.respondent-name');
+    const entries = [
+      ...(nameWrap ? [{ wrap: nameWrap, type: 'name', control: nameWrap.querySelector('#respondent_name'), label: t('respond.yourName') }] : []),
+      ...[...form.querySelectorAll('.field[data-type]')].map((wrap) => ({
+        wrap,
+        type: wrap.dataset.type,
+        required: wrap.hasAttribute('data-required'),
+        label: wrap.dataset.label,
+        control: wrap.querySelector('[id^="fld_"]'),
+      })),
+    ].filter((entry) => entry.control);
+
+    /** The message for one entry's current value, or undefined when it is valid. */
+    function check(entry) {
+      const inputs = [...entry.wrap.querySelectorAll('input, select, textarea')];
+      if (entry.type === 'name') {
+        const max = limits.respondentName;
+        return tooLong(entry.control.value.trim(), max) ? t('validation.respondentNameTooLong', { max }) : undefined;
+      }
+      if (entry.type === 'checkbox') {
+        return entry.required && !inputs.some((i) => i.checked) ? t('validation.required') : undefined;
+      }
+      const value = ['radio', 'yesno'].includes(entry.type)
+        ? (inputs.find((i) => i.checked)?.value ?? '').trim()
+        : entry.control.value.trim();
+      if (!value) return entry.required ? t('validation.required') : undefined;
+      switch (entry.type) {
+        case 'text':
+          return tooLong(value, limits.text) ? t('validation.tooLong', { max: limits.text }) : undefined;
+        case 'textarea':
+          return tooLong(value, limits.textarea) ? t('validation.tooLong', { max: limits.textarea }) : undefined;
+        case 'number':
+          return Number.isFinite(Number(value)) ? undefined : t('validation.number');
+        case 'email':
+          return value.length > 254 || !EMAIL.test(value) ? t('validation.email') : undefined;
+        case 'date':
+          return isValidDate(value) ? undefined : t('validation.date');
+        case 'select':
+          return [...entry.control.options].some((o) => o.value && o.value === value) ? undefined : t('validation.invalidOption');
+        case 'radio':
+        case 'yesno':
+          return inputs.some((i) => i.value === value) ? undefined : t('validation.invalidOption');
+        default:
+          return undefined;
+      }
+    }
+
+    // Messages shown now, by entry; server-rendered errors (after a rejected submission) count too.
+    const shown = new Map();
+    for (const entry of entries) {
+      const text = entry.wrap.querySelector(':scope > .field-error')?.textContent.trim();
+      if (text) shown.set(entry, text);
+    }
+
+    function show(entry, message) {
+      const errorId = `${entry.control.id}_error`;
+      entry.wrap.querySelector(':scope > .field-error')?.remove();
+      if (message) {
+        const p = Object.assign(document.createElement('p'), { className: 'field-error', id: errorId });
+        p.append(alertIcon(), ` ${message}`);
+        entry.wrap.append(p);
+        entry.wrap.classList.add('has-error');
+        entry.control.setAttribute('aria-describedby', errorId);
+        entry.control.setAttribute('aria-invalid', 'true');
+        shown.set(entry, message);
+      } else {
+        entry.wrap.classList.remove('has-error');
+        entry.control.removeAttribute('aria-describedby');
+        entry.control.removeAttribute('aria-invalid');
+        shown.delete(entry);
+      }
+    }
+
+    // The summary above the form, like errorList() in src/views.js.
+    function renderSummary() {
+      const old = form.previousElementSibling?.classList.contains('errors') ? form.previousElementSibling : null;
+      const problems = entries.filter((entry) => shown.has(entry));
+      if (!problems.length) {
+        old?.remove();
+        return;
+      }
+      const list = document.createElement('ul');
+      list.append(Object.assign(document.createElement('li'), { textContent: tn('respond.checkAnswers', problems.length) }));
+      for (const entry of problems) {
+        const link = Object.assign(document.createElement('a'), { href: `#${entry.control.id}`, textContent: entry.label });
+        const item = document.createElement('li');
+        item.append(link, `: ${shown.get(entry)}`);
+        list.append(item);
+      }
+      const summary = Object.assign(document.createElement('div'), { className: 'errors' });
+      summary.setAttribute('role', 'alert');
+      summary.append(alertIcon(), list);
+      if (old) old.replaceWith(summary);
+      else form.before(summary);
+    }
+
+    // The browser's own bubbles would compete with the inline messages.
+    form.noValidate = true;
+
+    form.addEventListener('submit', (event) => {
+      for (const entry of entries) show(entry, check(entry));
+      renderSummary();
+      const first = entries.find((entry) => shown.has(entry));
+      if (!first) return;
+      event.preventDefault();
+      first.wrap.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      const focusable = first.control.matches('fieldset') ? first.control.querySelector('input') : first.control;
+      focusable.focus({ preventScroll: true });
+    });
+
+    // A question that shows an error updates as soon as its answer changes, and clears when valid.
+    const recheck = (event) => {
+      const entry = entries.find((e) => e.wrap.contains(event.target));
+      if (!entry || !shown.has(entry)) return;
+      const message = check(entry);
+      if (message === shown.get(entry)) return;
+      show(entry, message);
+      renderSummary();
+    };
+    form.addEventListener('input', recheck);
+    form.addEventListener('change', recheck);
+  }
+}
 
 // Confirmation for destructive forms: <form data-confirm="Are you sure?">
 document.addEventListener('submit', (event) => {

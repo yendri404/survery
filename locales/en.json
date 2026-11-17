@@ -224,6 +224,7 @@
   "client.builder.options": "Options",
   "client.builder.optionsHint": "One option per line.",
   "client.builder.noRepeatedOptions": "Repeated options are not allowed.",
+  "client.builder.optionsRequired": "Add at least one option.",
   "client.builder.duplicateOption": "The option \"{option}\" is repeated. Each option must be different.",
   "client.builder.duplicateQuestion": "Question {n} asks the same thing. Each question must be different.",
   "client.builder.optionsPlaceholder": "Write one option per line, for example:\nYes\nNo"

@@ -64,12 +64,21 @@ export function createI18n(lang = DEFAULT_LANGUAGE) {
   return { lang: code, t, tn, formatDate };
 }
 
-/** Keys starting with "client." without that prefix: the strings the browser scripts need. */
+/**
+ * Server messages the browser scripts also show, under their own names: public/app.js checks
+ * answers with the same rules and words as the server before sending the form.
+ */
+const SHARED_WITH_CLIENT = ['validation.', 'respond.checkAnswers.', 'respond.yourName'];
+
+/**
+ * The strings the browser scripts need: keys starting with "client." without that prefix, plus
+ * the SHARED_WITH_CLIENT keys with their full names.
+ */
 export function clientMessages(i18n) {
   const prefix = 'client.';
   return Object.fromEntries(Object.keys(MESSAGES[DEFAULT_LANGUAGE])
-    .filter((key) => key.startsWith(prefix))
-    .map((key) => [key.slice(prefix.length), i18n.t(key)]));
+    .filter((key) => key.startsWith(prefix) || SHARED_WITH_CLIENT.some((shared) => key.startsWith(shared)))
+    .map((key) => [key.startsWith(prefix) ? key.slice(prefix.length) : key, i18n.t(key)]));
 }
 
 /** English translator, used as the default wherever no request language is available. */

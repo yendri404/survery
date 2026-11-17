@@ -46,6 +46,7 @@ npm run create-user -- <email> <name> <password>
 - Question types: short text, long text, number, email, date, dropdown, single choice, yes/no, multiple choice. Each can be required. Yes/no needs no options: respondents see "Yes" and "No" in their language, and results show them in yours.
 - Respondents can optionally leave their name; otherwise the response is anonymous.
 - Number questions accept only numbers: letters and symbols cannot be typed or pasted, and a decimal comma becomes a point.
+- Answers are checked in the browser before sending, with the same rules and messages as the server: mistakes show next to each question at once, without reloading the page. The server checks everything again.
 - One response per device and survey (device cookie; clearing cookies or another browser counts as a new device).
 - Edit questions at any time; existing answers are kept.
 - Questions and the options of one question must all be different (ignoring case and spaces). The editor warns while you type and will not save until they are; the server checks it again.

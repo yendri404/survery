@@ -12,8 +12,11 @@
   } catch {
     // Missing strings show their keys; the builder keeps working.
   }
-  const t = (key, params = {}) => (messages[`builder.${key}`] ?? key)
-    .replace(/\{(\w+)\}/g, (match, name) => (Object.hasOwn(params, name) ? String(params[name]) : match));
+  const fill = (text, params) =>
+    text.replace(/\{(\w+)\}/g, (match, name) => (Object.hasOwn(params, name) ? String(params[name]) : match));
+  const t = (key, params = {}) => fill(messages[`builder.${key}`] ?? key, params);
+  // Server validation messages ("validation.*"), shared through the same data block.
+  const tv = (key, params = {}) => fill(messages[key] ?? key, params);
   const CHOICE_TYPES = new Set(['select', 'radio', 'checkbox']);
   const SVG_NS = 'http://www.w3.org/2000/svg';
   const ICONS = {
@@ -86,12 +89,19 @@
   // Controls and message slots of each rendered question, by index; filled by fieldItem().
   let items = [];
 
+  // After the first blocked submit, missing answers are flagged too, and update while typing.
+  let submitted = false;
+
   /**
    * Problems of each question, by index: { label?: message, options?: message }.
-   * Repeated questions and repeated options are flagged while the creator types.
+   * Repeated questions and repeated options are flagged while the creator types; empty question
+   * text and missing options only after a submit attempt. The server applies the same rules.
    */
   function fieldProblems() {
-    const problems = fields.map(() => ({}));
+    const problems = fields.map((field) => (submitted ? {
+      label: field.label.trim() ? undefined : tv('validation.required'),
+      options: CHOICE_TYPES.has(field.type) && !optionLines(field.options).length ? t('optionsRequired') : undefined,
+    } : {}));
     const byText = new Map();
     fields.forEach((field, index) => {
       const key = sameTextKey(field.label);
@@ -103,7 +113,7 @@
       if (indexes.length < 2) continue;
       for (const index of indexes) {
         const other = indexes.find((i) => i !== index);
-        problems[index].label = t('duplicateQuestion', { n: other + 1 });
+        problems[index].label ??= t('duplicateQuestion', { n: other + 1 });
       }
     }
     fields.forEach((field, index) => {
@@ -112,7 +122,7 @@
       for (const option of optionLines(field.options)) {
         const key = sameTextKey(option);
         if (seen.has(key)) {
-          problems[index].options = t('duplicateOption', { option: seen.get(key) });
+          problems[index].options ??= t('duplicateOption', { option: seen.get(key) });
           break;
         }
         seen.set(key, option);
@@ -134,9 +144,14 @@
     }
   }
 
-  /** Updates every question's messages; returns the first control with a problem, if any. */
+  /** Updates every message (survey basics, then questions); returns the first control with a problem. */
   function refreshMessages() {
     let first;
+    for (const basic of basics) {
+      const message = submitted ? basic.check() : undefined;
+      setMessage(basic.control, basic.slot, message);
+      first ??= message ? basic.control : undefined;
+    }
     fieldProblems().forEach((problem, index) => {
       const item = items[index];
       if (!item) return;
@@ -154,6 +169,28 @@
     slot.hidden = true;
     return slot;
   };
+
+  // Title and closing date: checked on submit like the questions, with the server's messages.
+  const form = root.closest('form');
+  const title = form.querySelector('[name="title"]');
+  const closesOn = form.querySelector('[name="closes_on"]');
+  const basics = [
+    title && { control: title, check: () => (title.value.trim() ? undefined : tv('validation.titleRequired')) },
+    closesOn && {
+      control: closesOn,
+      check: () => {
+        if (closesOn.validity.badInput) return tv('validation.closingDateInvalid');
+        if (!closesOn.value) return tv('validation.required');
+        // YYYY-MM-DD strings compare correctly as text; min is today (or the current expired date).
+        return closesOn.min && closesOn.value < closesOn.min ? tv('validation.closingDatePast') : undefined;
+      },
+    },
+  ].filter(Boolean);
+  for (const basic of basics) {
+    basic.slot = messageSlot();
+    basic.control.closest('label').after(basic.slot);
+    basic.control.addEventListener('input', () => { if (submitted) refreshMessages(); });
+  }
 
   function move(index, delta) {
     const target = index + delta;
@@ -245,8 +282,11 @@
     item?.querySelector('input')?.focus({ preventScroll: true });
   }
 
-  root.closest('form').addEventListener('submit', (event) => {
-    // The server rejects repeated questions and options too; stopping here saves a page reload.
+  // Inline messages replace the browser's bubbles; the server checks everything again.
+  form.noValidate = true;
+  form.addEventListener('submit', (event) => {
+    // Stopping here keeps what was typed on screen and saves a round trip to the server.
+    submitted = true;
     const invalid = refreshMessages();
     if (invalid) {
       event.preventDefault();

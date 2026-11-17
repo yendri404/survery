@@ -224,6 +224,7 @@
   "client.builder.options": "Opciones",
   "client.builder.optionsHint": "Una opción por línea.",
   "client.builder.noRepeatedOptions": "No se permiten opciones repetidas.",
+  "client.builder.optionsRequired": "Agrega al menos una opción.",
   "client.builder.duplicateOption": "La opción \"{option}\" está repetida. Cada opción debe ser distinta.",
   "client.builder.duplicateQuestion": "La pregunta {n} pregunta lo mismo. Cada pregunta debe ser distinta.",
   "client.builder.optionsPlaceholder": "Escribe una opción por línea, por ejemplo:\nSí\nNo"

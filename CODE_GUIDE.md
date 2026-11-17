@@ -547,7 +547,7 @@ Server-rendered template strings. Every page is plain HTML forms, so it works wi
 | `homePage` | Landing | Login / register buttons |
 | `loginPage`, `registerPage` | Account forms | Keep typed values on error (never the password) |
 | `surveyListPage` | "My surveys" | Status badge + response count |
-| `surveyEditorPage` | New/edit | Hidden `fields_json` + `#builder` container; warns when editing a survey with responses. `public/builder.js` shows repeated questions and options as inline messages while the creator types and blocks submitting until they are fixed |
+| `surveyEditorPage` | New/edit | Hidden `fields_json` + `#builder` container; warns when editing a survey with responses. `public/builder.js` shows repeated questions and options as inline messages while the creator types and blocks submitting until they are fixed. On submit it also checks title, closing date, question text and options (server messages, inline, no reload); the form carries `data-limits` |
 | `surveyDetailPage` | Results | Share link with copy button, open/close/delete actions, CSV links, key figures, charts, responses table |
 | `publicFormPage` | Respondent form | `renderField` per type (`yesno`: two large side-by-side radios, `.choices.yesno`); per-field errors; values kept after an error |
 | `thanksPage`, `closedPage` | Respondent states | |
@@ -622,6 +622,8 @@ The SVG is `aria-hidden`; the legend and bar labels carry every number as text. 
 
 | Behavior | Detail |
 |----------|--------|
+| Checks before sending | On submit (button or Enter) the answers are checked with the same rules and messages as `validateAnswers` / `parseRespondentName`. Invalid → nothing is sent, no reload; errors appear with the server's markup (`.has-error`, `.field-error`, `aria-invalid` / `aria-describedby`, the `.errors` summary with links) and the first invalid question gets the focus. A question's error clears as soon as its answer is valid. The script sets `noValidate`; the HTML keeps `required` for browsers without JavaScript, and the server always checks again |
+| Where the rules come from | `renderField` puts `data-type`, `data-required` and `data-label` on each `.field`; the form carries `data-limits` (`LIMITS` as JSON); messages come from the `i18n-client` block. Changing a rule means changing `src/surveys.js` **and** `check()` in `public/app.js` |
 | Number questions | Only digits, one decimal point and a leading `-` can be typed, pasted or dropped (`beforeinput`, with an `input` safety net). A comma becomes a point (`4,5` → `4.5`). The script turns the field into a text input with `inputmode="decimal"` (number keyboard on phones), because a native number input hides the typed text and cursor from scripts; Up/Down arrows still add or subtract 1. Without JavaScript it stays `type="number"` |
 
 **No inline JS or CSS:** the CSP forbids it, so behaviors like "copy link" or "confirm delete" are declared with `data-copy` / `data-confirm` attributes and handled by `public/app.js`.
@@ -638,7 +640,7 @@ All interface text lives in `locales/<code>.json`, one flat file per language, r
 | `LANGUAGE_COOKIE` | `sharevy_lang`, set by `GET /lang/:code` |
 | `negotiateLanguage(cookie, acceptLanguage)` | A supported cookie wins; otherwise the first supported language of `Accept-Language` by q-value (`es-MX` → `es`); `*`, nothing or only unsupported languages → `en` |
 | `createI18n(lang)` | `{ lang, t(key, params), tn(key, count, params), formatDate(yyyyMmDd) }` |
-| `clientMessages(i18n)` | The `client.*` strings, prefix removed, for the browser scripts |
+| `clientMessages(i18n)` | The `client.*` strings (prefix removed) plus the server messages the browser also shows (`validation.*`, `respond.checkAnswers.*`, `respond.yourName`, full names), for the browser scripts |
 | `defaultI18n` | English translator, the default wherever no request is involved |
 
 **Locale file format**

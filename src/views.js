@@ -263,7 +263,7 @@ export function surveyEditorPage({ user, csrf, survey, values, errors = [], toda
 <h1>${esc(editing ? t('editor.editHeading') : t('editor.newTitle'))}</h1>
 ${warning}
 ${escapedErrors(errors)}
-<form method="post" action="${action}" class="stack editor-form" id="survey-form">
+<form method="post" action="${action}" class="stack editor-form" id="survey-form" data-limits="${esc(JSON.stringify(LIMITS))}">
   ${csrfInput(csrf)}
   <section class="panel stack editor-basics">
     <h2>${esc(t('editor.basics'))}</h2>
@@ -462,7 +462,9 @@ function renderField(field, value, error, index, i18n) {
   const errorHtml = error ? `<p class="field-error" id="${id}_error">${icon('alert')} ${esc(error)}</p>` : '';
   const described = error ? ` aria-describedby="${id}_error" aria-invalid="true"` : '';
   const number = `<span class="q-number">${index + 1}.</span> `;
-  const wrap = (inner) => `<div class="field${error ? ' has-error' : ''}">${inner}${errorHtml}</div>`;
+  // data-* attributes give public/app.js the rules it checks before sending (the server checks again).
+  const rules = ` data-type="${esc(field.type)}"${field.required ? ' data-required' : ''} data-label="${esc(field.label)}"`;
+  const wrap = (inner) => `<div class="field${error ? ' has-error' : ''}"${rules}>${inner}${errorHtml}</div>`;
 
   switch (field.type) {
     case 'radio':
@@ -533,7 +535,7 @@ export function publicFormPage({ survey, values = {}, errors = {}, respondentNam
   ${hasRequired ? `<p class="hint">${tHtml(i18n, 'respond.requiredHint', { mark: '<span class="req">*</span>' })}</p>` : ''}
 </div>
 ${errorSummary}
-<form method="post" action="/s/${esc(survey.publicToken)}" class="stack respondent-form">
+<form method="post" action="/s/${esc(survey.publicToken)}" class="stack respondent-form" data-limits="${esc(JSON.stringify(LIMITS))}">
   ${respondentNameField(respondentName, respondentNameError, i18n)}
   ${survey.fields.map((f, i) => renderField(f, values[f.id] ?? '', errors[f.id], i, i18n)).join('\n')}
   <button type="submit" class="big block">${icon('check')} ${esc(t('respond.submit'))}</button>

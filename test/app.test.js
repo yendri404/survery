@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 import { createApp } from '../src/app.js';
 import { loadConfig } from '../src/config.js';
 import { openDatabase } from '../src/db.js';
+import { LIMITS } from '../src/surveys.js';
 
 async function startApp(overrides = {}) {
   const db = openDatabase(':memory:');
@@ -959,5 +960,30 @@ describe('language', () => {
     assert.equal(es.copied, '¡Copiado!');
     assert.equal(es.resultsUpdated, 'Resultados actualizados');
     assert.equal(es['builder.addQuestion'], 'Agregar una pregunta');
+  });
+
+  test('browser scripts get the answer validation messages, and forms carry the limits and field rules', async () => {
+    const english = clientStrings((await new Client(app.base).request('/')).text);
+    assert.equal(english['validation.required'], 'This field is required.');
+    assert.equal(english['validation.tooLong'], 'At most {max} characters.');
+    assert.equal(english['respond.checkAnswers.other'], 'Please check these {count} answers:');
+    assert.equal(english['respond.yourName'], 'Your name');
+    const es = clientStrings((await spanish().request('/')).text);
+    assert.equal(es['validation.required'], 'Este campo es obligatorio.');
+    assert.equal(es['respond.checkAnswers.one'], 'Revisa esta respuesta:');
+
+    const c = spanish();
+    await c.register('client-rules@corp.local');
+    const id = await c.createSurvey([
+      { label: 'Age <years>', type: 'number', required: true },
+      { label: 'Tools', type: 'checkbox', options: ['A', 'B'] },
+    ]);
+    const form = (await new Client(app.base).request(`/s/${await c.shareToken(id)}`)).text;
+    const limits = JSON.parse(form.match(/<form method="post" action="\/s\/[^"]+" class="stack respondent-form" data-limits="([^"]+)"/)[1].replaceAll('&quot;', '"'));
+    assert.deepEqual(limits, LIMITS);
+    assert.match(form, /<div class="field" data-type="number" data-required data-label="Age &lt;years&gt;">/);
+    assert.match(form, /<div class="field" data-type="checkbox" data-label="Tools">/);
+    const editor = (await c.request('/surveys/new')).text;
+    assert.match(editor, /id="survey-form" data-limits="[^"]+"/);
   });
 });
