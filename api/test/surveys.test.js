@@ -136,10 +136,11 @@ test('csvCell escapes delimiters/quotes and neutralizes formulas but not negativ
   assert.equal(csvCell('a;b', ';'), '"a;b"');
 });
 
-test('toCsv writes header and rows in submission order', () => {
+test('toCsv writes header and rows in submission order, numbered per survey', () => {
+  // ids are app-wide; the first column is the per-survey number.
   const csv = toCsv(fields.slice(0, 1), [
-    { id: 2, submittedAt: '2026-01-02 00:00:00', respondentName: 'Bo B.', answers: { name0001: 'Bo' } },
-    { id: 1, submittedAt: '2026-01-01 00:00:00', respondentName: null, answers: { name0001: 'Ana' } },
+    { id: 12, number: 2, submittedAt: '2026-01-02 00:00:00', respondentName: 'Bo B.', answers: { name0001: 'Bo' } },
+    { id: 11, number: 1, submittedAt: '2026-01-01 00:00:00', respondentName: null, answers: { name0001: 'Ana' } },
   ]);
   assert.equal(csv, 'Response ID,Submitted at (UTC),Name,Name\r\n1,2026-01-01 00:00:00,,Ana\r\n2,2026-01-02 00:00:00,Bo B.,Bo\r\n');
 });
@@ -164,9 +165,9 @@ test('yes/no questions need no options and accept only yes or no', () => {
 test('yes/no answers are counted as two options and exported in the creator language', () => {
   const yesno = [{ id: 'yn000001', label: 'Remote?', type: 'yesno', required: false, options: [] }];
   const responses = [
-    { id: 1, submittedAt: '2026-01-01 00:00:00', respondentName: null, answers: { yn000001: 'yes' } },
-    { id: 2, submittedAt: '2026-01-02 00:00:00', respondentName: null, answers: { yn000001: 'no' } },
-    { id: 3, submittedAt: '2026-01-03 00:00:00', respondentName: null, answers: { yn000001: 'yes' } },
+    { id: 1, number: 1, submittedAt: '2026-01-01 00:00:00', respondentName: null, answers: { yn000001: 'yes' } },
+    { id: 2, number: 2, submittedAt: '2026-01-02 00:00:00', respondentName: null, answers: { yn000001: 'no' } },
+    { id: 3, number: 3, submittedAt: '2026-01-03 00:00:00', respondentName: null, answers: { yn000001: 'yes' } },
   ];
   const [summary] = summarize(yesno, responses, { t: createI18n('es').t });
   assert.equal(summary.answered, 3);

@@ -132,8 +132,8 @@
   "detail.columnName": "Name",
   "detail.columnActions": "Actions",
   "detail.anonymous": "Anonymous",
-  "detail.deleteResponseConfirm": "Delete response #{id}? This cannot be undone.",
-  "detail.deleteResponseLabel": "Delete response #{id}",
+  "detail.deleteResponseConfirm": "Delete response #{number}? This cannot be undone.",
+  "detail.deleteResponseLabel": "Delete response #{number}",
   "detail.deleteResponseTitle": "Delete response",
   "detail.noAnswers": "No answers yet. Share the link above to start collecting them.",
 

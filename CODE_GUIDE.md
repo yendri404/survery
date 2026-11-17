@@ -91,13 +91,13 @@ web/                         Browser client (port 3000), no dependencies, no bui
 |------|----:|-------|------------------|
 | `api/src/server.js` | 20 | Bootstrap | Start the process |
 | `api/src/config.js` | 30 | Bootstrap | Environment → config |
-| `api/src/db.js` | 95 | Bootstrap | Schema, migrations, connection |
+| `api/src/db.js` | 110 | Bootstrap | Schema, migrations, connection |
 | `api/src/app.js` | 130 | HTTP core | Request pipeline |
 | `api/src/http.js` | 50 | HTTP core | JSON in/out helpers |
 | `api/src/errors.js` | 100 | HTTP core | Error codes and shape |
 | `api/src/routes/*.js` | 20–190 | Routes | Endpoints |
 | `api/src/surveys.js` | 290 | Domain | Validation, summary, CSV |
-| `api/src/repo.js` | 115 | Infrastructure | SQL access |
+| `api/src/repo.js` | 125 | Infrastructure | SQL access |
 | `api/src/auth.js`, `rate-limit.js`, `live.js`, `qr.js`, `i18n.js` | 20–60 each | Infrastructure | Crypto, abuse protection, SSE, QR, texts |
 | `web/server/app.js` | 170 | Web server | Static + proxy |
 | `web/public/js/app.js` | 300 | App shell | Boot, router, theme, language, live regions |
@@ -258,12 +258,14 @@ erDiagram
         text fields_json "array of field definitions"
         int is_open "1 = accepting responses"
         text closes_on "YYYY-MM-DD, last day that accepts answers"
+        int response_seq "last response number handed out"
         text created_at "UTC"
         text updated_at "UTC"
     }
     responses {
         int id PK
         int survey_id FK
+        int number "1, 2, 3... per survey, never reused; unique per survey"
         text answers_json "{ fieldId: value }"
         text respondent_name "optional, NULL = anonymous"
         text device_hash "sha256 of X-Device-Id; unique per survey"
@@ -336,7 +338,7 @@ The database file (`data/surveys.db`) is the same one the single-server version 
 
 Pass `':memory:'` for a throwaway database (the tests do this).
 
-**Migrations:** after the base schema, `migrate()` runs the `MIGRATIONS` list inside one transaction: `respondent_name`, `closes_on` (existing surveys get creation date + 10 days, once), and `device_hash` with the unique index `(survey_id, device_hash)`. Each step checks the current shape first (`hasColumn`), so steps are idempotent and run on every boot. Add new steps at the end of the list; never edit a released step.
+**Migrations:** after the base schema, `migrate()` runs the `MIGRATIONS` list inside one transaction: `respondent_name`, `closes_on` (existing surveys get creation date + 10 days, once), `device_hash` with the unique index `(survey_id, device_hash)`, and per-survey response numbers: `surveys.response_seq` plus `responses.number` with the unique index `(survey_id, number)` (existing responses are numbered 1..n per survey by `id`, once, and each counter set to its survey's highest number). Each step checks the current shape first (`hasColumn`), so steps are idempotent and run on every boot. Add new steps at the end of the list; never edit a released step.
 
 ---
 
@@ -464,7 +466,7 @@ All routes need a Bearer token (`authed(...)` registers them with `{ auth: true 
 | Method | Path | Result |
 |--------|------|--------|
 | GET | `/public/surveys/:token` | Title, description, closing date, `status`, fields, `alreadyAnswered` for this `X-Device-Id` |
-| POST | `/public/surveys/:token/responses` | `201 { id }` (plus `deviceId` when none was sent) · 400 · 403 · 409 · 422 · 429 |
+| POST | `/public/surveys/:token/responses` | `201 { id, number }` (plus `deviceId` when none was sent) · 400 · 403 · 409 · 422 · 429 |
 
 **Order of checks on submit** (cheapest and most decisive first):
 
@@ -519,7 +521,7 @@ The heart of the API. It has no database, no HTTP and no JSON output, which is w
 | `fieldOptions(field)` | → `string[]` | `YES_NO` for `yesno`, otherwise the creator's options |
 | `summarize(fields, responses, { t })` | → per choice field (yes/no included): `answered`, counts per option | Feeds `/summary`, which adds percentages |
 | `csvCell(value, delimiter)` | → escaped cell | Quotes when needed. Prefixes `'` to values starting with `= + - @` (formula injection), except plain numbers like `-5` |
-| `toCsv(fields, responses, delimiter, { t })` | → full CSV text | Header (fixed columns in the requested language) + rows in submission order, `\r\n` line endings |
+| `toCsv(fields, responses, delimiter, { t })` | → full CSV text | Header (fixed columns in the requested language) + rows in submission order, first column = per-survey `number`, `\r\n` line endings |
 
 **Validation per type** (mirrored in `web/public/js/validation.js`)
 

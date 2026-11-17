@@ -18,6 +18,7 @@ function hydrateSurvey(row) {
 function hydrateResponse(row) {
   return {
     id: row.id,
+    number: row.number,
     answers: JSON.parse(row.answers_json),
     respondentName: row.respondent_name ?? null,
     submittedAt: row.submitted_at,
@@ -90,16 +91,22 @@ export function createRepo(db) {
 
     // Responses
     /**
-     * Stores a response. Returns its id, or null when this device already answered the survey
-     * (enforced by a unique index, so concurrent submissions cannot both succeed).
+     * Stores a response with the survey's next response number. Returns { id, number }, or null when
+     * this device already answered the survey (enforced by a unique index, so concurrent submissions
+     * cannot both succeed). The counter and the insert share one transaction, so a rejected insert
+     * rolls back and uses up no number.
      */
     addResponse(surveyId, answers, respondentName = null, deviceHash = null) {
+      db.exec('BEGIN IMMEDIATE');
       try {
-        const r = q('INSERT INTO responses (survey_id, answers_json, respondent_name, device_hash) VALUES (?, ?, ?, ?)')
-          .run(surveyId, JSON.stringify(answers), respondentName || null, deviceHash);
-        return Number(r.lastInsertRowid);
+        const { response_seq: number } = q('UPDATE surveys SET response_seq = response_seq + 1 WHERE id = ? RETURNING response_seq').get(surveyId);
+        const r = q('INSERT INTO responses (survey_id, number, answers_json, respondent_name, device_hash) VALUES (?, ?, ?, ?, ?)')
+          .run(surveyId, number, JSON.stringify(answers), respondentName || null, deviceHash);
+        db.exec('COMMIT');
+        return { id: Number(r.lastInsertRowid), number };
       } catch (err) {
-        if (deviceHash && /UNIQUE constraint failed/.test(err.message)) return null;
+        db.exec('ROLLBACK');
+        if (deviceHash && /UNIQUE constraint failed: responses\.survey_id, responses\.device_hash/.test(err.message)) return null;
         throw err;
       }
     },

@@ -10,7 +10,7 @@ const QR_LABEL = 'QR code that opens this survey';
 
 const percent = (count, answered) => (answered ? Math.round((count / answered) * 100) : 0);
 
-const responseJson = (r) => ({ id: r.id, submittedAt: isoUtc(r.submittedAt), respondentName: r.respondentName, answers: r.answers });
+const responseJson = (r) => ({ id: r.id, number: r.number, submittedAt: isoUtc(r.submittedAt), respondentName: r.respondentName, answers: r.answers });
 
 /** Creator endpoints: every one needs a Bearer token and only sees the creator's own surveys. */
 export function registerSurveyRoutes({ route, repo, config, today, live }) {

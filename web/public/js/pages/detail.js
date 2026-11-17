@@ -70,7 +70,7 @@ export async function detailPage(app, { params, signal }) {
     kpiTiles(sum, app.i18n),
     summaryCharts(sum, app.i18n),
     responsesTable(s.fields, list, app.i18n, (response) => {
-      if (!window.confirm(t('detail.deleteResponseConfirm', { id: response.id }))) return;
+      if (!window.confirm(t('detail.deleteResponseConfirm', { number: response.number }))) return;
       act(async () => {
         await app.api.del(`${path}/responses/${response.id}`);
         await app.navigate(`${path}?msg=response-deleted`);

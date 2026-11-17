@@ -95,11 +95,11 @@ export function registerPublicRoutes({ route, repo, config, today, live }) {
     // Without X-Device-Id the server picks an id and returns it, so the client can keep it.
     const deviceId = existingDeviceId ?? newToken();
     // The unique index decides when two submissions from one device race each other.
-    const responseId = repo.addResponse(survey.id, answers, respondent.name, hashToken(deviceId));
-    if (responseId === null) throw new ApiError(409, 'respond.alreadyAnswered');
+    const stored = repo.addResponse(survey.id, answers, respondent.name, hashToken(deviceId)); // { id, number }
+    if (stored === null) throw new ApiError(409, 'respond.alreadyAnswered');
 
     submissions.hit(limitKey);
     live.surveyChanged(survey);
-    sendJson(ctx.res, 201, existingDeviceId ? { id: responseId } : { id: responseId, deviceId });
+    sendJson(ctx.res, 201, existingDeviceId ? stored : { ...stored, deviceId });
   });
 }

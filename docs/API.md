@@ -295,18 +295,23 @@ Deletes the survey and all its responses.
 
 ### `GET /surveys/:id/responses`
 
-Newest first. `answers` maps question id to text, or to a list of options for `checkbox` (in the survey's option order).
+Newest first. `id` identifies the response across the whole API (use it to delete); `number` is its position in this
+survey: 1, 2, 3... in arrival order, never reused after a deletion (the next response gets the next number), so a number
+always names the same response, also in CSVs already exported. Show `number` to people.
+`answers` maps question id to text, or to a list of options for `checkbox` (in the survey's option order).
 Unanswered questions are `""` (or `[]`). `respondentName` is `null` for anonymous answers. Yes/no answers are `"yes"` / `"no"`.
 
 ```json
 200
 { "responses": [
-  { "id": 12, "submittedAt": "2026-11-17T10:05:00Z", "respondentName": "Marta Gómez",
+  { "id": 12, "number": 3, "submittedAt": "2026-11-17T10:05:00Z", "respondentName": "Marta Gómez",
     "answers": { "3f9a0c1b2d4e": "HR", "8b1c2d3e4f50": "yes" } }
 ] }
 ```
 
 ### `DELETE /surveys/:id/responses/:responseId`
+
+`:responseId` is the response `id`, not its `number`.
 
 ```
 204
@@ -359,9 +364,10 @@ Content-Type: text/csv; charset=utf-8
 Content-Disposition: attachment; filename="sharevy-survey-7-responses.csv"
 
 ﻿Response ID,Submitted at (UTC),Name,Department,Work remotely?\r\n
-12,2026-11-17 10:05:00,Marta Gómez,HR,Yes\r\n
+3,2026-11-17 10:05:00,Marta Gómez,HR,Yes\r\n
 ```
 
+The first column is the response `number` within the survey (not the app-wide `id`).
 UTF-8 with a BOM (so Excel reads accents), `\r\n` line ends, oldest response first, checkbox answers joined
 with `", "`. Cells starting with `=`, `+`, `-`, `@`, tab or carriage return get a leading `'` (unless they are
 plain numbers) so spreadsheets do not run them as formulas. Unknown values answer
@@ -430,9 +436,12 @@ A malformed value answers `400 invalid_device_id`. A new id counts as a new devi
 `checkbox`. Unknown question ids are ignored. Yes/no answers must be exactly `yes` or `no`.
 
 ```json
-201 { "id": 12 }
-201 { "id": 12, "deviceId": "Hq0RkT2x9VbYc1LmNoPq_w" }
+201 { "id": 12, "number": 3 }
+201 { "id": 12, "number": 3, "deviceId": "Hq0RkT2x9VbYc1LmNoPq_w" }
 ```
+
+`number` is the response's number within this survey (see `GET /surveys/:id/responses`). A rejected submission uses
+up no number.
 
 `deviceId` comes back only when no `X-Device-Id` was sent: the server picked one, so keep it and send it next time.
 A device id the client sent is never echoed.

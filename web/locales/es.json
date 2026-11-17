@@ -132,8 +132,8 @@
   "detail.columnName": "Nombre",
   "detail.columnActions": "Acciones",
   "detail.anonymous": "Anónima",
-  "detail.deleteResponseConfirm": "¿Eliminar la respuesta #{id}? Esta acción no se puede deshacer.",
-  "detail.deleteResponseLabel": "Eliminar la respuesta #{id}",
+  "detail.deleteResponseConfirm": "¿Eliminar la respuesta #{number}? Esta acción no se puede deshacer.",
+  "detail.deleteResponseLabel": "Eliminar la respuesta #{number}",
   "detail.deleteResponseTitle": "Eliminar respuesta",
   "detail.noAnswers": "Todavía no hay respuestas. Comparte el enlace de arriba para empezar a recibirlas.",
 

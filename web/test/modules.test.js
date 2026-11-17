@@ -189,3 +189,49 @@ describe('charts', () => {
     assert.equal(barWidth(0, 0), 0);
   });
 });
+
+describe('results table', () => {
+  // Just enough DOM for dom.js h()/s(): elements with attributes, children and listeners.
+  class FakeNode {
+    constructor(tag) { this.tag = tag; this.attrs = {}; this.children = []; }
+    setAttribute(name, value) { this.attrs[name] = value; }
+    addEventListener() {}
+    append(child) { this.children.push(child); }
+    get textContent() { return this.children.map((c) => (c instanceof FakeNode ? c.textContent : c.text)).join(''); }
+  }
+  class FakeSvg extends FakeNode {}
+  const findAll = (node, pred, out = []) => {
+    if (node instanceof FakeNode) {
+      if (pred(node)) out.push(node);
+      for (const child of node.children) findAll(child, pred, out);
+    }
+    return out;
+  };
+
+  test('rows show the per-survey number, not the app-wide id', async (t) => {
+    const saved = { Node: globalThis.Node, SVGElement: globalThis.SVGElement, document: globalThis.document };
+    Object.assign(globalThis, {
+      Node: FakeNode,
+      SVGElement: FakeSvg,
+      document: {
+        createElement: (tag) => new FakeNode(tag),
+        createElementNS: (_ns, tag) => new FakeSvg(tag),
+        createTextNode: (text) => ({ text }),
+      },
+    });
+    t.after(() => Object.assign(globalThis, saved));
+    const { responsesTable } = await import('../public/js/components/results.js');
+    const { t: tr } = createI18n('en', en, en);
+    const fields = [{ id: 'q1', label: 'Q', type: 'text' }];
+    const responses = [
+      { id: 41, number: 2, submittedAt: '2026-11-02T10:00:00Z', respondentName: null, answers: { q1: 'b' } },
+      { id: 17, number: 1, submittedAt: '2026-11-01T10:00:00Z', respondentName: 'Ana', answers: { q1: 'a' } },
+    ];
+    const deleted = [];
+    const [, wrap] = responsesTable(fields, responses, { t: tr }, (r) => deleted.push(r));
+    const firstCells = findAll(wrap, (n) => n.tag === 'tr').slice(1).map((row) => row.children[0].textContent);
+    assert.deepEqual(firstCells, ['#2', '#1']);
+    const labels = findAll(wrap, (n) => n.tag === 'button').map((b) => b.attrs['aria-label']);
+    assert.deepEqual(labels, ['Delete response #2', 'Delete response #1']);
+  });
+});

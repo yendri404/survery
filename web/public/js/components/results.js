@@ -89,13 +89,13 @@ export function responsesTable(fields, responses, { t }, onDelete) {
     return text || h('span', { class: 'muted' }, '-');
   };
   const rows = responses.map((r) => h('tr', {},
-    h('td', { 'data-label': t('detail.columnResponse') }, `#${r.id}`),
+    h('td', { 'data-label': t('detail.columnResponse') }, `#${r.number}`),
     h('td', { 'data-label': t('detail.columnSent'), class: 'nowrap' }, formatTimestamp(r.submittedAt)),
     h('td', { 'data-label': t('detail.columnName') }, r.respondentName ? r.respondentName : h('span', { class: 'muted' }, t('detail.anonymous'))),
     fields.map((f) => h('td', { 'data-label': f.label }, answerText(f, r.answers[f.id]))),
     h('td', { class: 'row-actions' },
       h('form', { onsubmit: (event) => { event.preventDefault(); onDelete(r); } },
-        h('button', { type: 'submit', class: 'icon-button danger', 'aria-label': t('detail.deleteResponseLabel', { id: r.id }), title: t('detail.deleteResponseTitle') }, icon('trash'))))));
+        h('button', { type: 'submit', class: 'icon-button danger', 'aria-label': t('detail.deleteResponseLabel', { number: r.number }), title: t('detail.deleteResponseTitle') }, icon('trash'))))));
   return [
     h('h3', {}, t('detail.allAnswers')),
     h('div', { class: 'table-wrap' }, h('table', { class: 'responsive' },

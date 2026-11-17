@@ -75,6 +75,42 @@ test('openDatabase adds a per-device column with a unique index per survey', () 
   });
 });
 
+test('openDatabase numbers existing responses per survey in arrival order, once', () => {
+  withOldDatabase((path) => {
+    const old = new DatabaseSync(path);
+    old.exec(`
+      INSERT INTO surveys (owner_id, public_token, title, fields_json) VALUES (1, 'tok2', 'Second survey', '[]');
+      INSERT INTO responses (survey_id, answers_json) VALUES (2, '{"b":"1"}'), (1, '{"a":"2"}'), (2, '{"b":"2"}'), (1, '{"a":"3"}');
+      DELETE FROM responses WHERE answers_json = '{"a":"2"}';
+      INSERT INTO responses (survey_id, answers_json) VALUES (1, '{"a":"4"}');
+    `);
+    const before = old.prepare('SELECT id, survey_id, answers_json, submitted_at FROM responses ORDER BY id').all();
+    old.close();
+
+    const db = openDatabase(path);
+    assert.ok(columns(db, 'responses').includes('number'));
+    assert.ok(columns(db, 'surveys').includes('response_seq'));
+    const rows = () => db.prepare('SELECT id, survey_id, answers_json, submitted_at, number FROM responses ORDER BY id').all()
+      .map((r) => ({ ...r }));
+    assert.deepEqual(rows().map((r) => [r.answers_json, r.number]), [
+      ['{"a":"1"}', 1], ['{"b":"1"}', 1], ['{"b":"2"}', 2], ['{"a":"3"}', 2], ['{"a":"4"}', 3],
+    ]);
+    assert.deepEqual(rows().map(({ number, ...rest }) => rest), before.map((r) => ({ ...r })), 'data otherwise unchanged');
+    assert.deepEqual(db.prepare('SELECT id, response_seq FROM surveys ORDER BY id').all().map((r) => [r.id, r.response_seq]), [[1, 3], [2, 2]]);
+    assert.throws(() => db.prepare("INSERT INTO responses (survey_id, answers_json, number) VALUES (1, '{}', 3)").run(), /UNIQUE/);
+
+    // A later boot must not renumber, even after a gap left by a deletion.
+    db.prepare('DELETE FROM responses WHERE number = 1 AND survey_id = 1').run();
+    const kept = rows();
+    db.close();
+    const again = openDatabase(path);
+    assert.deepEqual(again.prepare('SELECT id, survey_id, answers_json, submitted_at, number FROM responses ORDER BY id').all()
+      .map((r) => ({ ...r })), kept);
+    assert.deepEqual(again.prepare('SELECT response_seq FROM surveys ORDER BY id').all().map((r) => r.response_seq), [3, 2]);
+    again.close();
+  });
+});
+
 test('the default database path is data/surveys.db at the repository root, not the cwd', async () => {
   const { loadConfig, REPO_ROOT } = await import('../src/config.js');
   assert.equal(loadConfig({}).dbPath, join(REPO_ROOT, 'data', 'surveys.db'));

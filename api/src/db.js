@@ -71,6 +71,22 @@ const MIGRATIONS = [
     db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_responses_survey_device
              ON responses(survey_id, device_hash) WHERE device_hash IS NOT NULL`);
   },
+  // Responses are numbered 1, 2, 3... per survey (`number`), in arrival order; `id` stays app-wide.
+  // surveys.response_seq is the last number handed out, so a deleted response's number is never
+  // reused. Existing responses are numbered only once, when the column is added (ordered by id).
+  (db) => {
+    if (!hasColumn(db, 'surveys', 'response_seq')) {
+      db.exec('ALTER TABLE surveys ADD COLUMN response_seq INTEGER NOT NULL DEFAULT 0');
+    }
+    if (!hasColumn(db, 'responses', 'number')) {
+      db.exec('ALTER TABLE responses ADD COLUMN number INTEGER');
+      db.exec(`UPDATE responses SET number = (
+                 SELECT ranked.n FROM (SELECT id, ROW_NUMBER() OVER (PARTITION BY survey_id ORDER BY id) AS n FROM responses) AS ranked
+                 WHERE ranked.id = responses.id)`);
+      db.exec(`UPDATE surveys SET response_seq = COALESCE((SELECT MAX(r.number) FROM responses r WHERE r.survey_id = surveys.id), 0)`);
+    }
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_responses_survey_number ON responses(survey_id, number)');
+  },
 ];
 
 function migrate(db) {

@@ -288,6 +288,6 @@ export function toCsv(fields, responses, delimiter = ',', { t = englishT } = {})
   const rows = responses
     .slice()
     .sort((a, b) => a.id - b.id)
-    .map((r) => [r.id, r.submittedAt, r.respondentName ?? '', ...fields.map((f) => answerText(f, r.answers[f.id], t))]);
+    .map((r) => [r.number, r.submittedAt, r.respondentName ?? '', ...fields.map((f) => answerText(f, r.answers[f.id], t))]);
   return [header, ...rows].map((row) => row.map((c) => csvCell(c, delimiter)).join(delimiter)).join('\r\n') + '\r\n';
 }

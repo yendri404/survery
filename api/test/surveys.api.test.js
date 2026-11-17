@@ -162,6 +162,68 @@ describe('creator surveys', () => {
     assert.deepEqual((await c.request(`/surveys/${survey.id}/responses`)).json.responses.map((r) => r.id), [list[0].id]);
   });
 
+  test('responses are numbered 1, 2, 3... per survey, not across the whole app', async () => {
+    const c = await creator(app.base, 'numbers@corp.local');
+    const a = await c.createSurvey([{ label: 'Q', type: 'text' }], 'A');
+    const b = await c.createSurvey([{ label: 'Q', type: 'text' }], 'B');
+    const sent = [];
+    for (const survey of [a, b, a, b, a]) {
+      const res = await answer(app.base, survey.publicToken);
+      assert.equal(res.status, 201, res.text);
+      sent.push([survey.title, res.json.number]);
+    }
+    assert.deepEqual(sent, [['A', 1], ['B', 1], ['A', 2], ['B', 2], ['A', 3]]);
+    const list = async (survey) => (await c.request(`/surveys/${survey.id}/responses`)).json.responses;
+    assert.deepEqual((await list(a)).map((r) => r.number), [3, 2, 1]);
+    assert.deepEqual((await list(b)).map((r) => r.number), [2, 1]);
+    // The global id stays the identifier: it differs from the number and is unique app-wide.
+    const ids = [...(await list(a)), ...(await list(b))].map((r) => r.id);
+    assert.equal(new Set(ids).size, 5);
+  });
+
+  test('a deleted response number is never reused', async () => {
+    const c = await creator(app.base, 'reuse@corp.local');
+    const survey = await c.createSurvey([{ label: 'Q', type: 'text' }]);
+    for (let i = 0; i < 3; i++) await answer(app.base, survey.publicToken);
+    const [third] = (await c.request(`/surveys/${survey.id}/responses`)).json.responses;
+    assert.equal(third.number, 3);
+    assert.equal((await c.request(`/surveys/${survey.id}/responses/${third.id}`, { method: 'DELETE' })).status, 204);
+    assert.equal((await answer(app.base, survey.publicToken)).json.number, 4);
+    assert.deepEqual((await c.request(`/surveys/${survey.id}/responses`)).json.responses.map((r) => r.number), [4, 2, 1]);
+  });
+
+  test('a rejected submission does not use up a number', async () => {
+    const c = await creator(app.base, 'rejected@corp.local');
+    const survey = await c.createSurvey([{ label: 'Q', type: 'text', required: true }]);
+    const [field] = survey.fields;
+    const respondent = new Client(app.base, { deviceId: newDeviceId() });
+    assert.equal((await answer(app.base, survey.publicToken, { answers: { [field.id]: 'one' } }, respondent)).json.number, 1);
+    assert.equal((await answer(app.base, survey.publicToken, { answers: { [field.id]: 'again' } }, respondent)).status, 409);
+    assert.equal((await answer(app.base, survey.publicToken, { answers: {} })).status, 422);
+    assert.equal((await answer(app.base, survey.publicToken, { answers: { [field.id]: 'two' } })).json.number, 2);
+  });
+
+  test('concurrent submissions from different devices get distinct consecutive numbers', async () => {
+    const c = await creator(app.base, 'concurrent@corp.local');
+    const survey = await c.createSurvey([{ label: 'Q', type: 'text' }]);
+    const results = await Promise.all(Array.from({ length: 12 }, () => answer(app.base, survey.publicToken)));
+    assert.deepEqual(results.map((r) => r.status), Array(12).fill(201));
+    assert.deepEqual(results.map((r) => r.json.number).sort((x, y) => x - y), Array.from({ length: 12 }, (_, i) => i + 1));
+  });
+
+  test('the CSV first column holds the per-survey response numbers', async () => {
+    const c = await creator(app.base, 'csvnumbers@corp.local');
+    const other = await c.createSurvey([{ label: 'Q', type: 'text' }], 'Other');
+    const survey = await c.createSurvey([{ label: 'Q', type: 'text' }], 'Main');
+    const [field] = survey.fields;
+    await answer(app.base, other.publicToken);
+    await answer(app.base, survey.publicToken, { answers: { [field.id]: 'first' } });
+    await answer(app.base, other.publicToken);
+    await answer(app.base, survey.publicToken, { answers: { [field.id]: 'second' } });
+    const lines = (await c.request(`/surveys/${survey.id}/export.csv`, { raw: true })).text.slice(1).trim().split('\r\n');
+    assert.deepEqual(lines.slice(1).map((l) => [l.split(',')[0], l.split(',').at(-1)]), [['1', 'first'], ['2', 'second']]);
+  });
+
   test('CSV export: BOM, translated headers and yes/no, delimiter, formula neutralization', async () => {
     const c = await creator(app.base, 'csv@corp.local');
     const survey = await c.createSurvey([...FIELDS, { label: 'Remote?', type: 'yesno' }]);
