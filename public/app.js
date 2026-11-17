@@ -148,6 +148,63 @@ if (window.EventSource) {
   }
 }
 
+/*
+ * Number questions accept only a number: digits, one decimal point and a minus sign at the start.
+ * Letters, "e", "+" and a second point are blocked while typing, pasting or dropping; a comma is
+ * turned into a point ("4,5" -> "4.5"). The field becomes a text input with a decimal keyboard
+ * (inputmode="decimal", set by the server), because a number input hides the typed text and the
+ * cursor position from scripts. Up/Down arrows still add or subtract 1. Without JavaScript the
+ * field stays a native number input, and the server always validates the value.
+ */
+{
+  const NUMBER_TEXT = /^-?\d*\.?\d*$/;
+  const normalize = (text) => text.replace(/,/g, '.').replace(/\s+/g, '');
+
+  for (const input of document.querySelectorAll('.respondent-form input[type="number"]')) {
+    input.type = 'text';
+    if (!input.inputMode) input.inputMode = 'decimal';
+    let lastGood = NUMBER_TEXT.test(input.value) ? input.value : '';
+
+    input.addEventListener('beforeinput', (event) => {
+      if (!event.inputType.startsWith('insert') || event.inputType === 'insertCompositionText') return;
+      const data = event.data ?? event.dataTransfer?.getData('text/plain') ?? '';
+      const text = normalize(data);
+      const start = input.selectionStart ?? input.value.length;
+      const end = input.selectionEnd ?? start;
+      const next = input.value.slice(0, start) + text + input.value.slice(end);
+      if (!NUMBER_TEXT.test(next)) {
+        event.preventDefault();
+      } else if (text !== data) {
+        // Insert the cleaned text ourselves (comma -> point) and report it like a normal edit.
+        event.preventDefault();
+        input.setRangeText(text, start, end, 'end');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
+
+    // Safety net for what beforeinput cannot cancel (IME composition, autofill, old browsers).
+    input.addEventListener('input', () => {
+      const value = normalize(input.value);
+      if (NUMBER_TEXT.test(value)) {
+        if (value !== input.value) input.value = value;
+        lastGood = value;
+      } else {
+        input.value = lastGood;
+      }
+    });
+
+    input.addEventListener('keydown', (event) => {
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+      const current = Number(input.value || 0);
+      if (!Number.isFinite(current)) return;
+      event.preventDefault();
+      // Rounding keeps 0.1 + 1 from showing as 1.1000000000000001.
+      input.value = String(Number((current + (event.key === 'ArrowUp' ? 1 : -1)).toFixed(10)));
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
+}
+
 // Open the calendar when tapping anywhere on a date field, not only on its small icon.
 document.addEventListener('click', (event) => {
   const input = event.target.closest?.('input[type="date"]');

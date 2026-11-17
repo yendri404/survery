@@ -444,7 +444,7 @@ The heart of the app. It has no database, no HTTP and no HTML, which is why it c
 |------|----------------|
 | `text` | Up to 1 000 characters |
 | `textarea` | Up to 10 000 characters |
-| `number` | Anything `Number()` parses as finite |
+| `number` | Anything `Number()` parses as finite. In the browser, `public/app.js` also blocks typing or pasting anything else (see below) |
 | `email` | `x@y.z` shape, up to 254 characters |
 | `date` | `YYYY-MM-DD` that is a real calendar date (`2026-02-30` is rejected) |
 | `select`, `radio` | Exactly one of the options |
@@ -617,6 +617,12 @@ The SVG is `aria-hidden`; the legend and bar labels carry every number as text. 
 | Live updates | `.live-updated *` turns entrance animations off, so a swapped section only gets the highlight ring |
 | Theme switch | Short color fade on the main surfaces only (`body`, top bar, panels, cards, inputs), never on `*` |
 | Reduced motion | `prefers-reduced-motion: reduce` sets every animation and transition to ~0 and disables view transitions |
+
+**Respondent form in the browser (`public/app.js`):**
+
+| Behavior | Detail |
+|----------|--------|
+| Number questions | Only digits, one decimal point and a leading `-` can be typed, pasted or dropped (`beforeinput`, with an `input` safety net). A comma becomes a point (`4,5` → `4.5`). The script turns the field into a text input with `inputmode="decimal"` (number keyboard on phones), because a native number input hides the typed text and cursor from scripts; Up/Down arrows still add or subtract 1. Without JavaScript it stays `type="number"` |
 
 **No inline JS or CSS:** the CSP forbids it, so behaviors like "copy link" or "confirm delete" are declared with `data-copy` / `data-confirm` attributes and handled by `public/app.js`.
 
