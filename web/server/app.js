@@ -3,6 +3,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { createServer, request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { extname, resolve, sep } from 'node:path';
+import { pipeline } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
 /** The web/ folder: index.html, public/ (served at /public/) and locales/ (served at /locales/). */
@@ -142,7 +143,9 @@ export function createWebServer({ apiUrl = 'http://127.0.0.1:3001', root = WEB_R
       res.writeHead(apiRes.statusCode, withoutHopByHop(apiRes.headers));
       res.flushHeaders();
       res.socket?.setNoDelay(true); // events go out as soon as they are written
-      apiRes.pipe(res);
+      // pipeline (not pipe): when the API drops the answer mid-way (restart, crash), the browser's
+      // response is destroyed too, so an event stream ends and the client reconnects.
+      pipeline(apiRes, res, () => {});
     });
     upstream.on('error', () => {
       if (res.headersSent) return res.destroy();

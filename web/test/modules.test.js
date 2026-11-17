@@ -7,7 +7,7 @@ import { ERROR_KEYS, errorMessage } from '../public/js/errors.js';
 import { addDays, formatTimestamp, safeNext } from '../public/js/format.js';
 import { SUPPORTED_LANGUAGES, createI18n, pickLanguage } from '../public/js/i18n.js';
 import { NUMBER_TEXT, normalizeNumberText, numberInsert, stepNumber } from '../public/js/number-input.js';
-import { backoffDelay, createSseParser } from '../public/js/sse.js';
+import { backoffDelay, createSseParser, followEvents } from '../public/js/sse.js';
 import { checkAnswer, checkRespondentName, isValidDate } from '../public/js/validation.js';
 
 const locale = (lang) => JSON.parse(readFileSync(new URL(`../locales/${lang}.json`, import.meta.url), 'utf8'));
@@ -159,6 +159,40 @@ describe('server-sent events', () => {
     parser.push('data: a\ndata: b\n\n');
     assert.deepEqual(events, [{ event: 'change', data: '17' }, { event: 'message', data: 'a\nb' }]);
     assert.equal(parser.retry, 3000);
+  });
+
+  test('followEvents reconnects after the stream ends or fails, and refreshes once reconnected', async () => {
+    const encoder = new TextEncoder();
+    // Each body sends a short retry, one change event, then ends (as when the proxy drops the stream).
+    const endingBody = () => new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode('retry: 5\n\nevent: change\ndata: 1\n\n'));
+        controller.close();
+      },
+    });
+    const controller = new AbortController();
+    const calls = [];
+    let changes = 0;
+    const fourthCall = new Promise((resolve) => {
+      followEvents({
+        url: '/api/v1/surveys/1/events',
+        signal: controller.signal,
+        onChange: () => { changes += 1; },
+        fetchImpl: async () => {
+          calls.push(Date.now());
+          if (calls.length === 4) resolve();
+          if (calls.length === 2) throw new TypeError('network error');
+          return { status: 200, ok: true, body: endingBody() };
+        },
+      });
+    });
+    let timer;
+    await Promise.race([fourthCall, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`only ${calls.length} connections`)), 3000); })]);
+    clearTimeout(timer);
+    controller.abort();
+    assert.equal(calls.length, 4);
+    // Connection 1: its event. Connection 3: the catch-up refresh plus its event.
+    assert.ok(changes >= 3, `changes: ${changes}`);
   });
 
   test('reconnection waits longer after each failure, up to a ceiling', () => {

@@ -30,6 +30,13 @@ function stubApi() {
         streams.push(res);
         return undefined;
       }
+      if (req.url === '/api/v1/surveys/9/events') {
+        // The API drops the stream after one event (restart, crash): the socket goes away mid-body.
+        res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.write('event: change\ndata: 1\n\n');
+        setTimeout(() => res.destroy(), 50);
+        return undefined;
+      }
       res.writeHead(201, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ echo: body }));
     });
@@ -191,6 +198,24 @@ describe('web server', () => {
     api.streams.at(-1).write('event: change\ndata: 1\n\n');
     while (!text.includes('event: change')) text += decoder.decode((await reader.read()).value);
     controller.abort();
+  });
+
+  test('a stream the API drops mid-way ends for the browser too, so the client can reconnect', async () => {
+    const res = await fetch(`${base}/api/v1/surveys/9/events`);
+    assert.equal(res.status, 200);
+    const reader = res.body.getReader();
+    let timer;
+    const ended = (async () => {
+      try {
+        for (;;) if ((await reader.read()).done) return 'ended';
+      } catch {
+        return 'ended'; // an aborted body also ends the read loop
+      }
+    })();
+    const outcome = await Promise.race([ended, new Promise((resolve) => { timer = setTimeout(() => resolve('still open'), 2000); })]);
+    clearTimeout(timer);
+    if (outcome !== 'ended') await reader.cancel();
+    assert.equal(outcome, 'ended');
   });
 
   test('an unreachable API answers 502 with a JSON error the client can translate', async () => {
