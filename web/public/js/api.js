@@ -18,7 +18,7 @@ export class ApiError extends Error {
 }
 
 /** File name from `Content-Disposition: attachment; filename="x.csv"`. */
-export const attachmentName = (header, fallback) => /filename="([^"]+)"/.exec(header ?? '')?.[1] ?? fallback;
+const attachmentName = (header, fallback) => /filename="([^"]+)"/.exec(header ?? '')?.[1] ?? fallback;
 
 /**
  * `getToken()` gives the current token (or null). `onUnauthorized()` runs when the API rejects

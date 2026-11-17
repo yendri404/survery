@@ -45,7 +45,7 @@ export async function detailPage(app, { params, signal }) {
   // The latest survey state: live updates replace it, so actions never use a stale one.
   let current = survey;
 
-  /** Runs an action; any failure shows the error page, like a failed form post did. */
+  /** Runs an action (download, open/close, delete); a failure replaces the page with an error panel. */
   const act = async (action) => {
     try {
       await action();

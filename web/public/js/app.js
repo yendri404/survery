@@ -1,4 +1,4 @@
-import { ApiError, createApi } from './api.js';
+import { API_BASE, ApiError, createApi } from './api.js';
 import { errorPanel, flash, languageMenu, themeToggle, topbar, APP_NAME } from './components/layout.js';
 import { h } from './dom.js';
 import { errorMessage } from './errors.js';
@@ -105,7 +105,7 @@ export async function startApp() {
         // Network hiccup: the next event or reconnection triggers another refresh.
       }
     });
-    followEvents({ url: `/api/v1${url}`, headers: app.api.authHeaders, onChange: refresh, onUnauthorized: () => app.api.get('/me').catch(() => {}), signal });
+    followEvents({ url: `${API_BASE}${url}`, headers: app.api.authHeaders, onChange: refresh, onUnauthorized: () => app.api.get('/me').catch(() => {}), signal });
   };
 
   // ---------- Theme ----------
@@ -261,7 +261,7 @@ export async function startApp() {
     }
   });
 
-  /** Shows the error page for a failed action (like a failed form post did). */
+  /** Replaces the page with an error panel for an action that failed (not used for form submissions). */
   app.showError = (err, respondent = document.body.classList.contains('respondent')) => {
     const status = err instanceof ApiError && err.status ? err.status : 500;
     if (status === 401) return; // onUnauthorized already went to the login page

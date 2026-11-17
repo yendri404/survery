@@ -40,7 +40,7 @@ const CONTENT_TYPES = {
 };
 
 /*
- * Same policy as the single-server version: no inline script or style. `blob:` images are the QR
+ * No inline script or style. `blob:` images are the QR
  * code, which the page fetches with the Bearer token; `connect-src 'self'` covers the API, which
  * this server forwards under /api, so the browser talks to one origin only.
  */

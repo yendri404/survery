@@ -3,7 +3,7 @@ import { NUMBER_TEXT, normalizeNumberText, numberInsert, stepNumber } from '../n
 import { icon } from './icons.js';
 
 /*
- * One question of the respondent form, with the same markup as the single-server version:
+ * One question of the respondent form, in the markup style.css expects:
  * <div class="field" data-type …> with a label (or fieldset + legend for choices) and the control
  * whose id is "fld_<question id>". Error messages go in a .field-error paragraph under it.
  */

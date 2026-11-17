@@ -58,7 +58,7 @@ describe('i18n', () => {
     assert.equal(i18n.t('a'), 'Hola {name}');
   });
 
-  test('dates read like the single-server version', () => {
+  test('dates read as short month names in each language', () => {
     assert.equal(createI18n('en', en).formatDate('2026-11-26'), 'Nov 26, 2026');
     assert.equal(createI18n('es', es).formatDate('2026-11-26'), '26 nov 2026');
     assert.equal(createI18n('en', en).formatDate(''), '');
@@ -66,7 +66,7 @@ describe('i18n', () => {
 });
 
 describe('format', () => {
-  test('timestamps show as "YYYY-MM-DD HH:MM:SS" (UTC), like before', () => {
+  test('timestamps show as "YYYY-MM-DD HH:MM:SS" (UTC)', () => {
     assert.equal(formatTimestamp('2026-11-17T10:05:00Z'), '2026-11-17 10:05:00');
     assert.equal(formatTimestamp(''), '');
   });

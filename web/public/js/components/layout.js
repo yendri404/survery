@@ -3,7 +3,7 @@ import { icon } from './icons.js';
 
 /*
  * Presentational building blocks shared by every page: pure functions from data to DOM, with the
- * same markup (classes, ids, roles) as the single-server version, so style.css applies unchanged.
+ * classes, ids and roles that style.css styles.
  * Event handlers come in as arguments; these functions never fetch or navigate on their own.
  */
 

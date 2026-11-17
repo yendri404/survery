@@ -1,7 +1,6 @@
 /*
- * Chart math for the survey summary (the API counts; the client only draws). Same drawing as the
- * single-server version: a donut for single-choice questions with up to MAX_DONUT_SLICES options,
- * horizontal bars otherwise. Colors come from CSS classes (.slice-1 to .slice-6), never inline styles.
+ * Chart math for the survey summary (the API counts; the client only draws): a donut for
+ * single-choice questions with up to MAX_DONUT_SLICES options, horizontal bars otherwise. Colors come from CSS classes (.slice-1 to .slice-6), never inline styles.
  */
 export const MAX_DONUT_SLICES = 6; // categorical colors are never cycled; more options use bars
 const DONUT_GAP = 0.6; // surface gap between slices, in percent of the circle
