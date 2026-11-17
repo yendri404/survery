@@ -1,0 +1,14 @@
+{
+  "name": "sharevy-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sharevy web client: static ES modules (no build step) and a small server that also forwards /api to the REST API.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/"
+  }
+}

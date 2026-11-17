@@ -2,14 +2,17 @@
   "name": "sharevy",
   "version": "0.2.0",
   "private": true,
-  "description": "Sharevy — self-hosted survey app. api/ is the JSON REST API; the web client talks to it over HTTP + JSON.",
+  "description": "Sharevy — self-hosted survey app. api/ is the JSON REST API; web/ is the browser client, which talks to it over HTTP + JSON.",
   "engines": {
     "node": ">=22.13"
   },
   "scripts": {
     "start": "npm run start:api",
     "start:api": "npm --prefix api start",
-    "test": "npm --prefix api test",
+    "start:web": "npm --prefix web start",
+    "test": "npm --prefix api test && npm --prefix web test",
+    "test:api": "npm --prefix api test",
+    "test:web": "npm --prefix web test",
     "create-user": "npm --prefix api run create-user --"
   }
 }

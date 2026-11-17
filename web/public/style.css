@@ -286,7 +286,7 @@ legend { font-weight: 500; padding: 0; }
 .q-number { color: var(--muted); font-variant-numeric: tabular-nums; }
 .req { color: var(--danger); }
 .result { text-align: center; padding: 2rem 1rem; }
-.result-icon { width: 3.5rem; height: 3.5rem; margin: 0 auto 1rem; border-radius: var(--radius); display: grid; place-items: center; background: var(--brand-soft); color: var(--brand-text); border: 1px solid currentColor; }
+.result-icon { width: 3.5rem; height: 3.5rem; margin: 0 auto 1rem; border-radius: 100px; display: grid; place-items: center; background: var(--brand-soft); color: var(--brand-text); border: 1px solid currentColor; }
 .result-icon.ok { background: var(--ok-soft); color: var(--ok); }
 .result-icon .icon { width: 2rem; height: 2rem; }
 
@@ -376,6 +376,8 @@ td { font-variant-numeric: tabular-nums; }
 .qr-block { display: flex; flex-direction: column; align-items: center; gap: 1rem; margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid var(--border); text-align: center; }
 .qr { width: min(240px, 70vw); background: #fff; padding: .5rem; border-radius: var(--radius); border: 1px solid var(--border); line-height: 0; }
 .qr svg { width: 100%; height: auto; }
+/* The web client shows the QR code as an image (fetched with the Bearer token); it keeps its square box while loading. */
+.qr img { display: block; width: 100%; height: auto; aspect-ratio: 1; }
 .qr-help h3 { margin: 0 0 .5rem; padding: 0; border: none; display: flex; align-items: center; justify-content: center; gap: .4rem; }
 @media (min-width: 700px) {
   .qr-block { flex-direction: row; align-items: center; text-align: left; }
