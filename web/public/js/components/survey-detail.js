@@ -1,0 +1,85 @@
+import { h, withParts } from '../dom.js';
+import { icon } from './icons.js';
+import { closingText, notice, statusBadge } from './layout.js';
+import { kpiTiles, responsesTable, summaryCharts } from './results.js';
+
+/*
+ * Presentational parts of one survey's page: plain data and callbacks in, DOM out. The container
+ * (pages/detail.js) fetches, runs the actions and keeps these parts current with live updates.
+ */
+
+// ---------- The survey's state (rebuilt on each live update) ----------
+
+export const surveyHeading = (survey, { t }) => h('h1', {}, `${survey.title} `, statusBadge(survey.status, t));
+
+export const closingLine = (survey, i18n) => h('p', { class: 'meta' }, icon('calendar'), ` ${closingText(survey.closesOn, survey.status, i18n)}`);
+
+export const surveyDescription = (survey) => (survey.description ? h('p', { class: 'description' }, survey.description) : null);
+
+/** Closed or expired: what respondents will see, with a link to change the date. Open: nothing. */
+export function statusNotice(survey, { t }, editHref) {
+  if (survey.status === 'closed') return notice('lock', t('detail.closedNotice'));
+  if (survey.status === 'expired') {
+    return notice('calendar', ...withParts(t('detail.expiredNotice'), { link: h('a', { href: editHref }, t('detail.expiredNoticeLink')) }));
+  }
+  return null;
+}
+
+export const openCloseButton = (survey, { t }) => (survey.isOpen
+  ? h('button', { type: 'submit', class: 'secondary' }, icon('lock'), ` ${t('detail.close')}`)
+  : h('button', { type: 'submit', class: 'secondary' }, icon('unlock'), ` ${t('detail.reopen')}`));
+
+// ---------- Side panels ----------
+
+/**
+ * Share link with copy / native share / open buttons, and the QR code. `onCopy(button, input)`,
+ * `onShare(url)`; the share button shows only when `canShare`. `qrImage` is filled by the page.
+ */
+export function sharePanel({ t, shareUrl, statusNode, qrImage, canShare, onCopy, onShare, onDownloadQr }) {
+  const shareInput = h('input', { id: 'share-url', class: 'share-url', value: shareUrl, readOnly: true, 'aria-label': t('detail.shareLinkLabel'), onfocus: (e) => e.currentTarget.select() });
+  return h('section', { class: 'panel share' },
+    h('h2', {}, icon('share'), ` ${t('detail.shareHeading')}`),
+    h('p', {}, t('detail.shareText')),
+    statusNode,
+    shareInput,
+    h('div', { class: 'button-row' },
+      h('button', { type: 'button', 'data-copy': 'share-url', onclick: (e) => onCopy(e.currentTarget, shareInput) }, icon('copy'), ' ', h('span', {}, t('detail.copyLink'))),
+      h('button', { type: 'button', class: 'secondary', hidden: !canShare, onclick: () => onShare(shareInput.value) }, icon('share'), ` ${t('detail.share')}`),
+      h('a', { class: 'button secondary', href: shareUrl, target: '_blank', rel: 'noopener' }, icon('open'), ` ${t('detail.openForm')}`)),
+    h('div', { class: 'qr-block' },
+      h('div', { class: 'qr' }, qrImage),
+      h('div', { class: 'qr-help' },
+        h('h3', {}, icon('qr'), ` ${t('detail.qrHeading')}`),
+        h('p', {}, t('detail.qrText')),
+        h('button', { type: 'button', class: 'secondary', onclick: onDownloadQr }, icon('download'), ` ${t('detail.qrDownload')}`))));
+}
+
+/** Edit link, open/close (`toggleNode` is its current button) and delete. */
+export function managePanel({ t, editHref, toggleNode, onToggle, onDelete }) {
+  const submitTo = (action) => (event) => {
+    event.preventDefault();
+    action();
+  };
+  return h('section', { class: 'panel' },
+    h('h2', {}, t('detail.manage')),
+    h('div', { class: 'button-row' },
+      h('a', { class: 'button secondary', href: editHref }, icon('edit'), ` ${t('detail.edit')}`),
+      h('form', { class: 'inline', onsubmit: submitTo(onToggle) }, toggleNode),
+      h('form', { class: 'inline', onsubmit: submitTo(onDelete) },
+        h('button', { type: 'submit', class: 'danger' }, icon('trash'), ` ${t('detail.delete')}`))),
+    h('p', { class: 'hint' }, t('detail.manageHint')));
+}
+
+// ---------- Results ----------
+
+/** Heading with the CSV exports, key figures, charts and the responses table. `onExport('semicolon' | 'comma')`. */
+export const resultsContent = ({ survey, summary, responses }, i18n, { onExport, onDeleteResponse }) => [
+  h('div', { class: 'page-head' },
+    h('h2', {}, i18n.t('detail.responses', { count: responses.length })),
+    h('div', { class: 'button-row' },
+      h('button', { type: 'button', class: 'secondary', onclick: () => onExport('semicolon') }, icon('download'), ` ${i18n.t('detail.exportExcel')}`),
+      h('button', { type: 'button', class: 'secondary', onclick: () => onExport('comma') }, icon('download'), ` ${i18n.t('detail.exportCsv')}`))),
+  kpiTiles(summary, i18n),
+  summaryCharts(summary, i18n),
+  responsesTable(survey.fields, responses, i18n, onDeleteResponse),
+];

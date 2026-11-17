@@ -81,7 +81,7 @@ web/                         Browser client (port 3000), no dependencies, no bui
 │   │   ├── charts.js        Donut and bar math
 │   │   ├── format.js        Timestamps, addDays, safeNext
 │   │   ├── pages/           Containers: home, auth, surveys, editor, detail, respond
-│   │   └── components/      Presentational: layout, icons, builder, answer-field, results, survey-cards
+│   │   └── components/      Presentational: layout, icons, builder, answer-field, results, survey-cards, survey-detail
 │   ├── style.css, theme.js, logo.png, favicon.svg
 │   └── fonts/               IBM Plex Sans woff2 + license
 └── test/                    server.test.js (stub API), modules.test.js (pure modules)
@@ -743,7 +743,7 @@ A page is `async (app, { params, query, signal }) → { title, body, respondent?
 | `auth.js` | `loginPage`, `registerPage` | Forms; API errors in a box above the form (registration in field order); keep typed values (never the password); after login go to `safeNext(next)`; the submit button is disabled while sending |
 | `surveys.js` | `surveyListPage` (cards from `components/survey-cards.js`) | Cards with status badge, response count and closing text; live via `/surveys/events` |
 | `editor.js` | `editorPage` | New / edit. Reads `/meta` for limits, types, `today` and `defaultOpenDays` (default closing date, `min` of the date input). Title and closing date are checked with the questions by the builder; API `errors[]` are shown in order above the form. Warns when editing a survey with responses |
-| `detail.js` | `detailPage` | Share link (copy button with a fallback for plain HTTP, native share sheet when supported), QR image (`qr.svg` fetched as a blob), PNG download, CSV downloads (`?lang=` = current interface language), open/close, delete (confirm), key figures, charts, responses table with delete; results live via `/surveys/:id/events`. Each live update also refreshes the survey state shown outside the results (title and status badge, closing date, description, closed/expired notice, open/close button), and open/close always uses that latest state |
+| `detail.js` | `detailPage` | Container for the parts in `components/survey-detail.js`: share link (copy button with a fallback for plain HTTP, native share sheet when supported), QR image (`qr.svg` fetched as a blob), PNG download, CSV downloads (`?lang=` = current interface language), open/close, delete (confirm), key figures, charts, responses table with delete; results live via `/surveys/:id/events`. Each live update also refreshes the survey state shown outside the results (title and status badge, closing date, description, closed/expired notice, open/close button), and open/close always uses that latest state |
 | `respond.js` | `respondPage`, `thanksPage` | Respondent form, closed / expired / already-answered panels, thanks page. Sends `X-Device-Id`, keeps a `deviceId` the API returns. Checks every answer in the browser first (`attachValidation`); API `fields` errors use the same markup |
 
 **Respondent form behavior (`respond.js` + `answer-field.js`):**
@@ -767,6 +767,7 @@ Pure functions from data (and callbacks) to DOM. They never fetch or navigate on
 | `builder.js` | `createBuilder({ fields, types, choiceTypes, limits, t, basics })` → `{ element, validate(), value() }` | Question editor: add, move, duplicate, delete. Warns about repeated questions and options **while typing**; empty question text, missing options, title and closing date (`basics`) **after a submit attempt**. Same rule as the API: equal after trimming, ignoring case. Keeps field ids so edits do not orphan answers |
 | `answer-field.js` | `answerField(field, index, i18n, limits)`, `respondentNameField`, `fieldError` | One control per type (`yesno`: two large side-by-side radios, `.choices.yesno`; choices in a `fieldset` + `legend`); control id `fld_<question id>` |
 | `results.js` | `kpiTiles`, `summaryCharts`, `responsesTable` | Key figures (`<dl class="kpis">`), charts, and the table (one card per response on phones, via each cell's `data-label`). Yes/no shown translated |
+| `survey-detail.js` | `surveyHeading`, `closingLine`, `surveyDescription`, `statusNotice`, `openCloseButton`, `sharePanel`, `managePanel`, `resultsContent` | The parts of one survey's page. The state parts are rebuilt by `pages/detail.js` on each live update (through `slot`); the panels take their actions as callbacks |
 | `survey-cards.js` | `surveyCards` | The creator's surveys as cards (status badge, response count, closing text), or the empty state |
 
 **Charts** (`summaryCharts`, math in `charts.js`):
