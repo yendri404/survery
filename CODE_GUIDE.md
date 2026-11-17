@@ -74,7 +74,7 @@ web/                         Browser client (port 3000), no dependencies, no bui
 │   │   ├── errors.js        API error code -> message key
 │   │   ├── sse.js           Event streams read with fetch (parser + reconnection)
 │   │   ├── storage.js       localStorage keys, device id
-│   │   ├── dom.js           h()/s() DOM builders, withParts(), setErrorBox()
+│   │   ├── dom.js           h()/s() DOM builders, withParts(), setErrorBox(), slot()
 │   │   ├── i18n.js          Language choice, t/tn, dates
 │   │   ├── validation.js    Respondent answer checks (mirror of the API rules)
 │   │   ├── number-input.js  Number question typing filter
@@ -742,7 +742,7 @@ A page is `async (app, { params, query, signal }) → { title, body, respondent?
 | `auth.js` | `loginPage`, `registerPage` | Forms; API errors in a box above the form (registration in field order); keep typed values (never the password); after login go to `safeNext(next)`; the submit button is disabled while sending |
 | `surveys.js` | `surveyListPage` (+ `surveyCards`) | Cards with status badge, response count and closing text; live via `/surveys/events` |
 | `editor.js` | `editorPage` | New / edit. Reads `/meta` for limits, types, `today` and `defaultOpenDays` (default closing date, `min` of the date input). Title and closing date are checked with the questions by the builder; API `errors[]` are shown in order above the form. Warns when editing a survey with responses |
-| `detail.js` | `detailPage` | Share link (copy button with a fallback for plain HTTP, native share sheet when supported), QR image (`qr.svg` fetched as a blob), PNG download, CSV downloads (`?lang=` = current interface language), open/close, delete (confirm), key figures, charts, responses table with delete; results live via `/surveys/:id/events` |
+| `detail.js` | `detailPage` | Share link (copy button with a fallback for plain HTTP, native share sheet when supported), QR image (`qr.svg` fetched as a blob), PNG download, CSV downloads (`?lang=` = current interface language), open/close, delete (confirm), key figures, charts, responses table with delete; results live via `/surveys/:id/events`. Each live update also refreshes the survey state shown outside the results (title and status badge, closing date, description, closed/expired notice, open/close button), and open/close always uses that latest state |
 | `respond.js` | `respondPage`, `thanksPage` | Respondent form, closed / expired / already-answered panels, thanks page. Sends `X-Device-Id`, keeps a `deviceId` the API returns. Checks every answer in the browser first (`attachValidation`); API `fields` errors use the same markup |
 
 **Respondent form behavior (`respond.js` + `answer-field.js`):**
@@ -784,6 +784,7 @@ The SVG is `aria-hidden`; the legend and bar labels carry every number as text. 
 | `h(tag, attrs, ...children)` | Element; strings become **text nodes**; `on*` functions become listeners; `value`, `checked`, `disabled`... are set as properties |
 | `s(tag, attrs, ...children)` | Same for SVG |
 | `withParts(text, parts)` | A translated sentence with nodes in its `{placeholders}` ("No account yet? {link}.") |
+| `slot(node)` | A swappable place in the page: `set(newNode)` replaces the node only when it differs (`isEqualNode`), `null` leaves an invisible placeholder; used for the detail page's live survey state |
 | `setErrorBox(form, box)` | Puts an `.errors` box (or nothing, with `null`) right above a form, replacing the previous one; used by the editor and the respondent form |
 
 There is no `innerHTML` anywhere in the client: user text can never become markup.

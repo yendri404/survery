@@ -71,3 +71,21 @@ export function setErrorBox(form, box) {
   else if (old) old.replaceWith(box);
   else form.before(box);
 }
+
+/**
+ * A place in the page whose node can be swapped later (a live update, a new state). `set(node)`
+ * replaces the current node only when the new one differs, so focus and animations survive
+ * refreshes that change nothing; `null` leaves an invisible placeholder.
+ */
+export function slot(initial) {
+  let current = initial ?? document.createComment('');
+  return {
+    get node() { return current; },
+    set(next) {
+      const node = next ?? document.createComment('');
+      if (current.isEqualNode(node)) return;
+      current.replaceWith(node);
+      current = node;
+    },
+  };
+}
