@@ -272,6 +272,12 @@ button:disabled { opacity: .35; cursor: not-allowed; }
 .add-question { width: 100%; background: var(--surface-alt); color: var(--brand-text); border: 1px solid var(--border-strong); }
 .add-question:hover { background: var(--brand-soft); border-color: var(--brand-text); }
 .form-footer { display: flex; flex-direction: column; gap: .5rem; position: sticky; bottom: 0; padding: .75rem 0; background: linear-gradient(transparent, var(--bg) 25%); }
+/* Editor below the desktop width: one column (basics, questions, then the buttons stuck to the
+   bottom of the screen). The side wrapper only groups them on desktop. */
+.editor-side { display: contents; }
+.editor-basics { order: 1; }
+.editor-questions { order: 2; }
+.editor-side > .form-footer { order: 3; }
 
 /* ---------- Choices (respondent + builder) ---------- */
 .choice { display: flex; align-items: center; gap: .75rem; font-weight: 400; cursor: pointer; }
@@ -520,11 +526,17 @@ td { font-variant-numeric: tabular-nums; }
   .detail-side .qr { width: 180px; }
   .detail-side .qr-help h3 { justify-content: center; }
 
-  /* Editor: questions on the left; basics on the right, with the save button following the scroll. */
-  .editor-form { display: grid; grid-template-columns: minmax(0, 1fr) 360px; grid-template-rows: auto 1fr; gap: 1rem 1.5rem; align-items: start; }
-  .editor-basics { grid-column: 2; grid-row: 1; margin: 0; }
-  .editor-questions { grid-column: 1; grid-row: 1 / span 2; }
-  .editor-form .form-footer { grid-column: 2; grid-row: 2; position: sticky; top: 1rem; flex-direction: column; padding: 0; background: none; }
+  /* Editor: "1. Basic information" on the left with the buttons right below it, "2. Questions" on
+     the right. The column follows the scroll as one block, so the buttons never cover the basics. */
+  .editor-form { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 1rem 1.5rem; align-items: start; }
+  .editor-side { display: flex; flex-direction: column; gap: 1rem; grid-column: 1; grid-row: 1; }
+  .editor-basics { margin: 0; }
+  .editor-questions { grid-column: 2; grid-row: 1; }
+  .editor-side > .form-footer { position: static; flex-direction: column; padding: 0; background: none; }
+}
+/* Only screens tall enough to show the whole column keep it in view; shorter ones scroll it normally. */
+@media (min-width: 1100px) and (min-height: 720px) {
+  .editor-side { position: sticky; top: 1rem; }
 }
 
 /* ---------- Motion ----------

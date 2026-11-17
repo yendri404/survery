@@ -35,7 +35,7 @@ export async function editorPage(app, { params, signal }) {
       h('span', {}, t('editor.requireName'), h('span', { class: 'hint' }, t('editor.requireNameHint')))));
 
   const submit = h('button', { type: 'submit', class: 'big' }, icon('check'), ` ${editing ? t('editor.save') : t('editor.create')}`);
-  const form = h('form', { class: 'stack editor-form', id: 'survey-form', noValidate: true }, basicsSection);
+  const form = h('form', { class: 'stack editor-form', id: 'survey-form', noValidate: true });
 
   // Title and closing date are checked on submit like the questions, with the API's messages.
   const builder = createBuilder({
@@ -58,9 +58,13 @@ export async function editorPage(app, { params, signal }) {
       },
     ],
   });
+  // Basics and the buttons travel together: on desktop a left column (1. then 2., read left to
+  // right) with the buttons always below the basics; on phones the buttons stick to the bottom.
   form.append(
+    h('div', { class: 'editor-side' },
+      basicsSection,
+      h('div', { class: 'form-footer' }, submit, h('a', { class: 'button big secondary', href: cancel }, t('editor.cancel')))),
     h('section', { class: 'stack editor-questions' }, h('h2', {}, t('editor.questions')), builder.element),
-    h('div', { class: 'form-footer' }, submit, h('a', { class: 'button big secondary', href: cancel }, t('editor.cancel'))),
   );
 
   /** API problems (a list, in the order the API found them) in a box above the form. */
