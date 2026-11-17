@@ -35,6 +35,22 @@ function compileRoute(method, path, handler, auth) {
   return { method, pattern: new RegExp(`^${source}$`), keys, handler, auth };
 }
 
+/**
+ * The request target as a URL. Only plain paths are accepted: absolute-form ("http://host/..."),
+ * scheme-relative ("//host/...") and backslash targets are refused, like the web server does, and
+ * a target URL cannot parse answers 400 instead of escaping the error handling.
+ */
+function parseTarget(target) {
+  if (typeof target !== 'string' || !target.startsWith('/') || target.startsWith('//') || target.includes('\\')) {
+    throw new ApiError(400, 'error.malformedUrl');
+  }
+  try {
+    return new URL(target, 'http://localhost');
+  } catch {
+    throw new ApiError(400, 'error.malformedUrl');
+  }
+}
+
 export function createApp({ db, config }) {
   const repo = createRepo(db);
   const routes = [];
@@ -100,9 +116,10 @@ export function createApp({ db, config }) {
   return createServer(async (req, res) => {
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
     const corsAllowed = applyCors(req, res);
-    const ctx = { req, res, url: new URL(req.url, 'http://localhost'), params: {}, user: null, session: null };
+    const ctx = { req, res, url: null, params: {}, user: null, session: null };
 
     try {
+      ctx.url = parseTarget(req.url);
       if (req.method === 'OPTIONS') {
         if (corsAllowed) {
           res.setHeader('Access-Control-Allow-Methods', CORS_METHODS);

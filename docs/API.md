@@ -509,7 +509,7 @@ The database schema only grows (additive migrations run on every start), so data
 | `unauthorized` | 401 | Log in to continue. |
 | `not_found` | 404 | Not found. / Survey not found. / This survey does not exist. Check the link you received. |
 | `method_not_allowed` | 405 | Method not allowed. |
-| `malformed_url` | 400 | Malformed URL. |
+| `malformed_url` | 400 | Malformed URL, or a request target that is not a plain path (absolute-form, `//host`, backslashes). |
 | `invalid_json` | 400 | The request body is not valid JSON. |
 | `invalid_body` | 400 | The request body must be a JSON object. |
 | `invalid_parameter` | 400 | The query parameter {name} has an unsupported value. |

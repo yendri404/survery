@@ -1,3 +1,4 @@
+import { connect } from 'node:net';
 import { createApp } from '../src/app.js';
 import { loadConfig } from '../src/config.js';
 import { openDatabase } from '../src/db.js';
@@ -105,4 +106,25 @@ export async function openEvents(url, token) {
     },
     close: () => controller.abort(),
   };
+}
+
+/**
+ * Sends a raw HTTP/1.1 request line, because fetch always normalizes the target to a plain path.
+ * Resolves with { status, json } (status 0 and json null when the server closed without answering).
+ */
+export function rawRequest(base, target, { method = 'GET' } = {}) {
+  return new Promise((resolve, reject) => {
+    const { hostname, port } = new URL(base);
+    const socket = connect(Number(port), hostname, () => {
+      socket.write(`${method} ${target} HTTP/1.1\r\nHost: ${hostname}:${port}\r\nConnection: close\r\n\r\n`);
+    });
+    let data = '';
+    socket.setTimeout(2000, () => socket.destroy()); // a server that never answers resolves status 0
+    socket.on('data', (chunk) => { data += chunk; });
+    socket.on('close', () => {
+      const body = data.slice(data.indexOf('{'), data.lastIndexOf('}') + 1); // skips chunked-encoding sizes
+      resolve({ status: Number(data.split(' ')[1]) || 0, json: body ? JSON.parse(body) : null });
+    });
+    socket.on('error', reject);
+  });
 }

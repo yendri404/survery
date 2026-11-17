@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
 import { loadConfig } from '../src/config.js';
 import { LIMITS } from '../src/surveys.js';
-import { Client, startApi } from './helpers.js';
+import { Client, rawRequest, startApi } from './helpers.js';
 
 describe('API basics', () => {
   let app;
@@ -49,6 +49,16 @@ describe('API basics', () => {
     assert.match(wrong.headers.get('allow'), /GET/);
     const outside = await fetch(`${app.base}/surveys`);
     assert.equal(outside.status, 404, 'only /api/v1 is served');
+  });
+
+  test('request targets that are not plain paths answer 400 malformed_url and the API keeps running', async () => {
+    for (const target of ['http://[zz/', 'http://localhost/api/v1/health', '//localhost/api/v1/health', '/api/v1\\health']) {
+      const res = await rawRequest(app.base, target);
+      assert.equal(res.status, 400, target);
+      assert.equal(res.json?.error.code, 'malformed_url', target);
+    }
+    const health = await new Client(app.base).request('/health');
+    assert.equal(health.status, 200, 'the server survived');
   });
 
   test('bodies must be JSON objects within the size limit', async () => {
