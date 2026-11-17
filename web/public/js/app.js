@@ -1,11 +1,12 @@
 import { API_BASE, ApiError, createApi } from './api.js';
-import { errorPanel, flash, languageMenu, themeToggle, topbar, APP_NAME } from './components/layout.js';
+import { errorPanel, flash, languageMenu, themeToggle, topbar, updateBanner, APP_NAME } from './components/layout.js';
 import { h } from './dom.js';
 import { errorMessage } from './errors.js';
 import { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, createI18n, pickLanguage } from './i18n.js';
 import { coalesce, followEvents } from './sse.js';
 import { KEYS, deviceId, load, save } from './storage.js';
 import { matchRoute } from './routes.js';
+import { createVersionWatch } from './version.js';
 
 // Confirmation messages shown after an action (?msg=<key>). Only known keys are shown.
 const FLASH_MESSAGES = {
@@ -53,8 +54,14 @@ export async function startApp() {
     root.lang = app.i18n.lang;
   }
 
+  // A server update while this tab stays open: say so now, and load the new client on the next page.
+  const versionWatch = createVersionWatch({
+    onChange: () => header.after(updateBanner({ t: app.t, onReload: () => location.reload() })),
+  });
+
   app.api = createApi({
     getToken: () => app.token,
+    onVersion: (version) => versionWatch.see(version),
     onUnauthorized: () => {
       // The token expired or was ended elsewhere: forget it and ask to log in again.
       setSession(null);
@@ -203,6 +210,11 @@ export async function startApp() {
       };
     }
     if (id !== renderId) return; // a newer navigation won
+    // The page was built by the old client from the updated API (new types, new texts): load the new one.
+    if (versionWatch.stale) {
+      location.reload();
+      return;
+    }
     if (page.redirect) {
       navigate(page.redirect, { replace: true });
       return;
@@ -230,6 +242,12 @@ export async function startApp() {
 
   function navigate(to, { replace = false } = {}) {
     const url = new URL(to, location.href);
+    if (versionWatch.stale) {
+      // Leaving the page anyway: a full load brings the new client without losing anything.
+      if (replace) location.replace(url);
+      else location.assign(url);
+      return Promise.resolve();
+    }
     if (replace) history.replaceState(null, '', url);
     else history.pushState(null, '', url);
     return render();

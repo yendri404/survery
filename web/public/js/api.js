@@ -23,8 +23,9 @@ const attachmentName = (header, fallback) => /filename="([^"]+)"/.exec(header ??
 /**
  * `getToken()` gives the current token (or null). `onUnauthorized()` runs when the API rejects
  * a token that was sent (expired or ended elsewhere), so the app can ask to log in again.
+ * `onVersion(value)` receives the `X-Sharevy-Version` header of every answer (version.js).
  */
-export function createApi({ getToken, onUnauthorized, fetchImpl = (...args) => fetch(...args) }) {
+export function createApi({ getToken, onUnauthorized, onVersion, fetchImpl = (...args) => fetch(...args) }) {
   async function send(path, { method = 'GET', body, deviceId, headers = {}, signal } = {}) {
     const h = { Accept: 'application/json', ...headers };
     const token = getToken();
@@ -38,6 +39,7 @@ export function createApi({ getToken, onUnauthorized, fetchImpl = (...args) => f
       if (err?.name === 'AbortError') throw err;
       throw new ApiError(0, { code: 'network_error' });
     }
+    onVersion?.(res.headers.get('X-Sharevy-Version'));
     if (res.ok) return res;
     let error = {};
     try {

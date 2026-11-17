@@ -249,5 +249,7 @@
   "client.builder.scalePreview": "Vista previa",
   "client.builder.scaleBoundInvalid": "Usa números enteros de {lowest} a {highest}.",
   "client.builder.scaleOrder": "\"Desde\" debe ser menor que \"Hasta\".",
-  "client.builder.scaleTooWide": "Como máximo {maxSteps} pasos entre \"Desde\" y \"Hasta\"."
+  "client.builder.scaleTooWide": "Como máximo {maxSteps} pasos entre \"Desde\" y \"Hasta\".",
+  "update.available": "Hay una versión nueva de Sharevy. Se carga al cambiar de página, o recarga ahora.",
+  "update.reload": "Recargar"
 }

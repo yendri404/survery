@@ -218,6 +218,8 @@ button:disabled { opacity: .35; cursor: not-allowed; }
 
 /* Messages: a tinted box with a solid colored rule on the left. */
 .flash, .notice, .errors { display: flex; gap: .6rem; align-items: flex-start; padding: .7rem 1rem; border: 0; border-left: 3px solid currentColor; border-radius: var(--radius); margin-bottom: 1rem; }
+.update-banner { display: flex; flex-wrap: wrap; gap: .6rem 1rem; align-items: center; padding: .6rem 1rem; background: var(--warn-soft); color: var(--warn); border-bottom: 1px solid currentColor; }
+.update-banner > span { flex: 1 1 16rem; }
 .flash { background: var(--ok-soft); color: var(--ok); font-weight: 500; }
 .notice { background: var(--warn-soft); color: var(--warn); }
 .errors { background: var(--danger-soft); color: var(--danger); }

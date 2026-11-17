@@ -55,6 +55,11 @@ export const errorList = (items) => (items?.length
   ? h('div', { class: 'errors', role: 'alert' }, icon('alert'), h('ul', {}, items.map((item) => h('li', {}, item))))
   : null);
 
+/** Shown once when the server has a newer client than this tab runs (version.js). */
+export const updateBanner = ({ t, onReload }) => h('div', { class: 'update-banner', role: 'status' },
+  icon('refresh'), h('span', {}, t('update.available')),
+  h('button', { type: 'button', class: 'secondary', onclick: onReload }, t('update.reload')));
+
 export const notice = (iconName, ...content) => h('p', { class: 'notice' }, icon(iconName), h('span', {}, ...content));
 
 export const backLink = (href, text) => h('a', { class: 'back', href }, icon('back'), ` ${text}`);

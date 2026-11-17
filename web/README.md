@@ -15,7 +15,7 @@ npm test    # web server + pure modules (node:test)
 - `/public/*` and `/locales/*` serve files from `public/` and `locales/`.
 - App pages (`/`, `/login`, `/surveys/...`, `/s/<token>`, ...) answer `index.html`, and the client router (`public/js/routes.js`) draws the page. Unknown paths answer `index.html` with status 404.
 
-Every file is sent with `Cache-Control: no-cache` and an `ETag`. Module URLs never change without a build step, so the browser revalidates them (a cheap 304) and never runs stale code. Fonts are cached as immutable. Every page gets a strict CSP: only this origin's scripts and styles, nothing inline.
+Every file is sent with `Cache-Control: no-cache` and an `ETag`. Module URLs never change without a build step, so the browser revalidates them (a cheap 304) and never runs stale code. Fonts are cached as immutable. Every answer, proxied API calls included, also carries `X-Sharevy-Version`, a fingerprint of the client files taken at start-up: a tab that was open before an update notices the new value, shows a "new version" banner, and loads the new client on the next page change instead of mixing old code with the updated API. Every page gets a strict CSP: only this origin's scripts and styles, nothing inline.
 
 ## Code map (`public/js/`)
 

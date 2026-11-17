@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { connect } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { closeServer, createWebServer } from '../server/app.js';
 
@@ -58,6 +61,42 @@ describe('web server', () => {
     for (const res of api.streams) res.end();
     await close(web);
     await close(api.server);
+  });
+
+  test('every answer (files, pages, proxied API calls) carries the same client version', async () => {
+    const versions = [];
+    for (const path of ['/public/js/main.js', '/locales/en.json', '/surveys', '/no-such-page', '/api/v1/anything']) {
+      const res = await fetch(`${base}${path}`, { method: path.startsWith('/api/') ? 'POST' : 'GET', body: path.startsWith('/api/') ? '{}' : undefined });
+      await res.arrayBuffer();
+      versions.push(res.headers.get('x-sharevy-version'));
+    }
+    assert.match(versions[0], /^[A-Za-z0-9_-]{16,}$/);
+    assert.deepEqual(new Set(versions).size, 1, `versions differ: ${versions}`);
+  });
+
+  test('the client version is a fingerprint of the client files: same files, same version; any change, a new one', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'sharevy-web-version-'));
+    after(() => rm(root, { recursive: true, force: true }));
+    await mkdir(join(root, 'public', 'js'), { recursive: true });
+    await mkdir(join(root, 'locales'));
+    await writeFile(join(root, 'index.html'), '<!doctype html>');
+    await writeFile(join(root, 'public', 'js', 'main.js'), 'export {};');
+    await writeFile(join(root, 'locales', 'en.json'), '{"a":"A"}');
+    const versionOf = async () => {
+      const server = createWebServer({ apiUrl: 'http://127.0.0.1:9', root });
+      const url = await listen(server);
+      const res = await fetch(`${url}/`);
+      await res.arrayBuffer();
+      await close(server);
+      return res.headers.get('x-sharevy-version');
+    };
+    const first = await versionOf();
+    assert.equal(await versionOf(), first);
+    await writeFile(join(root, 'locales', 'en.json'), '{"a":"A","b":"B"}');
+    const second = await versionOf();
+    assert.notEqual(second, first);
+    await writeFile(join(root, 'public', 'js', 'new.js'), 'export {};');
+    assert.notEqual(await versionOf(), second);
   });
 
   test('request targets that are not plain paths are refused, so the proxy cannot reach other hosts', async () => {

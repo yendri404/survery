@@ -8,6 +8,8 @@ import { addDays, formatTimestamp, safeNext } from '../public/js/format.js';
 import { SUPPORTED_LANGUAGES, createI18n, pickLanguage } from '../public/js/i18n.js';
 import { NUMBER_TEXT, normalizeNumberText, numberInsert, stepNumber } from '../public/js/number-input.js';
 import { backoffDelay, coalesce, createSseParser, followEvents } from '../public/js/sse.js';
+import { createVersionWatch } from '../public/js/version.js';
+import { createApi } from '../public/js/api.js';
 import { checkAnswer, checkRespondentName, checkScaleRange, isValidDate } from '../public/js/validation.js';
 
 const locale = (lang) => JSON.parse(readFileSync(new URL(`../locales/${lang}.json`, import.meta.url), 'utf8'));
@@ -332,5 +334,32 @@ describe('results table', () => {
     assert.deepEqual(firstCells, ['#2', '#1']);
     const labels = findAll(wrap, (n) => n.tag === 'button').map((b) => b.attrs['aria-label']);
     assert.deepEqual(labels, ['Delete response #2', 'Delete response #1']);
+  });
+});
+
+describe('new client version', () => {
+  test('the first version seen is the one running; a different one later marks it stale, once', () => {
+    const changes = [];
+    const watch = createVersionWatch({ onChange: () => changes.push('changed') });
+    watch.see(null); // answers without the header (another server) are ignored
+    watch.see('v1');
+    watch.see('v1');
+    assert.equal(watch.stale, false);
+    watch.see('v2');
+    watch.see('v3');
+    assert.equal(watch.stale, true);
+    assert.deepEqual(changes, ['changed']);
+  });
+
+  test('the API client reports the version of every answer, including errors', async () => {
+    const seen = [];
+    const answers = [
+      new Response('{"ok":true}', { status: 200, headers: { 'X-Sharevy-Version': 'v1' } }),
+      new Response('{"error":{"code":"not_found"}}', { status: 404, headers: { 'X-Sharevy-Version': 'v2' } }),
+    ];
+    const api = createApi({ getToken: () => null, onVersion: (v) => seen.push(v), fetchImpl: async () => answers.shift() });
+    assert.deepEqual(await api.get('/meta'), { ok: true });
+    await assert.rejects(api.get('/surveys/1'), { code: 'not_found' });
+    assert.deepEqual(seen, ['v1', 'v2']);
   });
 });

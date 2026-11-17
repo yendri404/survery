@@ -73,6 +73,7 @@ web/                         Browser client (port 3000), no dependencies, no bui
 │   │   ├── api.js           The only door to the API (fetch + Bearer + X-Device-Id)
 │   │   ├── errors.js        API error code -> message key
 │   │   ├── sse.js           Event streams read with fetch (parser + reconnection), refresh coalescing
+│   │   ├── version.js       Notices a newer client on the server (X-Sharevy-Version)
 │   │   ├── storage.js       localStorage keys, device id
 │   │   ├── dom.js           h()/s() DOM builders, withParts(), setErrorBox(), slot()
 │   │   ├── i18n.js          Language choice, t/tn, dates
@@ -659,6 +660,7 @@ Reads `PORT` (3000), `HOST` (`0.0.0.0`) and `API_URL` (`http://127.0.0.1:3001`),
 |--------|-----|
 | `Content-Security-Policy` | `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; ...`: only this origin's code, nothing inline. `blob:` is the QR image, fetched with the token |
 | `Cache-Control: no-cache` + `ETag` | Without a build step, module URLs never change, so the browser revalidates every file (a cheap 304) and never runs a stale module |
+| `X-Sharevy-Version` on every answer | A tab opened before an update keeps the old modules in memory. The server sends a fingerprint of the client files (`clientVersion`, computed at start-up); `version.js` notices a new one, shows a banner, and the next page change is a full load of the new client |
 | Fonts: `immutable`, 1 year | A new font version gets a new file name |
 
 **Why a proxy instead of CORS?** The browser sees one origin, so no CORS preflights, the API can stay on localhost, and share links on the LAN keep the old address. See [web/README.md](web/README.md).

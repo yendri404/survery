@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
+import { readdirSync, readFileSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { createServer, request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
-import { extname, resolve, sep } from 'node:path';
+import { extname, join, relative as relativePath, resolve, sep } from 'node:path';
 import { pipeline } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
@@ -63,6 +64,37 @@ function sendText(res, status, text, headers = {}) {
 }
 
 /**
+ * Fingerprint of the client files (index.html, public/, locales/), read once at start-up. Every answer
+ * carries it in `X-Sharevy-Version`, proxied API calls included, so a tab still running the previous
+ * client notices an update (new modules, new texts) and reloads before showing a page built with
+ * both. Deploying means restarting this server, which computes it again.
+ */
+export function clientVersion(root = WEB_ROOT) {
+  const hash = createHash('sha256');
+  const files = [resolve(root, 'index.html')];
+  for (const dir of Object.values(STATIC_DIRS)) {
+    try {
+      const base = resolve(root, dir);
+      for (const entry of readdirSync(base, { recursive: true, withFileTypes: true })) {
+        if (entry.isFile()) files.push(join(entry.parentPath, entry.name));
+      }
+    } catch {
+      // A missing folder simply adds nothing.
+    }
+  }
+  for (const file of files.map((f) => relativePath(root, f).split(sep).join('/')).sort()) {
+    hash.update(file).update('\0');
+    try {
+      hash.update(readFileSync(resolve(root, file)));
+    } catch {
+      // Unreadable or missing (index.html in a bare test root): its name still counts.
+    }
+    hash.update('\0');
+  }
+  return hash.digest('base64url').slice(0, 22);
+}
+
+/**
  * Stops accepting requests and ends the open ones too: proxied event streams never finish on their
  * own, so waiting for them (plain `server.close()`) would keep the process alive forever.
  */
@@ -83,11 +115,14 @@ export function closeServer(server) {
  * Without a build step, module URLs never change, so every file is served with
  * `Cache-Control: no-cache` and an ETag: the browser revalidates (a cheap 304) and never runs a
  * stale module. Fonts never change (a new version gets a new file name), so they are immutable.
+ * A tab that was open before an update still holds the old modules in memory: `X-Sharevy-Version`
+ * (clientVersion) lets it notice and reload.
  */
 export function createWebServer({ apiUrl = 'http://127.0.0.1:3001', root = WEB_ROOT } = {}) {
   const api = new URL(apiUrl);
   const sendRequest = api.protocol === 'https:' ? httpsRequest : httpRequest;
   const fileCache = new Map(); // absolute path -> { mtimeMs, size, body, etag }
+  const version = clientVersion(root);
 
   async function loadFile(path) {
     const info = await stat(path);
@@ -171,6 +206,7 @@ export function createWebServer({ apiUrl = 'http://127.0.0.1:3001', root = WEB_R
   }
 
   return createServer(async (req, res) => {
+    res.setHeader('X-Sharevy-Version', version); // merged into every writeHead below, proxy included
     // Only plain paths are accepted. Absolute-form ("http://host/..."), scheme-relative ("//host/...")
     // and backslash targets ("/\host/...", parsed like "//") could otherwise point the proxy at another host.
     if (typeof req.url !== 'string' || !req.url.startsWith('/') || req.url.startsWith('//') || req.url.includes('\\')) {

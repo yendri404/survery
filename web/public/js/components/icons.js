@@ -24,6 +24,7 @@ const ICONS = {
   // Question builder
   up: [['path', { d: 'M12 19V5M5 12l7-7 7 7' }]],
   down: [['path', { d: 'M12 5v14M19 12l-7 7-7-7' }]],
+  refresh: [['path', { d: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7' }]],
   duplicate: [['path', { d: 'M9 9h11v11H9zM5 15H4V4h11v1' }]],
 };
 

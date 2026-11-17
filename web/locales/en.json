@@ -249,5 +249,7 @@
   "client.builder.scalePreview": "Preview",
   "client.builder.scaleBoundInvalid": "Use whole numbers from {lowest} to {highest}.",
   "client.builder.scaleOrder": "\"From\" must be lower than \"To\".",
-  "client.builder.scaleTooWide": "At most {maxSteps} steps between \"From\" and \"To\"."
+  "client.builder.scaleTooWide": "At most {maxSteps} steps between \"From\" and \"To\".",
+  "update.available": "A new version of Sharevy is available. It loads when you change page, or reload now.",
+  "update.reload": "Reload"
 }
