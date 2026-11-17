@@ -1,6 +1,7 @@
 import { newToken } from '../auth.js';
+import { DEFAULT_WEB_BASE_URL } from '../config.js';
 import { ApiError, coded, validationFailed } from '../errors.js';
-import { isoUtc, readJson, sendJson, sendNoContent } from '../http.js';
+import { forwardedOrigin, isoUtc, readJson, sendJson, sendNoContent } from '../http.js';
 import { createI18n, isSupportedLanguage, negotiateLanguage } from '../i18n.js';
 import { qrPng, qrSvg } from '../qr.js';
 import { daysBetween, parseSurveyInput, summarize, surveyStatus, toCsv } from '../surveys.js';
@@ -24,10 +25,16 @@ export function registerSurveyRoutes({ route, repo, config, today, live }) {
     return survey;
   }
 
-  /** Respondents open surveys in the web client, so share links (and QR codes) point there. */
-  const shareUrl = (survey) => `${config.webBaseUrl}/s/${survey.publicToken}`;
+  /**
+   * Respondents open surveys in the web client, so share links (and QR codes) point there:
+   * WEB_BASE_URL when set, else the address the browser used (only through a trusted proxy).
+   */
+  const shareUrl = (ctx, survey) => {
+    const base = config.webBaseUrl ?? (config.trustProxy ? forwardedOrigin(ctx.req) : undefined) ?? DEFAULT_WEB_BASE_URL;
+    return `${base}/s/${survey.publicToken}`;
+  };
 
-  function surveyJson(survey, { withFields = true } = {}) {
+  function surveyJson(ctx, survey, { withFields = true } = {}) {
     return {
       id: survey.id,
       title: survey.title,
@@ -38,13 +45,13 @@ export function registerSurveyRoutes({ route, repo, config, today, live }) {
       closesOn: survey.closesOn,
       responseCount: survey.responseCount ?? 0,
       publicToken: survey.publicToken,
-      shareUrl: shareUrl(survey),
+      shareUrl: shareUrl(ctx, survey),
       createdAt: isoUtc(survey.createdAt),
       updatedAt: isoUtc(survey.updatedAt),
     };
   }
 
-  const sendSurvey = (ctx, status, id) => sendJson(ctx.res, status, { survey: surveyJson(repo.getOwnedSurvey(id, ctx.user.id)) });
+  const sendSurvey = (ctx, status, id) => sendJson(ctx.res, status, { survey: surveyJson(ctx, repo.getOwnedSurvey(id, ctx.user.id)) });
 
   /** Validates a survey definition body ({ title, description, closesOn, fields }) with the domain rules. */
   async function readDefinition(ctx, currentClosesOn) {
@@ -61,7 +68,7 @@ export function registerSurveyRoutes({ route, repo, config, today, live }) {
   }
 
   authed('GET', '/surveys', (ctx) => {
-    sendJson(ctx.res, 200, { surveys: repo.listSurveys(ctx.user.id).map((s) => surveyJson(s, { withFields: false })) });
+    sendJson(ctx.res, 200, { surveys: repo.listSurveys(ctx.user.id).map((s) => surveyJson(ctx, s, { withFields: false })) });
   });
 
   // Registered before /surveys/:id so "events" is never read as an id.
@@ -74,7 +81,7 @@ export function registerSurveyRoutes({ route, repo, config, today, live }) {
     sendSurvey(ctx, 201, id);
   });
 
-  authed('GET', '/surveys/:id', (ctx) => sendJson(ctx.res, 200, { survey: surveyJson(ownedSurvey(ctx)) }));
+  authed('GET', '/surveys/:id', (ctx) => sendJson(ctx.res, 200, { survey: surveyJson(ctx, ownedSurvey(ctx)) }));
 
   authed('PUT', '/surveys/:id', async (ctx) => {
     const survey = ownedSurvey(ctx);
@@ -169,14 +176,14 @@ export function registerSurveyRoutes({ route, repo, config, today, live }) {
   });
 
   authed('GET', '/surveys/:id/qr.svg', async (ctx) => {
-    const svg = await qrSvg(shareUrl(ownedSurvey(ctx)), QR_LABEL);
+    const svg = await qrSvg(shareUrl(ctx, ownedSurvey(ctx)), QR_LABEL);
     ctx.res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
     ctx.res.end(svg);
   });
 
   authed('GET', '/surveys/:id/qr.png', async (ctx) => {
     const survey = ownedSurvey(ctx);
-    const png = await qrPng(shareUrl(survey));
+    const png = await qrPng(shareUrl(ctx, survey));
     ctx.res.writeHead(200, {
       'Content-Type': 'image/png',
       'Content-Disposition': `attachment; filename="sharevy-survey-${survey.id}-qr.png"`,

@@ -42,7 +42,7 @@ api/                         REST API, JSON only (port 3001)
 │   ├── config.js            Environment variables -> one config object
 │   ├── db.js                Opens SQLite, creates the schema, runs additive migrations
 │   ├── app.js               HTTP server: /api/v1 router, Bearer sessions, CORS, JSON errors
-│   ├── http.js              JSON body reader, JSON/204 senders, Bearer header, ISO dates
+│   ├── http.js              JSON body reader, JSON/204 senders, Bearer header, forwarded origin, ISO dates
 │   ├── errors.js            Message key -> stable error code; ApiError and the error JSON shape
 │   ├── auth.js              Password hashing, random tokens, token hashing
 │   ├── rate-limit.js        In-memory rate limiter + client IP detection
@@ -124,7 +124,7 @@ sequenceDiagram
 
     B->>B: validation.js checks every answer (no request if invalid)
     B->>W: POST /api/v1/public/surveys/abc123/responses<br/>JSON + X-Device-Id
-    W->>A: forwarded as is, X-Forwarded-For = real client IP
+    W->>A: forwarded as is, X-Forwarded-For = real client IP, X-Forwarded-Host = Host the browser used
     A->>A: security headers, CORS, match /api/v1 route, load Bearer session (none here)
     A->>R: handler(ctx)
     R->>P: getSurveyByToken("abc123")
@@ -145,7 +145,7 @@ Every API request goes through the same pipeline:
 
 | Step | Where | What happens |
 |------|-------|--------------|
-| 1 | `web/server/app.js` | `/api/*` is piped to `API_URL` unchanged (method, headers, body, status, streamed answer). `X-Forwarded-For` is overwritten with the real client address |
+| 1 | `web/server/app.js` | `/api/*` is piped to `API_URL` unchanged (method, headers, body, status, streamed answer). `X-Forwarded-For` is overwritten with the real client address, `X-Forwarded-Host`/`-Proto` with the address the browser used |
 | 2 | `api/src/app.js` | Security headers and `Cache-Control: no-store` on every response; CORS headers for allowed origins; `OPTIONS` answers 204 |
 | 3 | `app.js` | Paths outside `/api/v1` answer 404 |
 | 4 | `app.js` → `matchRoute` | First route whose method + path match wins (404 / 405 with `Allow`; 400 for a malformed `%` encoding) |
@@ -309,7 +309,7 @@ The database file (`data/surveys.db`) is the same one the single-server version 
 | `port` | `PORT` | `3001` | `server.js` |
 | `host` | `HOST` | `127.0.0.1` (only the web proxy reaches the API; `0.0.0.0` exposes it) | `server.js` |
 | `dbPath` | `DB_PATH` | `data/surveys.db`, relative to the repository root | `server.js`, `scripts/create-user.js` |
-| `webBaseUrl` | `WEB_BASE_URL` (fallback `BASE_URL`) | `http://localhost:3000` | `routes/surveys.js` share link and QR |
+| `webBaseUrl` | `WEB_BASE_URL` (fallback `BASE_URL`) | `null`: the forwarded address, else `DEFAULT_WEB_BASE_URL` (`http://localhost:3000`) | `routes/surveys.js` share link and QR |
 | `corsOrigins` | `CORS_ORIGINS` (comma-separated, `*` = any) | `['http://localhost:3000']` | `app.js` → `applyCors` |
 | `allowRegistration` | `ALLOW_REGISTRATION` | `true` | `routes/auth.js`, `/meta` |
 | `sessionTtlMs` | — | 7 days | `routes/auth.js` |
@@ -380,6 +380,7 @@ Pass `':memory:'` for a throwaway database (the tests do this).
 | `sendJson(res, status, data, headers)` | JSON response |
 | `sendNoContent(res)` | `204` |
 | `bearerToken(req)` | The token of `Authorization: Bearer <token>`, or `undefined` |
+| `forwardedOrigin(req)` | `"proto://host[:port]"` from `X-Forwarded-Proto` (`http`/`https`) and `X-Forwarded-Host` (`hostname[:port]` characters only), or `undefined` |
 | `isoUtc(sqliteDate)` | `"2026-11-17 10:00:00"` → `"2026-11-17T10:00:00Z"` |
 
 ---
@@ -453,7 +454,7 @@ All routes need a Bearer token (`authed(...)` registers them with `{ auth: true 
 **Key internals:**
 
 - **`ownedSurvey(ctx)`** — the single ownership gate. It loads the survey by id **and** `owner_id = ctx.user.id`; otherwise 404. Returning 404 instead of 403 means another creator cannot even tell that the survey exists.
-- **`shareUrl(survey)`** — `WEB_BASE_URL` + `/s/<publicToken>`: respondents open surveys in the **web client**, not the API.
+- **`shareUrl(ctx, survey)`** — base + `/s/<publicToken>`: respondents open surveys in the **web client**, not the API. Base: `WEB_BASE_URL`; else, with `trustProxy`, `forwardedOrigin(req)` (`http.js`: `X-Forwarded-Proto` + a `hostname[:port]` `X-Forwarded-Host`); else `DEFAULT_WEB_BASE_URL`.
 - **`readDefinition`** — turns the JSON body into the shape `parseSurveyInput` expects and throws `validationFailed({ errors })` with coded problems.
 - **Public token** — `newToken(18)` gives 144 random bits, so links cannot be guessed or enumerated.
 - **CSV BOM** — the `﻿` prefix makes Excel read accented characters correctly. The `;` variant exists for Excel with Spanish/European regional settings.
@@ -611,7 +612,7 @@ The heart of the API. It has no database, no HTTP and no JSON output, which is w
 | `qrSvg(text, label)` | SVG with `role="img"` and an accessible name |
 | `qrPng(text)` | 600px PNG, large enough to print |
 
-Medium error correction and a 2-module margin. The QR always encodes `shareUrl`, so set `WEB_BASE_URL` to the address people use, or the code will point to the wrong place. Only `qr.js` imports `qrcode`, so replacing the library touches one file.
+Medium error correction and a 2-module margin. The QR always encodes `shareUrl`: the address the creator's browser used, or `WEB_BASE_URL` when set. Only `qr.js` imports `qrcode`, so replacing the library touches one file.
 
 ---
 
@@ -645,7 +646,7 @@ Reads `PORT` (3000), `HOST` (`0.0.0.0`) and `API_URL` (`http://127.0.0.1:3001`),
 
 | Path | Answer |
 |------|--------|
-| `/api`, `/api/*` | **Proxied** to `apiUrl`: method, headers (minus hop-by-hop), body, status and streamed answer, so event streams flow through. `X-Forwarded-For` is set to the real client address. API down → `502 { error: { code: 'api_unavailable' } }`. A closed tab ends the upstream request too |
+| `/api`, `/api/*` | **Proxied** to `apiUrl`: method, headers (minus hop-by-hop), body, status and streamed answer, so event streams flow through. `X-Forwarded-For` is set to the real client address and `X-Forwarded-Host` to the `Host` the browser sent (client-sent values are never kept). API down → `502 { error: { code: 'api_unavailable' } }`. A closed tab ends the upstream request too |
 | `/public/*`, `/locales/*` | Files from those folders only. Decoded `..`, `.`, backslashes and NUL are refused before touching the disk |
 | `APP_ROUTES` (`/`, `/login`, `/register`, `/surveys`, `/surveys/new`, `/surveys/<n>`, `/surveys/<n>/edit`, `/s/<token>`, `/s/<token>/thanks`) | `index.html`, status 200 |
 | Anything else | `index.html` with status 404 (the router shows "page not found") |

@@ -415,3 +415,48 @@ describe('existing database', () => {
     }
   });
 });
+
+describe('share link address', () => {
+  /** shareUrl of a new survey (and the URL its QR code encodes), with the given forwarded headers. */
+  async function shareUrlWith(app, email, headers) {
+    const c = await creator(app.base, email);
+    const survey = await c.createSurvey([{ label: 'Q', type: 'text' }]);
+    const got = await c.request(`/surveys/${survey.id}`, { headers });
+    const svg = await c.request(`/surveys/${survey.id}/qr.svg`, { headers, raw: true });
+    const qr = (await QRCode.toString(got.json.survey.shareUrl, { type: 'svg', errorCorrectionLevel: 'M', margin: 2 })).trim();
+    assert.equal(svg.text.replace(/ role="img" aria-label="[^"]*"/, ''), qr, 'the QR code encodes the same link');
+    return got.json.survey.shareUrl.replace(`/s/${survey.publicToken}`, '');
+  }
+  const lan = { 'x-forwarded-host': '192.168.1.20:3000', 'x-forwarded-proto': 'http' };
+
+  test('without WEB_BASE_URL, behind the trusted web proxy, links use the address the browser used', async () => {
+    const app = await startApi({ trustProxy: true });
+    try {
+      assert.equal(await shareUrlWith(app, 'fwd1@corp.local', lan), 'http://192.168.1.20:3000');
+      assert.equal(await shareUrlWith(app, 'fwd2@corp.local', { 'x-forwarded-host': 'surveys.corp.local', 'x-forwarded-proto': 'https' }), 'https://surveys.corp.local');
+      // Anything that is not hostname[:port] (or a bad scheme) is ignored: the default address is used.
+      for (const [i, bad] of [
+        { 'x-forwarded-host': 'evil.example/phish', 'x-forwarded-proto': 'http' },
+        { 'x-forwarded-host': 'a b', 'x-forwarded-proto': 'http' },
+        { 'x-forwarded-host': 'lan.local', 'x-forwarded-proto': 'javascript' },
+      ].entries()) {
+        assert.equal(await shareUrlWith(app, `bad${i}@corp.local`, bad), 'http://localhost:3000', JSON.stringify(bad));
+      }
+      assert.equal(await shareUrlWith(app, 'none@corp.local', {}), 'http://localhost:3000');
+    } finally {
+      await app.close();
+    }
+  });
+
+  test('forwarded headers are ignored when the proxy is not trusted, and WEB_BASE_URL always wins', async () => {
+    const untrusted = await startApi({ trustProxy: false });
+    const pinned = await startApi({ trustProxy: true, webBaseUrl: 'http://pinned.local:3000' });
+    try {
+      assert.equal(await shareUrlWith(untrusted, 'untrusted@corp.local', lan), 'http://localhost:3000');
+      assert.equal(await shareUrlWith(pinned, 'pinned@corp.local', lan), 'http://pinned.local:3000');
+    } finally {
+      await untrusted.close();
+      await pinned.close();
+    }
+  });
+});

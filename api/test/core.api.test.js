@@ -113,7 +113,7 @@ describe('CORS', () => {
   test('configuration reads PORT, WEB_BASE_URL and CORS_ORIGINS with sensible defaults', () => {
     const defaults = loadConfig({});
     assert.equal(defaults.port, 3001);
-    assert.equal(defaults.webBaseUrl, 'http://localhost:3000');
+    assert.equal(defaults.webBaseUrl, null, 'unset: share links follow the address the browser used');
     assert.deepEqual(defaults.corsOrigins, ['http://localhost:3000']);
     const custom = loadConfig({ WEB_BASE_URL: 'https://surveys.local/', CORS_ORIGINS: 'https://a.local, https://b.local' });
     assert.equal(custom.webBaseUrl, 'https://surveys.local');

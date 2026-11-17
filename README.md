@@ -12,7 +12,7 @@ Self-hosted app to create surveys and collect responses through a shareable link
 ```mermaid
 flowchart LR
     B["Browser<br/>(people on the LAN)"] -- "pages, JS, CSS<br/>/api/* (JSON)" --> W["web/<br/>0.0.0.0:3000<br/>static files + /api proxy"]
-    W -- "/api/* forwarded<br/>X-Forwarded-For set" --> A["api/<br/>127.0.0.1:3001<br/>JSON REST API /api/v1"]
+    W -- "/api/* forwarded<br/>X-Forwarded-For/-Host set" --> A["api/<br/>127.0.0.1:3001<br/>JSON REST API /api/v1"]
     A --> D[("data/surveys.db<br/>SQLite")]
     M["Other clients<br/>(mobile, scripts)"] -. "JSON over HTTP<br/>docs/API.md" .-> A
 ```
@@ -42,7 +42,7 @@ npm run start:web          # terminal 2: web client on port 3000
 1. Open `http://localhost:3000`, register a creator account, and create a survey.
 2. Other people on the same network open the share link shown on the survey page (`http://<server-ip>:3000/s/<token>`).
 
-By default the API listens on `127.0.0.1` and trusts the `X-Forwarded-For` header the web proxy sets, so its rate limits count each person. To pin the address used in share links and QR codes, also set `WEB_BASE_URL`:
+By default the API listens on `127.0.0.1` and trusts the `X-Forwarded-For` header the web proxy sets, so its rate limits count each person. Share links and QR codes use the address the browser opened (for example `http://<server-ip>:3000`); to pin one address instead, set `WEB_BASE_URL`:
 
 ```bash
 WEB_BASE_URL=http://<server-ip>:3000 npm run start:api
@@ -77,7 +77,7 @@ Both run hidden in the background and log to `data/*.log`. Overrides: `SHAREVY_D
 | `PORT` | `3001` | HTTP port. |
 | `HOST` | `127.0.0.1` | Interface to bind. The default keeps the API reachable only through the web proxy. To expose it to other clients, set `HOST=0.0.0.0` (then `TRUST_PROXY` defaults to `false`). |
 | `DB_PATH` | `data/surveys.db` | SQLite file. Relative paths are resolved from the repository root. Back this file up. |
-| `WEB_BASE_URL` | `http://localhost:3000` | Address of the web client; share links and QR codes point to `<WEB_BASE_URL>/s/<token>`. Set it to the address people use (e.g. `http://192.168.1.20:3000`). `BASE_URL` is read as a fallback. |
+| `WEB_BASE_URL` | unset | Address of the web client; share links and QR codes point to `<WEB_BASE_URL>/s/<token>`. Unset, they use the address the browser opened (the web proxy's `X-Forwarded-Host`, only with `TRUST_PROXY`), else `http://localhost:3000`. Set it to pin one address (e.g. `http://192.168.1.20:3000`). `BASE_URL` is read as a fallback. |
 | `CORS_ORIGINS` | `http://localhost:3000` | Comma-separated browser origins allowed to call the API directly; `*` allows any. Not needed for the web client, which goes through its proxy. |
 | `ALLOW_REGISTRATION` | `true` | `false` disables self-registration of creators (use `npm run create-user`). |
 | `TRUST_PROXY` | `true` on a loopback `HOST`, else `false` | `true` reads the client IP from `X-Forwarded-For`, which the web proxy always overwrites. An explicit value always wins; never set `true` on an API reachable directly (see [Security notes](#security-notes)). |
@@ -140,7 +140,7 @@ The API sends stable error **codes**; the client translates them. To add a langu
 | Sessions | `Authorization: Bearer <token>`. The API stores only the SHA-256 of each token; tokens last 7 days and "Log out" ends them on the server. |
 | Token in the browser | Kept in `localStorage` (`sharevy-token`), so any script on this origin could read it. Kept small on purpose: the CSP allows only this origin's scripts, the page loads no third-party code, and the DOM is built without `innerHTML`. |
 | Content-Security-Policy | Strict on every web page (only this origin's scripts and styles, nothing inline); the API answers `default-src 'none'`. Plus `nosniff`, `X-Frame-Options: DENY`, `no-referrer`. |
-| Network exposure | The API binds to `127.0.0.1`; only the web proxy reaches it. The proxy always overwrites `X-Forwarded-For` with the address it really sees, so the API (on a loopback host `TRUST_PROXY` is on by default) counts each person in its rate limits, not the proxy. Never set `TRUST_PROXY=true` on an API reachable directly: clients could fake their IP. |
+| Network exposure | The API binds to `127.0.0.1`; only the web proxy reaches it. The proxy always overwrites `X-Forwarded-For` with the address it really sees (and `X-Forwarded-Host`/`-Proto` with the address the browser used, for share links), so the API (on a loopback host `TRUST_PROXY` is on by default) counts each person in its rate limits, not the proxy. Never set `TRUST_PROXY=true` on an API reachable directly: clients could fake their IP. |
 | Rate limits | Failed logins per email + IP, and submissions per survey + IP, counted in memory (reset on restart). Answers 429 with `Retry-After`. |
 | Ownership | Creators only see their own surveys; another creator's survey answers 404, like a missing one. Ownership is also enforced in SQL. |
 | Share links | 144-bit random tokens; anyone holding the link can answer. |

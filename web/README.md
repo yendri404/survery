@@ -11,7 +11,7 @@ npm test    # web server + pure modules (node:test)
 
 `server.js` (no dependencies) does three things:
 
-- `/api/*` is forwarded to `API_URL`, including event streams, status codes and headers. The browser therefore uses one origin and needs no CORS. The proxy sets `X-Forwarded-For` to the address it really sees. The API's defaults (`HOST=127.0.0.1`, which turns `TRUST_PROXY` on) keep it unexposed and make its rate limits count each person rather than the proxy.
+- `/api/*` is forwarded to `API_URL`, including event streams, status codes and headers. The browser therefore uses one origin and needs no CORS. The proxy sets `X-Forwarded-For` to the address it really sees and `X-Forwarded-Host` to the `Host` the browser sent (the API builds share links from it when `WEB_BASE_URL` is unset), overwriting any value the browser sent. The API's defaults (`HOST=127.0.0.1`, which turns `TRUST_PROXY` on) keep it unexposed and make its rate limits count each person rather than the proxy.
 - `/public/*` and `/locales/*` serve files from `public/` and `locales/`.
 - App pages (`/`, `/login`, `/surveys/...`, `/s/<token>`, ...) answer `index.html`, and the client router (`public/js/routes.js`) draws the page. Unknown paths answer `index.html` with status 404.
 

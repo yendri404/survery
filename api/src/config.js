@@ -7,6 +7,9 @@ export const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const fromRepo = (path) => (path === ':memory:' || isAbsolute(path) ? path : resolve(REPO_ROOT, path));
 const withoutTrailingSlash = (url) => url.trim().replace(/\/+$/, '');
 
+/** Share links point here when WEB_BASE_URL is not set and no trusted proxy says which address the browser used. */
+export const DEFAULT_WEB_BASE_URL = 'http://localhost:3000';
+
 /** Hosts only this machine can reach (where the web proxy runs). */
 export const isLoopback = (host) => ['127.0.0.1', '::1', 'localhost'].includes(host);
 
@@ -19,8 +22,10 @@ export function loadConfig(env = process.env) {
     // Default: data/surveys.db at the repository root, whatever folder the server starts from.
     dbPath: fromRepo(env.DB_PATH ?? 'data/surveys.db'),
     // Address of the web client; share links and QR codes point to `${webBaseUrl}/s/<token>`.
-    // BASE_URL (the setting of the single-server version) is still read as a fallback.
-    webBaseUrl: withoutTrailingSlash(env.WEB_BASE_URL || env.BASE_URL || 'http://localhost:3000'),
+    // BASE_URL (the setting of the single-server version) is still read as a fallback. Unset (null),
+    // links follow the address the browser used (X-Forwarded-Host, only with trustProxy), else
+    // DEFAULT_WEB_BASE_URL.
+    webBaseUrl: env.WEB_BASE_URL || env.BASE_URL ? withoutTrailingSlash(env.WEB_BASE_URL || env.BASE_URL) : null,
     // Browser origins allowed to call the API (comma-separated; "*" allows any origin).
     corsOrigins: (env.CORS_ORIGINS ?? 'http://localhost:3000').split(',').map(withoutTrailingSlash).filter(Boolean),
     allowRegistration: env.ALLOW_REGISTRATION !== 'false',

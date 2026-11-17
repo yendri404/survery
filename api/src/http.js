@@ -47,5 +47,19 @@ export function bearerToken(req) {
   return match?.[1];
 }
 
+const FORWARDED_HOST = /^[A-Za-z0-9.-]+(?::\d{1,5})?$/;
+
+/**
+ * "proto://host[:port]" the client used, from X-Forwarded-Proto and X-Forwarded-Host (set by the web
+ * proxy, which overwrites whatever the browser sent). Undefined when either is missing or malformed,
+ * so a header can never put a path, credentials or another scheme into a link.
+ */
+export function forwardedOrigin(req) {
+  const proto = String(req.headers['x-forwarded-proto'] ?? '').trim().toLowerCase();
+  const host = String(req.headers['x-forwarded-host'] ?? '').trim();
+  if (!['http', 'https'].includes(proto) || !FORWARDED_HOST.test(host)) return undefined;
+  return `${proto}://${host}`;
+}
+
 /** "2026-11-17 10:00:00" (SQLite UTC) -> "2026-11-17T10:00:00Z" (ISO 8601). */
 export const isoUtc = (sqliteDate) => (sqliteDate ? `${sqliteDate.replace(' ', 'T')}Z` : null);

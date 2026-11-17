@@ -135,8 +135,11 @@ export function createWebServer({ apiUrl = 'http://127.0.0.1:3001', root = WEB_R
     const headers = {
       ...withoutHopByHop(req.headers),
       host: target.host,
-      // The API trusts this header only with TRUST_PROXY=true; it always holds the real client address.
+      // The API trusts these only with TRUST_PROXY on. They are always overwritten here, never taken
+      // from the browser: the real client address, and the address the browser used (the API builds
+      // share links from it when WEB_BASE_URL is not set).
       'x-forwarded-for': req.socket.remoteAddress ?? '',
+      'x-forwarded-host': req.headers.host ?? '',
       'x-forwarded-proto': 'http',
     };
     const upstream = sendRequest(target, { method: req.method, headers }, (apiRes) => {

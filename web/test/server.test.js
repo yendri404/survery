@@ -166,7 +166,7 @@ describe('web server', () => {
   test('/api requests are forwarded with their body, status and headers', async () => {
     const res = await fetch(`${base}/api/v1/auth/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer abc', 'X-Forwarded-For': '6.6.6.6' },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer abc', 'X-Forwarded-For': '6.6.6.6', 'X-Forwarded-Host': 'evil.example', 'X-Forwarded-Proto': 'https' },
       body: '{"email":"a@b.c"}',
     });
     assert.equal(res.status, 429);
@@ -177,6 +177,9 @@ describe('web server', () => {
     assert.equal(seen.headers.authorization, 'Bearer abc');
     // The client cannot pick its own IP: the proxy reports the address it really sees.
     assert.equal(seen.headers['x-forwarded-for'], '127.0.0.1');
+    // Nor the address it used: share links are built from the Host it really sent.
+    assert.equal(seen.headers['x-forwarded-host'], new URL(base).host);
+    assert.equal(seen.headers['x-forwarded-proto'], 'http');
 
     const csv = await fetch(`${base}/api/v1/surveys/7/export.csv?delimiter=semicolon&lang=es`);
     assert.equal(csv.status, 200);

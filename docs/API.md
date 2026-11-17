@@ -195,7 +195,7 @@ A creator only sees their own surveys: another creator's survey answers `404 not
 | Field | Meaning |
 |-------|---------|
 | `status` | `open` accepts answers; `closed` was closed by the creator; `expired` passed `closesOn`. A survey accepts answers during its whole closing day (server time). |
-| `shareUrl` | Link for respondents, in the **web client**: `${WEB_BASE_URL}/s/<publicToken>`. |
+| `shareUrl` | Link for respondents, in the **web client**: `${WEB_BASE_URL}/s/<publicToken>`. Without `WEB_BASE_URL`, the base is the address the client used, from `X-Forwarded-Proto` + `X-Forwarded-Host` (only with `TRUST_PROXY`; the host must be `hostname[:port]`), else `http://localhost:3000`. |
 | `options` | Written by the creator for `select`, `radio`, `checkbox`; always `[]` for the others (`yesno` uses `yes` / `no`). |
 
 ### `GET /surveys`
@@ -491,7 +491,7 @@ Environment variables of the API process:
 | `PORT` | `3001` | HTTP port. |
 | `HOST` | `127.0.0.1` | Interface to bind. The default makes the API reachable only through the `web/` proxy. To expose it to other clients, set `HOST=0.0.0.0` (then `TRUST_PROXY` defaults to `false`). |
 | `DB_PATH` | `data/surveys.db` | SQLite file. Relative paths are resolved from the **repository root**, not the current folder. |
-| `WEB_BASE_URL` | `http://localhost:3000` | Address of the web client, used for `shareUrl` and QR codes. Set it to the address people use on the network (e.g. `http://192.168.1.20:3000`). Falls back to `BASE_URL` when only that is set (setting of the single-server version). |
+| `WEB_BASE_URL` | unset | Address of the web client, used for `shareUrl` and QR codes. Unset: the address the browser used, as the `web/` proxy reports it in `X-Forwarded-Host` (only with `TRUST_PROXY`), else `http://localhost:3000`. Set it to pin one address (e.g. `http://192.168.1.20:3000`). Falls back to `BASE_URL` when only that is set (setting of the single-server version). |
 | `CORS_ORIGINS` | `http://localhost:3000` | Comma-separated browser origins allowed to call the API; `*` allows any. |
 | `ALLOW_REGISTRATION` | `true` | `false` disables `POST /auth/register` (create accounts with `npm run create-user -- <email> <name> <password>`). |
 | `TRUST_PROXY` | `true` when `HOST` is loopback (`127.0.0.1`, `::1`, `localhost`), else `false` | `true` only behind a reverse proxy you control: the client IP comes from `X-Forwarded-For`. The `web/` server is such a proxy (it always overwrites that header); without it every person would count as `127.0.0.1` for the rate limits. An explicit value always wins; the API warns at start-up when it is `true` on a non-loopback host. |
