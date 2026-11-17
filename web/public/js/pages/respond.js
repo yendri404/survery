@@ -2,7 +2,7 @@ import { ApiError } from '../api.js';
 import { answerField, fieldError, respondentNameField } from '../components/answer-field.js';
 import { icon } from '../components/icons.js';
 import { errorList, resultPanel } from '../components/layout.js';
-import { h, withParts } from '../dom.js';
+import { h, setErrorBox, withParts } from '../dom.js';
 import { checkAnswer, checkRespondentName } from '../validation.js';
 
 /*
@@ -28,6 +28,13 @@ function showResult(app, title, panel) {
   document.title = `${title} · Sharevy`;
   document.querySelector('main').replaceChildren(panel);
   window.scrollTo(0, 0);
+}
+
+/** A problem that is not about one answer, above the form; the next submit clears it. */
+function showSubmitError(form, message) {
+  const box = errorList([message]);
+  setErrorBox(form, box);
+  box.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 
 /**
@@ -73,18 +80,11 @@ function attachValidation(form, entries, app, limits) {
 
   /** The summary above the form: "Please check these N answers:" and a link to each one. */
   function renderSummary() {
-    const old = form.previousElementSibling?.classList.contains('errors') ? form.previousElementSibling : null;
     const problems = entries.filter((entry) => shown.has(entry));
-    if (!problems.length) {
-      old?.remove();
-      return;
-    }
-    const summary = errorList([
+    setErrorBox(form, errorList(problems.length ? [
       tn('respond.checkAnswers', problems.length),
       ...problems.map((entry) => [h('a', { href: `#${entry.control.id}` }, entry.label), `: ${shown.get(entry)}`]),
-    ]);
-    if (old) old.replaceWith(summary);
-    else form.before(summary);
+    ] : []));
   }
 
   function focusFirst() {
@@ -176,7 +176,9 @@ export async function respondPage(app, { params, signal }) {
         const messages = Object.fromEntries(Object.entries(err.fields).map(([key, problem]) => [key, app.error(new ApiError(422, problem))]));
         return checks.showServerErrors(messages);
       }
-      return app.showError(err, true);
+      // Network down, API unavailable, too many responses...: the form and its answers stay, so
+      // the respondent can send again.
+      return showSubmitError(form, app.error(err));
     } finally {
       submit.disabled = false;
     }

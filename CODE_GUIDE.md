@@ -74,7 +74,7 @@ web/                         Browser client (port 3000), no dependencies, no bui
 │   │   ├── errors.js        API error code -> message key
 │   │   ├── sse.js           Event streams read with fetch (parser + reconnection)
 │   │   ├── storage.js       localStorage keys, device id
-│   │   ├── dom.js           h()/s() DOM builders, withParts()
+│   │   ├── dom.js           h()/s() DOM builders, withParts(), setErrorBox()
 │   │   ├── i18n.js          Language choice, t/tn, dates
 │   │   ├── validation.js    Respondent answer checks (mirror of the API rules)
 │   │   ├── number-input.js  Number question typing filter
@@ -750,7 +750,7 @@ A page is `async (app, { params, query, signal }) → { title, body, respondent?
 | Behavior | Detail |
 |----------|--------|
 | Checks before sending | On submit, every answer is checked with `checkAnswer` / `checkRespondentName` (`validation.js`). Invalid → nothing is sent; errors appear under each question (`.has-error`, `.field-error`, `aria-invalid` / `aria-describedby`), plus the `.errors` summary with a link to each, and the first invalid question gets the focus. A question's error clears as soon as its answer is valid. The form sets `noValidate` so browser bubbles do not compete |
-| Server errors | A 422 `fields` map is translated with `errors.js` and shown with the same markup; `already_answered`, `survey_closed`, `survey_expired` switch to their panels |
+| Server errors | A 422 `fields` map is translated with `errors.js` and shown with the same markup; `already_answered`, `survey_closed`, `survey_expired` switch to their panels. Any other failure (network down, `api_unavailable`, `too_many_responses`...) shows its translated message in the `.errors` box above the form; the form and its answers stay, so the respondent can send again |
 | Number questions | A text input with `inputmode="decimal"` (a number input hides the typed text and cursor from scripts). Only digits, one point and a leading `-` can be typed, pasted or dropped (`beforeinput`, with an `input` safety net); a comma becomes a point; Up/Down add or subtract 1 (`number-input.js`) |
 
 ---
@@ -784,6 +784,7 @@ The SVG is `aria-hidden`; the legend and bar labels carry every number as text. 
 | `h(tag, attrs, ...children)` | Element; strings become **text nodes**; `on*` functions become listeners; `value`, `checked`, `disabled`... are set as properties |
 | `s(tag, attrs, ...children)` | Same for SVG |
 | `withParts(text, parts)` | A translated sentence with nodes in its `{placeholders}` ("No account yet? {link}.") |
+| `setErrorBox(form, box)` | Puts an `.errors` box (or nothing, with `null`) right above a form, replacing the previous one; used by the editor and the respondent form |
 
 There is no `innerHTML` anywhere in the client: user text can never become markup.
 

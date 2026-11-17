@@ -60,3 +60,14 @@ export function withParts(text, parts) {
   nodes.push(text.slice(last));
   return nodes;
 }
+
+/**
+ * Shows `box` (an `.errors` element, or null to clear) right above `form`, replacing the one shown
+ * there before. Forms keep what was typed: problems appear above them instead of replacing the page.
+ */
+export function setErrorBox(form, box) {
+  const old = form.previousElementSibling?.classList.contains('errors') ? form.previousElementSibling : null;
+  if (!box) old?.remove();
+  else if (old) old.replaceWith(box);
+  else form.before(box);
+}

@@ -2,7 +2,7 @@ import { ApiError } from '../api.js';
 import { createBuilder } from '../components/builder.js';
 import { icon } from '../components/icons.js';
 import { backLink, errorList, notice } from '../components/layout.js';
-import { h } from '../dom.js';
+import { h, setErrorBox } from '../dom.js';
 import { addDays } from '../format.js';
 
 /** Container: new survey (/surveys/new) or edit (/surveys/:id/edit). */
@@ -60,10 +60,7 @@ export async function editorPage(app, { params, signal }) {
 
   /** API problems (a list, in the order the API found them) in a box above the form. */
   function showErrors(messages) {
-    const old = form.previousElementSibling?.classList.contains('errors') ? form.previousElementSibling : null;
-    const box = errorList(messages);
-    if (old) old.replaceWith(box);
-    else form.before(box);
+    setErrorBox(form, errorList(messages));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
