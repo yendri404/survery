@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { hashToken } from '../src/auth.js';
 import { Client, answer, newDeviceId, openEvents, startApi } from './helpers.js';
@@ -126,6 +127,33 @@ describe('respondents', () => {
     const statuses = (await Promise.all([1, 2, 3].map(() => answer(app.base, survey.publicToken, {}, phone)))).map((r) => r.status).sort();
     assert.deepEqual(statuses, [201, 409, 409]);
     assert.equal((await c.request(`/surveys/${survey.id}`)).json.survey.responseCount, 1);
+  });
+
+  test('a survey deleted while its answer is being sent answers 404 not_found and stores nothing', async () => {
+    const { c, survey } = await surveyOf(app.base, 'gone@corp.local');
+    const { port } = new URL(app.base);
+    const body = JSON.stringify({ answers: { [survey.fields[0].id]: 'late' } });
+    let resolveRes;
+    const response = new Promise((resolve) => { resolveRes = resolve; });
+    const req = request({
+      host: '127.0.0.1', port, method: 'POST', path: `/api/v1/public/surveys/${survey.publicToken}/responses`,
+      headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body), 'x-device-id': newDeviceId() },
+    }, (res) => {
+      let text = '';
+      res.on('data', (chunk) => { text += chunk; });
+      res.on('end', () => resolveRes({ status: res.statusCode, json: JSON.parse(text) }));
+    });
+    req.write(body.slice(0, 5)); // the API has found the survey and is reading the body
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal((await c.request(`/surveys/${survey.id}`, { method: 'DELETE' })).status, 204);
+    req.end(body.slice(5));
+    const res = await response;
+    assert.equal(res.status, 404);
+    assert.equal(res.json.error.code, 'not_found');
+    assert.equal(app.db.prepare('SELECT COUNT(*) AS n FROM responses WHERE survey_id = ?').get(survey.id).n, 0);
+    // The transaction was rolled back: the API keeps writing normally.
+    const next = await surveyOf(app.base, 'after-gone@corp.local');
+    assert.equal((await answer(app.base, next.survey.publicToken, { answers: { [next.survey.fields[0].id]: 'ok' } })).status, 201);
   });
 
   test('closed surveys reject responses with 403 survey_closed until reopened', async () => {

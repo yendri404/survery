@@ -550,7 +550,7 @@ The heart of the API. It has no database, no HTTP and no JSON output, which is w
 | Users | `createUser`, `findUserByEmail`, `findUserById` |
 | Sessions | `createSession`, `getSession` (ignores expired ones), `deleteSession`, `deleteExpiredSessions` |
 | Surveys | `listSurveys(ownerId)`, `createSurvey`, `getOwnedSurvey(id, ownerId)`, `getSurveyByToken`, `updateSurvey`, `setSurveyOpen`, `deleteSurvey` |
-| Responses | `addResponse` (returns `null` when the device already answered), `hasDeviceResponse`, `listResponses` (newest first), `deleteResponse(surveyId, responseId)` |
+| Responses | `addResponse` (returns `{ id, number }`, or `{ error: 'alreadyAnswered' }` when the device already answered and `{ error: 'surveyMissing' }` when the survey was deleted meanwhile, both rolled back), `hasDeviceResponse`, `listResponses` (newest first), `deleteResponse(surveyId, responseId)` |
 
 **Design notes:**
 
