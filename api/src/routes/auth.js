@@ -1,9 +1,8 @@
 import { DUMMY_HASH, hashPassword, hashToken, newToken, verifyPassword } from '../auth.js';
-import { ApiError, coded, validationFailed } from '../errors.js';
+import { ApiError, coded, tooManyRequests, validationFailed } from '../errors.js';
 import { bearerToken, readJson, sendJson, sendNoContent } from '../http.js';
 import { clientIp, createRateLimiter } from '../rate-limit.js';
-
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import { isEmail } from '../surveys.js';
 
 const text = (value) => (typeof value === 'string' ? value : '');
 const publicUser = (user) => ({ id: user.id, name: user.name, email: user.email });
@@ -27,12 +26,7 @@ export function registerAuthRoutes({ route, repo, config }) {
     const password = text(body.password);
     const limitKey = `${email.toLowerCase()}|${clientIp(ctx.req, config.trustProxy)}`;
 
-    if (loginFailures.isLimited(limitKey)) {
-      const retryAfter = loginFailures.retryAfterSeconds(limitKey);
-      const err = new ApiError(429, 'login.tooManyAttempts', { minutes: Math.ceil(retryAfter / 60) });
-      err.headers = { 'Retry-After': String(retryAfter) };
-      throw err;
-    }
+    if (loginFailures.isLimited(limitKey)) throw tooManyRequests('login.tooManyAttempts', loginFailures.retryAfterSeconds(limitKey));
 
     const user = email ? repo.findUserByEmail(email) : undefined;
     // The dummy hash keeps the timing the same whether or not the account exists.
@@ -53,7 +47,7 @@ export function registerAuthRoutes({ route, repo, config }) {
     const fields = {};
 
     if (!values.name || values.name.length > 100) fields.name = coded('register.nameInvalid');
-    if (!EMAIL.test(values.email) || values.email.length > 254) fields.email = coded('register.emailInvalid');
+    if (!isEmail(values.email)) fields.email = coded('register.emailInvalid');
     if (password.length < 8 || password.length > 200) fields.password = coded('register.passwordLength');
     // The confirmation is optional for API clients; when sent, it must match.
     if (body.confirm !== undefined && password !== text(body.confirm)) fields.confirm = coded('register.passwordMismatch');

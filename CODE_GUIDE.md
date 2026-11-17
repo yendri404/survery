@@ -393,6 +393,7 @@ Pass `':memory:'` for a throwaway database (the tests do this).
 | `ApiError(status, key, params, details)` | Throwable error; `toJSON()` gives `{ error: { code, message, params?, fields?, errors? } }`. `message` is English |
 | `coded(key, params)` | A translator for the domain functions that returns `{ code, params, message }` instead of a sentence, so each problem reaches the client as a code |
 | `validationFailed({ fields?, errors? })` | `422 validation_failed`. `fields` = per-field problems (answers, registration); `errors` = an ordered list (survey definition) |
+| `tooManyRequests(key, retryAfterSeconds)` | `429` with `params.minutes` and a `Retry-After` header; used by the login and submission limits |
 
 The full list with statuses and English messages is in [docs/API.md, section 10](docs/API.md#10-error-code-reference). `api/test/i18n.test.js` checks that every message maps to a code and back.
 
@@ -519,6 +520,7 @@ The heart of the API. It has no database, no HTTP and no JSON output, which is w
 | `localDateString(date)`, `addDays(date, n)`, `daysBetween(from, to)` | → `YYYY-MM-DD` / whole days | Server-local calendar date; calendar math without time zones; "days left" |
 | `parseRespondentName(value, { t })` | → `{ name, error }` | Optional, trimmed, max 100 characters, empty means anonymous |
 | `answerText(field, value, t)` | → `string` | Arrays become `"a, b"`; `yes`/`no` translated (CSV) |
+| `isEmail(value)` | → `boolean` | The one email rule (at most 254 characters), for email questions and creator registration |
 | `summarize(fields, responses, { t })` | → per choice field (yes/no included): `answered`, counts per option | Feeds `/summary`, which adds percentages |
 | `csvCell(value, delimiter)` | → escaped cell | Quotes when needed. Prefixes `'` to values starting with `= + - @` (formula injection), except plain numbers like `-5` |
 | `toCsv(fields, responses, delimiter, { t })` | → full CSV text | Header (fixed columns in the requested language) + rows in submission order, first column = per-survey `number`, `\r\n` line endings |

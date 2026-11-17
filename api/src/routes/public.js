@@ -1,5 +1,5 @@
 import { hashToken, newToken } from '../auth.js';
-import { ApiError, coded, validationFailed } from '../errors.js';
+import { ApiError, coded, tooManyRequests, validationFailed } from '../errors.js';
 import { readJson, sendJson } from '../http.js';
 import { clientIp, createRateLimiter } from '../rate-limit.js';
 import { parseRespondentName, surveyStatus, validateAnswers } from '../surveys.js';
@@ -78,12 +78,7 @@ export function registerPublicRoutes({ route, repo, config, today, live }) {
     if (alreadyAnswered(survey, existingDeviceId)) throw new ApiError(409, 'respond.alreadyAnswered');
 
     const limitKey = `${survey.id}|${clientIp(ctx.req, config.trustProxy)}`;
-    if (submissions.isLimited(limitKey)) {
-      const retryAfter = submissions.retryAfterSeconds(limitKey);
-      const err = new ApiError(429, 'respond.tooManyResponses', { minutes: Math.ceil(retryAfter / 60) });
-      err.headers = { 'Retry-After': String(retryAfter) };
-      throw err;
-    }
+    if (submissions.isLimited(limitKey)) throw tooManyRequests('respond.tooManyResponses', submissions.retryAfterSeconds(limitKey));
 
     const rawAnswers = body.answers ?? {};
     if (!isPlainObject(rawAnswers)) throw validationFailed({ errors: [coded('validation.answersInvalid')] });

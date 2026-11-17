@@ -94,5 +94,12 @@ export class ApiError extends Error {
   }
 }
 
+/** 429 for a rate limit: `params.minutes` for the message and a Retry-After header, in seconds. */
+export function tooManyRequests(key, retryAfterSeconds) {
+  const err = new ApiError(429, key, { minutes: Math.ceil(retryAfterSeconds / 60) });
+  err.headers = { 'Retry-After': String(retryAfterSeconds) };
+  return err;
+}
+
 /** 422 with per-field problems and/or a list of general problems (each from `coded`). */
 export const validationFailed = (details) => new ApiError(422, 'error.validation', {}, details);

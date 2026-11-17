@@ -79,6 +79,9 @@ export function parseRespondentName(value, { t = englishT } = {}) {
 const FIELD_ID = /^[a-z0-9]{4,32}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** An email address as creators register with and email questions accept (at most 254 characters). */
+export const isEmail = (value) => value.length <= 254 && EMAIL.test(value);
+
 function newFieldId(taken) {
   let id;
   do id = randomBytes(6).toString('hex');
@@ -230,7 +233,7 @@ export function validateAnswers(fields, form, { t = englishT } = {}) {
         if (!Number.isFinite(Number(value))) errors[field.id] = t('validation.number');
         break;
       case 'email':
-        if (value.length > 254 || !EMAIL.test(value)) errors[field.id] = t('validation.email');
+        if (!isEmail(value)) errors[field.id] = t('validation.email');
         break;
       case 'date':
         if (!isValidDate(value)) errors[field.id] = t('validation.date');
