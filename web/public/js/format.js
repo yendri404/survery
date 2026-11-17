@@ -10,8 +10,13 @@ export function addDays(dateString, days) {
   return d.toISOString().slice(0, 10);
 }
 
-/** A same-site path to go back to after logging in; anything else (other sites, "//x") gives the list. */
+/**
+ * A same-site path to go back to after logging in; anything else (other sites, "//x") gives the list.
+ * Control characters, spaces and backslashes are rejected because browsers strip or normalize them
+ * while parsing URLs ("/\t/evil.com" becomes "//evil.com").
+ */
 export function safeNext(next, fallback = '/surveys') {
-  if (typeof next !== 'string' || !next.startsWith('/') || next.startsWith('//') || next.startsWith('/\\')) return fallback;
+  if (typeof next !== 'string' || !next.startsWith('/') || next.startsWith('//')) return fallback;
+  if (/[\x00-\x20\x7f\\]/.test(next)) return fallback;
   return next;
 }

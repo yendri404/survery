@@ -79,7 +79,8 @@ describe('format', () => {
   test('safeNext keeps only paths of this site', () => {
     assert.equal(safeNext('/surveys/7'), '/surveys/7');
     assert.equal(safeNext('/surveys?msg=x'), '/surveys?msg=x');
-    for (const bad of ['//evil.example', '/\\evil.example', 'https://evil.example', 'javascript:alert(1)', '', null]) {
+    // Browsers strip tabs/newlines while parsing URLs, so "/\t/evil" would become "//evil".
+    for (const bad of ['//evil.example', '/\\evil.example', '/\t/evil.example', '/\n/evil.example', '/ /evil.example', 'https://evil.example', 'javascript:alert(1)', '', null]) {
       assert.equal(safeNext(bad), '/surveys', String(bad));
     }
   });
