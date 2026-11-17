@@ -22,7 +22,11 @@
     copy: 'M9 9h11v11H9zM5 15H4V4h11v1',
     trash: 'M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6',
     plus: 'M12 5v14M5 12h14',
+    alert: 'M12 3l10 18H2L12 3zM12 10v5M12 18h.01',
   };
+  // Same rule as the server (src/surveys.js): equal after trimming, ignoring case.
+  const sameTextKey = (text) => text.trim().toLocaleLowerCase();
+  const optionLines = (text) => text.split('\n').map((o) => o.trim()).filter(Boolean);
   const blank = () => ({ id: '', label: '', type: 'text', required: false, options: '' });
 
   let fields;
@@ -79,6 +83,78 @@
   });
   root.append(list, addButton);
 
+  // Controls and message slots of each rendered question, by index; filled by fieldItem().
+  let items = [];
+
+  /**
+   * Problems of each question, by index: { label?: message, options?: message }.
+   * Repeated questions and repeated options are flagged while the creator types.
+   */
+  function fieldProblems() {
+    const problems = fields.map(() => ({}));
+    const byText = new Map();
+    fields.forEach((field, index) => {
+      const key = sameTextKey(field.label);
+      if (!key) return;
+      if (!byText.has(key)) byText.set(key, []);
+      byText.get(key).push(index);
+    });
+    for (const indexes of byText.values()) {
+      if (indexes.length < 2) continue;
+      for (const index of indexes) {
+        const other = indexes.find((i) => i !== index);
+        problems[index].label = t('duplicateQuestion', { n: other + 1 });
+      }
+    }
+    fields.forEach((field, index) => {
+      if (!CHOICE_TYPES.has(field.type)) return;
+      const seen = new Map();
+      for (const option of optionLines(field.options)) {
+        const key = sameTextKey(option);
+        if (seen.has(key)) {
+          problems[index].options = t('duplicateOption', { option: seen.get(key) });
+          break;
+        }
+        seen.set(key, option);
+      }
+    });
+    return problems;
+  }
+
+  /** Shows or hides one inline message under a control, with the same markup as the respondent form. */
+  function setMessage(control, slot, message) {
+    slot.hidden = !message;
+    slot.lastChild.textContent = message ?? '';
+    if (message) {
+      control.setAttribute('aria-invalid', 'true');
+      control.setAttribute('aria-describedby', slot.id);
+    } else {
+      control.removeAttribute('aria-invalid');
+      control.removeAttribute('aria-describedby');
+    }
+  }
+
+  /** Updates every question's messages; returns the first control with a problem, if any. */
+  function refreshMessages() {
+    let first;
+    fieldProblems().forEach((problem, index) => {
+      const item = items[index];
+      if (!item) return;
+      setMessage(item.label, item.labelError, problem.label);
+      setMessage(item.options, item.optionsError, problem.options);
+      first ??= (problem.label && item.label) || (problem.options && item.options) || undefined;
+    });
+    return first;
+  }
+
+  let messageCount = 0;
+  const messageSlot = () => {
+    messageCount += 1;
+    const slot = el('p', { className: 'field-error', id: `builder_error_${messageCount}` }, [svgIcon('alert'), el('span')]);
+    slot.hidden = true;
+    return slot;
+  };
+
   function move(index, delta) {
     const target = index + delta;
     if (target < 0 || target >= fields.length) return;
@@ -105,7 +181,7 @@
 
   function fieldItem(field, index) {
     const label = el('input', { value: field.label, required: true, maxLength: 300, placeholder: t('questionPlaceholder') });
-    label.addEventListener('input', () => { field.label = label.value; });
+    label.addEventListener('input', () => { field.label = label.value; refreshMessages(); });
 
     const type = el('select', {}, Object.entries(types).map(([value, text]) =>
       el('option', { value, textContent: text, selected: value === field.type })));
@@ -114,18 +190,26 @@
     required.addEventListener('change', () => { field.required = required.checked; });
 
     const options = el('textarea', { value: field.options, rows: 4, placeholder: t('optionsPlaceholder') });
-    options.addEventListener('input', () => { field.options = options.value; });
-    const optionsWrap = el('label', { className: 'options' }, [
-      `${t('options')} `,
-      el('span', { className: 'hint', textContent: t('optionsHint') }),
-      options,
+    options.addEventListener('input', () => { field.options = options.value; refreshMessages(); });
+    const labelError = messageSlot();
+    const optionsError = messageSlot();
+    const optionsWrap = el('div', { className: 'options' }, [
+      el('label', {}, [
+        `${t('options')} `,
+        el('span', { className: 'hint', textContent: t('optionsHint') }),
+        options,
+      ]),
+      el('span', { className: 'hint', textContent: t('noRepeatedOptions') }),
+      optionsError,
     ]);
+    items[index] = { label, options, labelError, optionsError };
     optionsWrap.hidden = !CHOICE_TYPES.has(field.type);
 
     type.addEventListener('change', () => {
       field.type = type.value;
       optionsWrap.hidden = !CHOICE_TYPES.has(field.type);
       if (!optionsWrap.hidden && !options.value.trim()) options.focus();
+      refreshMessages();
     });
 
     const toolbar = el('div', { className: 'field-toolbar' }, [
@@ -141,6 +225,7 @@
     return el('li', { className: 'field-item panel' }, [
       toolbar,
       el('label', {}, [t('question'), label]),
+      labelError,
       el('div', { className: 'field-settings' }, [
         el('label', {}, [t('answerType'), type]),
         el('label', { className: 'choice switch' }, [required, el('span', { textContent: t('required') })]),
@@ -151,14 +236,24 @@
 
   // Re-render the list; optionally keep the focus on the item that just moved or was added.
   function render(focusIndex) {
+    items = [];
     list.replaceChildren(...fields.map(fieldItem));
+    refreshMessages();
     if (focusIndex === undefined) return;
     const item = list.children[focusIndex];
     item?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     item?.querySelector('input')?.focus({ preventScroll: true });
   }
 
-  root.closest('form').addEventListener('submit', () => {
+  root.closest('form').addEventListener('submit', (event) => {
+    // The server rejects repeated questions and options too; stopping here saves a page reload.
+    const invalid = refreshMessages();
+    if (invalid) {
+      event.preventDefault();
+      invalid.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      invalid.focus({ preventScroll: true });
+      return;
+    }
     hidden.value = JSON.stringify(fields.map((f) => ({
       id: f.id || undefined,
       label: f.label,

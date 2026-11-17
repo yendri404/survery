@@ -104,6 +104,7 @@ export function parseSurveyInput({ title, description, fieldsJson, closesOn }, {
   }
 
   const fields = [];
+  const duplicateQuestionErrors = []; // reported after the per-question errors
   if (!Array.isArray(raw)) {
     errors.push(t('validation.fieldsInvalid'));
   } else {
@@ -111,6 +112,7 @@ export function parseSurveyInput({ title, description, fieldsJson, closesOn }, {
     if (raw.length > LIMITS.fields) errors.push(t('validation.fieldsTooMany', { max: LIMITS.fields }));
 
     const ids = new Set();
+    const questionNumbers = new Map(); // comparison key of a question text -> its 1-based number
     raw.slice(0, LIMITS.fields).forEach((input, index) => {
       const n = index + 1;
       if (!input || typeof input !== 'object') {
@@ -122,6 +124,11 @@ export function parseSurveyInput({ title, description, fieldsJson, closesOn }, {
 
       if (!label) errors.push(t('validation.labelRequired', { n }));
       else if (label.length > LIMITS.label) errors.push(t('validation.labelTooLong', { n, max: LIMITS.label }));
+      if (label) {
+        const first = questionNumbers.get(sameTextKey(label));
+        if (first) duplicateQuestionErrors.push(t('validation.labelDuplicate', { first, second: n }));
+        else questionNumbers.set(sameTextKey(label), n);
+      }
       if (!Object.hasOwn(FIELD_TYPES, type)) errors.push(t('validation.typeUnknown', { n }));
 
       const id = typeof input.id === 'string' && FIELD_ID.test(input.id) && !ids.has(input.id)
@@ -132,7 +139,8 @@ export function parseSurveyInput({ title, description, fieldsJson, closesOn }, {
       let options = [];
       if (CHOICE_TYPES.has(type)) {
         const rawOptions = Array.isArray(input.options) ? input.options : String(input.options ?? '').split('\n');
-        options = [...new Set(rawOptions.map((o) => String(o).trim()).filter(Boolean))];
+        options = rawOptions.map((o) => String(o).trim()).filter(Boolean);
+        for (const option of repeatedTexts(options)) errors.push(t('validation.optionDuplicate', { n, option }));
         if (options.length === 0) errors.push(t('validation.optionsEmpty', { n }));
         if (options.length > LIMITS.options) errors.push(t('validation.optionsTooMany', { n, max: LIMITS.options }));
         if (options.some((o) => o.length > LIMITS.option)) {
@@ -142,9 +150,28 @@ export function parseSurveyInput({ title, description, fieldsJson, closesOn }, {
 
       fields.push({ id, label, type, required: input.required === true, options });
     });
+    errors.push(...duplicateQuestionErrors);
   }
 
   return { value: { title: cleanTitle, description: cleanDescription, closesOn: cleanClosesOn, fields }, errors };
+}
+
+/**
+ * Two texts count as the same question or option when they match after trimming, ignoring case.
+ * public/builder.js applies the same rule while the creator types.
+ */
+const sameTextKey = (text) => text.trim().toLocaleLowerCase();
+
+/** Each text that appears more than once (by sameTextKey), as first written, in order. */
+function repeatedTexts(texts) {
+  const seen = new Map();
+  const repeated = new Set();
+  for (const text of texts) {
+    const key = sameTextKey(text);
+    if (seen.has(key)) repeated.add(seen.get(key));
+    else seen.set(key, text);
+  }
+  return [...repeated];
 }
 
 function isValidDate(value) {

@@ -447,6 +447,19 @@ describe('survey app', () => {
     assert.match(res.text, /Add at least one field/);
   });
 
+  test('surveys with repeated options or repeated questions are rejected', async () => {
+    const c = new Client(app.base);
+    await c.register('dupes@corp.local');
+    const fields = [
+      { label: 'Department', type: 'radio', options: ['IT', 'it'] },
+      { label: 'DEPARTMENT', type: 'text' },
+    ];
+    const res = await c.request('/surveys', { method: 'POST', form: { _csrf: await c.csrf(), title: 'Dupes', fields_json: JSON.stringify(fields) } });
+    assert.equal(res.status, 422);
+    assert.match(res.text, /Field 1: the option &quot;IT&quot; is repeated. Each option must be different./);
+    assert.match(res.text, /Fields 1 and 2 ask the same question. Each question must be different./);
+  });
+
   test('pages carry the Sharevy brand and a mobile viewport', async () => {
     const home = await new Client(app.base).request('/');
     assert.match(home.text, /<title>Sharevy<\/title>/);

@@ -177,6 +177,8 @@
   "validation.optionsEmpty": "Pregunta {n}: agrega al menos una opción.",
   "validation.optionsTooMany": "Pregunta {n}: como máximo {max} opciones.",
   "validation.optionTooLong": "Pregunta {n}: cada opción puede tener como máximo {max} caracteres.",
+  "validation.optionDuplicate": "Pregunta {n}: la opción \"{option}\" está repetida. Cada opción debe ser distinta.",
+  "validation.labelDuplicate": "Las preguntas {first} y {second} preguntan lo mismo. Cada pregunta debe ser distinta.",
   "validation.respondentNameTooLong": "El nombre puede tener como máximo {max} caracteres.",
   "validation.required": "Este campo es obligatorio.",
   "validation.invalidOption": "Se eligió una opción no válida.",
@@ -217,5 +219,8 @@
   "client.builder.required": "Respuesta obligatoria",
   "client.builder.options": "Opciones",
   "client.builder.optionsHint": "Una opción por línea.",
+  "client.builder.noRepeatedOptions": "No se permiten opciones repetidas.",
+  "client.builder.duplicateOption": "La opción \"{option}\" está repetida. Cada opción debe ser distinta.",
+  "client.builder.duplicateQuestion": "La pregunta {n} pregunta lo mismo. Cada pregunta debe ser distinta.",
   "client.builder.optionsPlaceholder": "Escribe una opción por línea, por ejemplo:\nSí\nNo"
 }

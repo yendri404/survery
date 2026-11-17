@@ -12,7 +12,7 @@ test('parseSurveyInput normalizes fields and keeps valid ids', () => {
     description: '',
     fieldsJson: JSON.stringify([
       { id: 'abcd1234', label: ' Name ', type: 'text', required: true },
-      { label: 'Area', type: 'radio', options: ['IT', ' HR ', 'IT', ''] },
+      { label: 'Area', type: 'radio', options: ['IT', ' HR ', ''] },
     ]),
   });
   assert.deepEqual(errors, []);
@@ -36,6 +36,26 @@ test('parseSurveyInput reports missing title, no fields, bad types and empty opt
     'Field 1: unknown field type.',
     'Field 2: add at least one option.',
   ]);
+});
+
+test('parseSurveyInput rejects repeated options and repeated questions, ignoring case and spaces', () => {
+  const { errors } = parseSurveyInput({
+    title: 'x',
+    fieldsJson: JSON.stringify([
+      { label: 'Area', type: 'radio', options: ['IT', ' HR ', 'it', '', 'Ops'] },
+      { label: 'Tools', type: 'checkbox', options: 'Mail\nChat\n MAIL \nchat' },
+      { label: ' area ', type: 'text' },
+      { label: 'Other', type: 'select', options: ['A', 'B'] },
+    ]),
+  });
+  assert.deepEqual(errors, [
+    'Field 1: the option "IT" is repeated. Each option must be different.',
+    'Field 2: the option "Mail" is repeated. Each option must be different.',
+    'Field 2: the option "Chat" is repeated. Each option must be different.',
+    'Fields 1 and 3 ask the same question. Each question must be different.',
+  ]);
+  // Blank lines are still ignored without an error.
+  assert.deepEqual(parseSurveyInput({ title: 'x', fieldsJson: JSON.stringify([{ label: 'Q', type: 'radio', options: ['A', '', ' ', 'B'] }]) }).errors, []);
 });
 
 test('parseSurveyInput defaults the closing date to 10 days from today and validates it', () => {

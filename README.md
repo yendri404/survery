@@ -47,6 +47,7 @@ npm run create-user -- <email> <name> <password>
 - Respondents can optionally leave their name; otherwise the response is anonymous.
 - One response per device and survey (device cookie; clearing cookies or another browser counts as a new device).
 - Edit questions at any time; existing answers are kept.
+- Questions and the options of one question must all be different (ignoring case and spaces). The editor warns while you type and will not save until they are; the server checks it again.
 - Every survey has a closing date (picked with a calendar; 10 days from creation by default). It accepts answers until the end of that day, server time.
 - Open/close a survey manually at any time.
 - Results update live while you watch: new answers appear without reloading the page.

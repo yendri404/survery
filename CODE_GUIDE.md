@@ -424,7 +424,7 @@ The heart of the app. It has no database, no HTTP and no HTML, which is why it c
 
 | Function | Input → Output | Notes |
 |----------|----------------|-------|
-| `parseSurveyInput({ title, description, fieldsJson, closesOn }, { today, currentClosesOn, t })` | → `{ value, errors[] }` | Empty `closesOn` defaults to `today` + `DEFAULT_OPEN_DAYS` (10). A past date is rejected unless it is the survey's current date (editing an expired survey). Also trims, enforces limits, removes duplicate and blank options. **Keeps a valid existing `id`** so edits do not orphan answers; generates a new one when it is missing, invalid or duplicated |
+| `parseSurveyInput({ title, description, fieldsJson, closesOn }, { today, currentClosesOn, t })` | → `{ value, errors[] }` | Empty `closesOn` defaults to `today` + `DEFAULT_OPEN_DAYS` (10). A past date is rejected unless it is the survey's current date (editing an expired survey). Also trims, enforces limits and ignores blank options. **Rejects repeated options in one question and two questions with the same text** (equal after trimming, ignoring case): multiple-choice answers are stored by option text, so repeats could not be told apart. **Keeps a valid existing `id`** so edits do not orphan answers; generates a new one when it is missing, invalid or duplicated |
 | `validateAnswers(fields, form, { t })` | → `{ answers, errors{fieldId: msg} }` | Reads only defined fields (`f_<id>`), so extra keys are ignored. Checks type, required, and that choices are among the options. Checkbox values are returned in option order |
 | `surveyStatus(survey, today)` | → `'open' | 'closed' | 'expired'` | `closed` = switched off by the creator; `expired` = `today` is after `closesOn`. Only `open` accepts answers |
 | `localDateString(date)`, `addDays(date, n)` | → `YYYY-MM-DD` | Server-local calendar date; calendar math without time zones |
@@ -543,7 +543,7 @@ Server-rendered template strings. Every page is plain HTML forms, so it works wi
 | `homePage` | Landing | Login / register buttons |
 | `loginPage`, `registerPage` | Account forms | Keep typed values on error (never the password) |
 | `surveyListPage` | "My surveys" | Status badge + response count |
-| `surveyEditorPage` | New/edit | Hidden `fields_json` + `#builder` container; warns when editing a survey with responses |
+| `surveyEditorPage` | New/edit | Hidden `fields_json` + `#builder` container; warns when editing a survey with responses. `public/builder.js` shows repeated questions and options as inline messages while the creator types and blocks submitting until they are fixed |
 | `surveyDetailPage` | Results | Share link with copy button, open/close/delete actions, CSV links, key figures, charts, responses table |
 | `publicFormPage` | Respondent form | `renderField` per type; per-field errors; values kept after an error |
 | `thanksPage`, `closedPage` | Respondent states | |

@@ -177,6 +177,8 @@
   "validation.optionsEmpty": "Field {n}: add at least one option.",
   "validation.optionsTooMany": "Field {n}: at most {max} options.",
   "validation.optionTooLong": "Field {n}: each option must be at most {max} characters.",
+  "validation.optionDuplicate": "Field {n}: the option \"{option}\" is repeated. Each option must be different.",
+  "validation.labelDuplicate": "Fields {first} and {second} ask the same question. Each question must be different.",
   "validation.respondentNameTooLong": "Name must be at most {max} characters.",
   "validation.required": "This field is required.",
   "validation.invalidOption": "Invalid option selected.",
@@ -217,5 +219,8 @@
   "client.builder.required": "Answer is required",
   "client.builder.options": "Options",
   "client.builder.optionsHint": "One option per line.",
+  "client.builder.noRepeatedOptions": "Repeated options are not allowed.",
+  "client.builder.duplicateOption": "The option \"{option}\" is repeated. Each option must be different.",
+  "client.builder.duplicateQuestion": "Question {n} asks the same thing. Each question must be different.",
   "client.builder.optionsPlaceholder": "Write one option per line, for example:\nYes\nNo"
 }
