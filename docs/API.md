@@ -480,12 +480,12 @@ Environment variables of the API process:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `3001` | HTTP port. |
-| `HOST` | `0.0.0.0` | Interface to bind. |
+| `HOST` | `0.0.0.0` | Interface to bind. Behind the `web/` proxy use `127.0.0.1`, so the API is reachable only through it. |
 | `DB_PATH` | `data/surveys.db` | SQLite file. Relative paths are resolved from the **repository root**, not the current folder. |
 | `WEB_BASE_URL` | `http://localhost:3000` | Address of the web client, used for `shareUrl` and QR codes. Set it to the address people use on the network (e.g. `http://192.168.1.20:3000`). Falls back to `BASE_URL` when only that is set (setting of the single-server version). |
 | `CORS_ORIGINS` | `http://localhost:3000` | Comma-separated browser origins allowed to call the API; `*` allows any. |
 | `ALLOW_REGISTRATION` | `true` | `false` disables `POST /auth/register` (create accounts with `npm run create-user -- <email> <name> <password>`). |
-| `TRUST_PROXY` | `false` | `true` only behind a reverse proxy you control: the client IP comes from `X-Forwarded-For`. |
+| `TRUST_PROXY` | `false` | `true` only behind a reverse proxy you control: the client IP comes from `X-Forwarded-For`. The `web/` server is such a proxy (it always overwrites that header), so run the API with `TRUST_PROXY=true` behind it, or every person counts as `127.0.0.1` for the rate limits. |
 | `LOGIN_MAX_FAILURES` | `10` | Failed logins per email + IP every 15 minutes before `429`. |
 | `SUBMISSION_LIMIT` | `60` | Responses per survey + IP every 10 minutes (`0` disables). |
 

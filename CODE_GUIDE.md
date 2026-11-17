@@ -1,8 +1,11 @@
-# Sharevy — Code Guide (`src/`)
+# Sharevy — Code Guide (`api/` and `web/`)
 
-A file-by-file tour of the server code: what each module does, what it exports, and why it is built that way.
+A file-by-file tour of the code: what each module does, what it exports, and why it is built that way.
 
-> **TL;DR** — `server.js` boots the app. `app.js` turns every HTTP request into a `ctx` object and sends it to a route in `routes/`. Routes use `surveys.js` for business rules, `repo.js` for the database, and `views.js` for HTML. The only npm dependency is `qrcode` (pinned, used only by `qr.js`); everything else uses Node built-ins (`node:http`, `node:sqlite`, `node:crypto`).
+> **TL;DR** — Sharevy is two packages that only talk HTTP + JSON.
+> **`api/`** is the REST API: `app.js` turns each request into a `ctx`, checks the Bearer token, and calls a handler in `routes/`; handlers use `surveys.js` for business rules and `repo.js` for SQLite, and answer JSON (errors as stable codes from `errors.js`). Its only npm dependency is `qrcode` (used only by `qr.js`).
+> **`web/`** is the browser client: `server/app.js` (no dependencies) sends `index.html`, the static files, and forwards `/api/*` to the API. In the browser, `public/js/app.js` boots the app, `routes.js` picks a **page** (container: fetches JSON, handles actions) and pages draw **components** (pure functions from data to DOM). No framework, no build step, no `innerHTML`.
+> The contract between them is [docs/API.md](docs/API.md).
 
 ---
 
@@ -12,126 +15,216 @@ A file-by-file tour of the server code: what each module does, what it exports, 
 2. [Life of a request](#2-life-of-a-request)
 3. [Layers and dependency rules](#3-layers-and-dependency-rules)
 4. [Data model](#4-data-model)
-5. [File by file](#5-file-by-file)
+5. [API, file by file](#5-api-file-by-file)
    - [Bootstrap](#bootstrap) — `server.js`, `config.js`, `db.js`
-   - [HTTP core](#http-core) — `app.js`, `http.js`, `guards.js`
-   - [Routes](#routes) — `routes/auth.js`, `routes/surveys.js`, `routes/public.js`
+   - [HTTP core](#http-core) — `app.js`, `http.js`, `errors.js`
+   - [Routes](#routes) — `routes/meta.js`, `routes/auth.js`, `routes/surveys.js`, `routes/public.js`
    - [Domain](#domain) — `surveys.js`
-   - [Infrastructure](#infrastructure) — `repo.js`, `auth.js`, `rate-limit.js`
-   - [Presentation](#presentation) — `views.js`, `i18n.js`
-6. [Common changes: where to touch](#6-common-changes-where-to-touch)
+   - [Infrastructure](#infrastructure) — `repo.js`, `auth.js`, `rate-limit.js`, `live.js`, `qr.js`, `i18n.js`
+6. [Web client, file by file](#6-web-client-file-by-file)
+   - [Web server](#web-server) — `server.js`, `server/app.js`
+   - [App shell](#app-shell) — `index.html`, `main.js`, `app.js`, `routes.js`
+   - [Talking to the API](#talking-to-the-api) — `api.js`, `errors.js`, `sse.js`, `storage.js`
+   - [Pages (containers)](#pages-containers) — `pages/*.js`
+   - [Components (presentational)](#components-presentational) — `components/*.js`, `dom.js`
+   - [Pure logic](#pure-logic) — `i18n.js`, `validation.js`, `number-input.js`, `charts.js`, `format.js`
+   - [Look and feel](#look-and-feel) — `style.css`, `theme.js`, design tokens, branding
+7. [Common changes: where to touch](#7-common-changes-where-to-touch)
 
 ---
 
 ## 1. Map of the code
 
 ```
-src/
-├── server.js          Entry point: loads config, opens the DB, starts listening
-├── config.js          Reads environment variables into one config object
-├── db.js              Opens SQLite and creates the schema
-├── app.js             HTTP server: router, sessions, static files, errors
-├── http.js            Low-level HTTP helpers (cookies, forms, redirects)
-├── guards.js          "Must be logged in" and CSRF wrappers for handlers
-├── auth.js            Password hashing, tokens, session-id hashing
-├── rate-limit.js      In-memory rate limiter + client IP detection
-├── qr.js              QR code of the share link (SVG for the page, PNG download)
-├── live.js            Live updates: in-process events streamed with Server-Sent Events
-├── i18n.js            Interface languages: picks one per request, translates, formats dates
-├── repo.js            All SQL queries (the only file that talks to the DB)
-├── surveys.js         Business rules: survey definitions, answers, CSV
-├── views.js           Server-rendered HTML pages
-└── routes/
-    ├── auth.js        Creator accounts: register, login, logout
-    ├── surveys.js     Creator dashboard: CRUD, results, export
-    └── public.js      Respondents: answer a survey through its link, and the language switch
+api/                         REST API, JSON only (port 3001)
+├── src/
+│   ├── server.js            Entry point: loads config, opens the DB, starts listening
+│   ├── config.js            Environment variables -> one config object
+│   ├── db.js                Opens SQLite, creates the schema, runs additive migrations
+│   ├── app.js               HTTP server: /api/v1 router, Bearer sessions, CORS, JSON errors
+│   ├── http.js              JSON body reader, JSON/204 senders, Bearer header, ISO dates
+│   ├── errors.js            Message key -> stable error code; ApiError and the error JSON shape
+│   ├── auth.js              Password hashing, random tokens, token hashing
+│   ├── rate-limit.js        In-memory rate limiter + client IP detection
+│   ├── live.js              Live updates: in-process events streamed as Server-Sent Events
+│   ├── qr.js                QR code of the share link (SVG and PNG)
+│   ├── i18n.js              The few texts the API writes for people (CSV headers, yes/no), English messages
+│   ├── repo.js              All SQL queries (the only file that talks to the DB)
+│   ├── surveys.js           Business rules: survey definitions, answers, summary, CSV
+│   └── routes/
+│       ├── meta.js          /health and /meta (the rules clients must not hard-code)
+│       ├── auth.js          Register, login, logout, /me
+│       ├── surveys.js       Creator endpoints: CRUD, results, summary, CSV, QR, event streams
+│       └── public.js        Respondents: read a survey by token, submit a response
+├── locales/                 en.json, es.json (API-side texts only)
+├── scripts/create-user.js   Create a creator account from the command line
+└── test/                    node:test suites (in-memory database)
 
-locales/               en.json, es.json: every interface text, one file per language
+web/                         Browser client (port 3000), no dependencies, no build
+├── server.js                Entry point: PORT, HOST, API_URL
+├── server/app.js            Static files, single-page fallback, /api proxy, CSP, ETags
+├── index.html               The one HTML page (top bar + <main>)
+├── locales/                 en.json, es.json: every interface text
+├── public/
+│   ├── js/
+│   │   ├── main.js          Module entry point: startApp()
+│   │   ├── app.js           App shell: language, theme, session, router, live regions
+│   │   ├── routes.js        Path -> page
+│   │   ├── api.js           The only door to the API (fetch + Bearer + X-Device-Id)
+│   │   ├── errors.js        API error code -> message key
+│   │   ├── sse.js           Event streams read with fetch (parser + reconnection)
+│   │   ├── storage.js       localStorage keys, device id
+│   │   ├── dom.js           h()/s() DOM builders, withParts()
+│   │   ├── i18n.js          Language choice, t/tn, dates
+│   │   ├── validation.js    Respondent answer checks (mirror of the API rules)
+│   │   ├── number-input.js  Number question typing filter
+│   │   ├── charts.js        Donut and bar math
+│   │   ├── format.js        Timestamps, addDays, safeNext
+│   │   ├── pages/           Containers: home, auth, surveys, editor, detail, respond
+│   │   └── components/      Presentational: layout, icons, builder, answer-field, results
+│   ├── style.css, theme.js, logo.png, favicon.svg
+│   └── fonts/               IBM Plex Sans woff2 + license
+└── test/                    server.test.js (stub API), modules.test.js (pure modules)
 ```
 
 | File | Lines (approx.) | Layer | One-line purpose |
 |------|----:|-------|------------------|
-| `server.js` | 20 | Bootstrap | Start the process |
-| `config.js` | 25 | Bootstrap | Environment → config |
-| `db.js` | 55 | Bootstrap | Schema + connection |
-| `app.js` | 110 | HTTP core | Request pipeline |
-| `http.js` | 65 | HTTP core | Request/response helpers |
-| `guards.js` | 30 | HTTP core | Auth + CSRF wrappers |
-| `routes/auth.js` | 100 | Routes | Account endpoints |
-| `routes/surveys.js` | 100 | Routes | Creator endpoints |
-| `routes/public.js` | 50 | Routes | Respondent endpoints |
-| `surveys.js` | 200 | Domain | Validation, summary, CSV |
-| `repo.js` | 100 | Infrastructure | SQL access |
-| `auth.js` | 35 | Infrastructure | Crypto helpers |
-| `rate-limit.js` | 60 | Infrastructure | Abuse protection |
-| `qr.js` | 20 | Infrastructure | QR codes (wraps the `qrcode` package) |
-| `live.js` | 45 | Infrastructure | Live updates (Server-Sent Events) |
-| `views.js` | 270 | Presentation | HTML templates |
-| `i18n.js` | 80 | Presentation | Translations (`locales/*.json`) and language choice |
+| `api/src/server.js` | 20 | Bootstrap | Start the process |
+| `api/src/config.js` | 30 | Bootstrap | Environment → config |
+| `api/src/db.js` | 95 | Bootstrap | Schema, migrations, connection |
+| `api/src/app.js` | 130 | HTTP core | Request pipeline |
+| `api/src/http.js` | 50 | HTTP core | JSON in/out helpers |
+| `api/src/errors.js` | 100 | HTTP core | Error codes and shape |
+| `api/src/routes/*.js` | 20–190 | Routes | Endpoints |
+| `api/src/surveys.js` | 290 | Domain | Validation, summary, CSV |
+| `api/src/repo.js` | 115 | Infrastructure | SQL access |
+| `api/src/auth.js`, `rate-limit.js`, `live.js`, `qr.js`, `i18n.js` | 20–60 each | Infrastructure | Crypto, abuse protection, SSE, QR, texts |
+| `web/server/app.js` | 170 | Web server | Static + proxy |
+| `web/public/js/app.js` | 300 | App shell | Boot, router, theme, language, live regions |
+| `web/public/js/pages/*.js` | 20–215 | Pages | Fetch, act, compose |
+| `web/public/js/components/*.js` | 30–230 | Components | Data → DOM |
+| `web/public/js/*.js` (others) | 5–85 each | Pure logic / API client | Tested in `web/test/modules.test.js` |
 
 ---
 
 ## 2. Life of a request
 
-Example: a respondent submits a survey (`POST /s/<token>`).
+### Data path: browser → web server → API → domain → database
+
+Example: a respondent submits a survey.
 
 ```mermaid
 sequenceDiagram
-    participant B as Browser
-    participant A as app.js
+    participant B as Browser (pages/respond.js)
+    participant W as web/server/app.js
+    participant A as api/src/app.js
     participant R as routes/public.js
     participant D as surveys.js
     participant P as repo.js
-    participant V as views.js
 
-    B->>A: POST /s/abc123 (form data)
-    A->>A: set security headers, load session (none for respondents)
-    A->>R: matchRoute → handler(ctx)
+    B->>B: validation.js checks every answer (no request if invalid)
+    B->>W: POST /api/v1/public/surveys/abc123/responses<br/>JSON + X-Device-Id
+    W->>A: forwarded as is, X-Forwarded-For = real client IP
+    A->>A: security headers, CORS, match /api/v1 route, load Bearer session (none here)
+    A->>R: handler(ctx)
     R->>P: getSurveyByToken("abc123")
-    R->>R: readForm, check open + rate limit
-    R->>D: validateAnswers(fields, form)
+    R->>R: device id format, open?, already answered?, rate limit
+    R->>D: validateAnswers(fields, answers) + parseRespondentName
     alt invalid
-        R->>V: publicFormPage(errors)  → 422
+        R-->>B: 422 { error: { code: "validation_failed", fields: { id: { code, params } } } }
+        B->>B: errors.js code -> message key, shown under each question
     else valid
-        R->>P: addResponse(surveyId, answers)
-        R-->>B: 303 redirect → /s/abc123/thanks
+        R->>P: addResponse(..., hash(deviceId))
+        R->>R: live.surveyChanged(survey)  (creators' open streams get "change")
+        R-->>B: 201 { id }
+        B->>B: navigate to /s/abc123/thanks
     end
 ```
 
-The same pipeline applies to every request:
+Every API request goes through the same pipeline:
 
 | Step | Where | What happens |
 |------|-------|--------------|
-| 1 | `app.js` | Security headers are set on every response |
-| 2 | `app.js` | `/public/*` and `/health` are answered directly, without session or routing |
-| 3 | `app.js` → `loadSession` | `sid` cookie → hashed → session row → `ctx.user` |
-| 4 | `app.js` → `matchRoute` | First route whose method + path match wins (404 / 405 otherwise) |
-| 5 | `guards.js` | Creator routes are wrapped: redirect to login, CSRF check on POST |
-| 6 | `routes/*.js` | Handler validates input (`surveys.js`), persists (`repo.js`), renders (`views.js`) |
-| 7 | `app.js` `catch` | Any thrown `HttpError` becomes an HTML error page with its status; anything else is a logged 500 |
+| 1 | `web/server/app.js` | `/api/*` is piped to `API_URL` unchanged (method, headers, body, status, streamed answer). `X-Forwarded-For` is overwritten with the real client address |
+| 2 | `api/src/app.js` | Security headers and `Cache-Control: no-store` on every response; CORS headers for allowed origins; `OPTIONS` answers 204 |
+| 3 | `app.js` | Paths outside `/api/v1` answer 404 |
+| 4 | `app.js` → `matchRoute` | First route whose method + path match wins (404 / 405 with `Allow`; 400 for a malformed `%` encoding) |
+| 5 | `app.js` → `loadSession` | `Authorization: Bearer <token>` → SHA-256 → unexpired session row → `ctx.user`. Routes registered with `{ auth: true }` answer 401 without it |
+| 6 | `routes/*.js` | Handler reads JSON (`readJson`), validates (`surveys.js`), persists (`repo.js`), answers `sendJson` |
+| 7 | `app.js` `catch` | `ApiError` → `{ "error": { code, message, params?, fields?, errors? } }` with its status; anything else is logged and becomes `500 internal_error` (no stack traces to clients) |
+
+### Rendering path: URL → page → DOM
+
+```mermaid
+sequenceDiagram
+    participant U as Browser
+    participant W as web/server/app.js
+    participant S as public/js/app.js
+    participant Rt as routes.js
+    participant Pg as pages/detail.js
+    participant C as components/results.js
+
+    U->>W: GET /surveys/7
+    W-->>U: index.html (status 200; 404 for unknown paths)
+    U->>W: GET /public/js/main.js, style.css, /locales/en.json ...
+    S->>S: boot: language, GET /api/v1/meta, GET /api/v1/me (if a token is saved)
+    S->>Rt: matchRoute("/surveys/7")
+    Rt-->>S: { page: detailPage, auth: true }
+    S->>Pg: detailPage(app, { params, query, signal })
+    Pg->>Pg: GET survey, /summary, /responses (via api.js)
+    Pg->>C: kpiTiles(), summaryCharts(), responsesTable()
+    C-->>Pg: DOM nodes
+    Pg-->>S: { title, body, mounted }
+    S->>U: swap <main> (view transition), set title, mounted() opens the live stream
+```
+
+In-app links are intercepted and use `history.pushState`, so later navigations skip the HTML and only fetch JSON.
 
 ---
 
 ## 3. Layers and dependency rules
 
+### API
+
 ```
    routes/*  ──►  surveys.js (domain)      pure functions, no I/O
       │      ──►  repo.js    (database)    only place with SQL
-      │      ──►  views.js   (HTML)        only place with markup
-      │      ──►  guards.js / http.js / auth.js / rate-limit.js
+      │      ──►  errors.js / http.js / auth.js / rate-limit.js / live.js / qr.js / i18n.js
       ▲
-   app.js (wires everything, owns the request lifecycle)
+   app.js (wires everything, owns the request lifecycle, /api/v1 prefix)
       ▲
    server.js (process entry point)
 ```
 
 | Rule | Why it matters |
 |------|----------------|
-| `surveys.js` has **no I/O** (no DB, no HTTP) | Business rules are unit-tested without a server (`test/surveys.test.js`) |
+| `surveys.js` has **no I/O** (no DB, no HTTP) | Business rules are unit-tested without a server (`api/test/surveys.test.js`) |
 | SQL lives **only** in `repo.js` | Changing the storage engine touches one file |
-| HTML lives **only** in `views.js` | Escaping is centralized: one `esc()` to audit |
-| Routes receive dependencies (`{ route, repo, config, views }`) | Tests build the app with an in-memory DB and custom config |
+| The API answers **JSON only**, never HTML | Any client can use it; presentation belongs to clients |
+| Errors are **codes**, not sentences | Clients translate them; `message` is English for logs and simple clients |
+| Routes receive dependencies (`{ route, repo, config, today, live }`) | Tests build the app with an in-memory DB, custom config and a fake clock |
 | `createApp()` does not call `listen()` | Tests start it on a random port; `server.js` decides the real port |
+
+### Web client
+
+```
+   pages/*  ──►  components/*   presentational: data -> DOM, no fetch, no navigation
+      │     ──►  api.js          the only module that calls the API
+      │     ──►  validation.js / number-input.js / charts.js / format.js / i18n.js   pure logic
+      ▲
+   routes.js ◄── app.js (shell: boot, router, theme, language, live regions)
+      ▲
+   main.js (module entry point)          server/app.js serves all of it and proxies /api
+```
+
+| Rule | Why it matters |
+|------|----------------|
+| Pages are **containers**: they fetch, handle actions and return `{ title, body, mounted?, redirect? }` | Data flow is in one place per screen |
+| Components are **pure functions** from data (and callbacks) to DOM | Easy to reuse and reason about; they keep the same classes as before, so `style.css` applies |
+| Only `api.js` calls `fetch` for the API (plus `sse.js` for streams) | Token, device id and error handling are in one place |
+| DOM is built with `h()` / `s()` from `dom.js`, **never** `innerHTML` | User text cannot become markup; the token in `localStorage` stays hard to steal |
+| Pure modules have no DOM or network access | Tested with `node --test`, no browser needed |
+| No inline scripts or styles | The CSP forbids them |
 
 ---
 
@@ -148,11 +241,12 @@ erDiagram
         text email UK "case-insensitive"
         text name
         text password_hash "scrypt$salt$key"
+        text created_at "UTC"
     }
     sessions {
-        text id PK "sha256 of the cookie value"
+        text id PK "sha256 of the Bearer token"
         int user_id FK
-        text csrf_token
+        text csrf_token "legacy column, empty for API tokens"
         int expires_at "epoch ms"
     }
     surveys {
@@ -164,13 +258,15 @@ erDiagram
         text fields_json "array of field definitions"
         int is_open "1 = accepting responses"
         text closes_on "YYYY-MM-DD, last day that accepts answers"
+        text created_at "UTC"
+        text updated_at "UTC"
     }
     responses {
         int id PK
         int survey_id FK
         text answers_json "{ fieldId: value }"
         text respondent_name "optional, NULL = anonymous"
-        text device_hash "sha256 of the device cookie; unique per survey"
+        text device_hash "sha256 of X-Device-Id; unique per survey"
         text submitted_at "UTC"
     }
 ```
@@ -179,22 +275,24 @@ erDiagram
 
 All foreign keys use `ON DELETE CASCADE`: deleting a survey deletes its responses; deleting a user deletes their sessions and surveys.
 
+The database file (`data/surveys.db`) is the same one the single-server version used: migrations are additive, so existing data keeps working. Dates are stored as SQLite UTC text and leave the API as ISO 8601 (`isoUtc`).
+
 ---
 
-## 5. File by file
+## 5. API, file by file
 
 ### Bootstrap
 
 #### `server.js` — process entry point
 
-**Purpose:** the only file with side effects at import time. Run with `npm start`.
+**Purpose:** the only file with side effects at import time. Run with `npm start` in `api/` (or `npm run start:api` at the root).
 
 | Does | Detail |
 |------|--------|
 | Loads config | `loadConfig()` from environment variables |
 | Opens the database | `openDatabase(config.dbPath)` |
 | Starts the HTTP server | `createApp({ db, config }).listen(port, host)` |
-| Graceful shutdown | On `SIGINT` / `SIGTERM`: closes open connections, the server and the DB |
+| Graceful shutdown | On `SIGINT` / `SIGTERM`: closes open connections (including event streams), the server and the DB |
 
 > Keep this file thin. Anything worth testing belongs in `app.js` or below.
 
@@ -202,16 +300,16 @@ All foreign keys use `ON DELETE CASCADE`: deleting a survey deletes its response
 
 #### `config.js` — configuration
 
-**Exports:** `loadConfig(env = process.env)` → plain object.
+**Exports:** `loadConfig(env = process.env)` → plain object; `REPO_ROOT`.
 
 | Key | Env var | Default | Used by |
 |-----|---------|---------|---------|
-| `port` | `PORT` | `3000` | `server.js` |
-| `host` | `HOST` | `0.0.0.0` | `server.js` |
-| `dbPath` | `DB_PATH` | `data/surveys.db` | `server.js`, `scripts/create-user.js` |
-| `baseUrl` | `BASE_URL` | `''` (use `Host` header) | `routes/surveys.js` share link |
-| `allowRegistration` | `ALLOW_REGISTRATION` | `true` | `routes/auth.js` |
-| `cookieSecure` | `COOKIE_SECURE` | `false` | `routes/auth.js` |
+| `port` | `PORT` | `3001` | `server.js` |
+| `host` | `HOST` | `0.0.0.0` (use `127.0.0.1` behind the web proxy) | `server.js` |
+| `dbPath` | `DB_PATH` | `data/surveys.db`, relative to the repository root | `server.js`, `scripts/create-user.js` |
+| `webBaseUrl` | `WEB_BASE_URL` (fallback `BASE_URL`) | `http://localhost:3000` | `routes/surveys.js` share link and QR |
+| `corsOrigins` | `CORS_ORIGINS` (comma-separated, `*` = any) | `['http://localhost:3000']` | `app.js` → `applyCors` |
+| `allowRegistration` | `ALLOW_REGISTRATION` | `true` | `routes/auth.js`, `/meta` |
 | `sessionTtlMs` | — | 7 days | `routes/auth.js` |
 | `trustProxy` | `TRUST_PROXY` | `false` | `rate-limit.js` → `clientIp` |
 | `loginMaxFailures` | `LOGIN_MAX_FAILURES` | `10` | `routes/auth.js` |
@@ -220,7 +318,7 @@ All foreign keys use `ON DELETE CASCADE`: deleting a survey deletes its response
 | `submissionWindowMs` | — | 10 min | `routes/public.js` |
 | `now` | — (tests only) | `() => new Date()` | `app.js` → `today()`, the clock used for closing dates |
 
-**Design note:** it takes `env` as a parameter instead of reading `process.env` directly, so tests can call `loadConfig({})` and override single keys.
+**Design note:** it takes `env` as a parameter instead of reading `process.env` directly, so tests can call `loadConfig({})` and override single keys. Relative `DB_PATH` values are resolved from `REPO_ROOT`, so the API finds the same database whatever folder it starts from.
 
 ---
 
@@ -238,8 +336,7 @@ All foreign keys use `ON DELETE CASCADE`: deleting a survey deletes its response
 
 Pass `':memory:'` for a throwaway database (the tests do this).
 
-**Migrations:** after the base schema, `migrate()` runs the `MIGRATIONS` list inside one transaction. Each step checks the current shape first (for example `hasColumn`) and only then alters the table, so steps are idempotent and run on every boot. Add new steps at the end of the list; never edit a released step.
-
+**Migrations:** after the base schema, `migrate()` runs the `MIGRATIONS` list inside one transaction: `respondent_name`, `closes_on` (existing surveys get creation date + 10 days, once), and `device_hash` with the unique index `(survey_id, device_hash)`. Each step checks the current shape first (`hasColumn`), so steps are idempotent and run on every boot. Add new steps at the end of the list; never edit a released step.
 
 ---
 
@@ -247,130 +344,118 @@ Pass `':memory:'` for a throwaway database (the tests do this).
 
 #### `app.js` — the request pipeline
 
-**Exports:** `createApp({ db, config })` → a `node:http` `Server` (not listening yet).
+**Exports:** `API_PREFIX` (`/api/v1`), `createApp({ db, config })` → a `node:http` `Server` (not listening yet).
 
-**What it builds once, at startup:**
-
-| Piece | Detail |
-|-------|--------|
-| `repo` | `createRepo(db)` |
-| Static assets | Reads `public/style.css`, `app.js`, `builder.js`, `theme.js`, `favicon.svg`, `logo.png` and the three `fonts/*.woff2` files into memory. Only these names are served; there is no directory listing or path traversal surface |
-| Asset versions | Hashes each asset (SHA-256, 10 chars) and hands the map to `views.setAssetVersions`. Pages link `/public/style.css?v=<hash>`, which is served with `immutable` caching; when a file changes its URL changes, so browsers never keep a stale stylesheet. Fonts (`font/woff2`) are linked from `style.css` without `?v` and are always `immutable`: a new font version gets a new file name |
-| Routes table | Each `route(method, '/path/:param', handler)` compiles to a regex; `:param` matches one path segment |
+**What it builds once, at startup:** `repo`, the `live` updates hub, the `today()` clock, and the routes table. Each `route(method, '/path/:param', handler, { auth })` compiles to a regex (relative to `/api/v1`); `:param` matches one path segment.
 
 **Per request:**
 
 | Function | Responsibility |
 |----------|----------------|
-| Security headers | Strict `Content-Security-Policy` (no inline scripts), `X-Frame-Options: DENY`, `nosniff`, `no-referrer` |
-| Language | `ctx.i18n = createI18n(negotiateLanguage(cookie sharevy_lang, Accept-Language))`, before routing, so error pages are translated too |
-| `loadSession(ctx)` | Cookie `sid` → `hashSessionId` → `repo.getSession` → `ctx.session`, `ctx.user` |
-| `matchRoute(method, path)` | Returns the handler and decoded params. Returns 405 if the path exists with another method, 404 if it does not exist, 400 for a malformed `%` encoding |
-| Error boundary | `HttpError` → page with that status, its message translated with `ctx.i18n`. Unknown error → logged + generic 500 (no stack traces to users). Respondent pages (`/s/...`) render without creator navigation |
+| Security headers | `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'`, `X-Frame-Options: DENY`, `nosniff`, `no-referrer`, `Cache-Control: no-store` |
+| `applyCors(req, res)` | Only for an `Origin` in `corsOrigins` (or `*`): echoes the origin, exposes `Retry-After` and `Content-Disposition`; preflight allows `Authorization`, `Content-Type`, `X-Device-Id`. Requests without `Origin` (curl, mobile apps, the web proxy's same-origin calls) need none |
+| `matchRoute(method, path)` | Handler + decoded params. 405 with `Allow` if the path exists with another method, 404 if not, 400 for malformed `%` encoding |
+| `loadSession(ctx)` | Bearer token → `hashToken` → `repo.getSession` (ignores expired) → `ctx.session`, `ctx.user` |
+| Error boundary | `ApiError` → its JSON and status (and extra `headers`, e.g. `Retry-After`). Unknown error → logged + `500 internal_error` |
 
 **The `ctx` object** passed to every handler:
 
 ```js
-{ req, res, url, params, user, session, i18n }
-// i18n    → { lang, t, tn, formatDate } for the request's language (see i18n.js)
+{ req, res, url, params, user, session }
 // user    → { id, name, email } | null
-// session → { id, user_id, csrf_token, expires_at } | null
+// session → the sessions row | null
 ```
 
-Routes also receive `ui(ctx)` in their dependencies: `{ i18n, currentPath }`, the two things every page needs (its language, and its own URL for the language switch). Pass it to every view: `views.homePage({ ...ui(ctx), ... })`.
-
-> **Order matters:** routes are matched in registration order. `/surveys/new` is registered before `/surveys/:id`, otherwise `new` would be captured as an id.
+> **Order matters:** routes are matched in registration order. `/surveys/events` is registered before `/surveys/:id`, otherwise `events` would be captured as an id.
 
 ---
 
-#### `http.js` — low-level helpers
+#### `http.js` — JSON helpers
 
 | Export | What it does |
 |--------|--------------|
-| `HttpError(status, key, params)` | Throwable error carrying an HTTP status and a translation key (e.g. `'error.surveyNotFound'`); `app.js` renders it in the request's language. `err.message` holds the English text for logs |
-| `parseCookies(header)` | `"a=1; b=2"` → `{ a: '1', b: '2' }`, tolerant of bad encoding |
-| `readForm(req, limit = 1 MB)` | Reads a `application/x-www-form-urlencoded` body and returns `URLSearchParams`. 415 for other content types, 413 if over the limit |
-| `sendHtml(res, status, html)` | Writes HTML with `Cache-Control: no-store` |
-| `redirect(res, location, headers)` | `303 See Other`, so the browser does a GET after a POST (no "resend form?" prompts) |
-| `safeNext(value, fallback)` | Validates a redirect target from the URL: after login, and after switching language (see below) |
-
-**`safeNext` in detail** — prevents open redirects (`/login?next=https://evil.com`):
-
-1. It must start with `/` and not with `//`.
-2. It must not contain control characters, spaces or `\`. Browsers silently strip tabs and newlines, so `/\t/evil.com` would become `//evil.com`.
-3. It is parsed with `new URL()`, and the origin must stay the same.
-4. Anything else falls back to `/surveys` (or the `fallback` given; the language switch uses `/`).
-
-`readForm` returns `URLSearchParams` on purpose: `getAll(name)` handles multi-value fields (checkboxes) without a custom parser.
+| `readJson(req, limit = 1 MB)` | Reads an `application/json` body and returns a plain object. Empty body → `{}`. 413 over the limit, 415 for another content type with a body, 400 `invalid_json` / `invalid_body` (not an object) |
+| `sendJson(res, status, data, headers)` | JSON response |
+| `sendNoContent(res)` | `204` |
+| `bearerToken(req)` | The token of `Authorization: Bearer <token>`, or `undefined` |
+| `isoUtc(sqliteDate)` | `"2026-11-17 10:00:00"` → `"2026-11-17T10:00:00Z"` |
 
 ---
 
-#### `guards.js` — handler wrappers
+#### `errors.js` — error codes
 
-| Export | Use it for | Behavior |
-|--------|-----------|----------|
-| `authed(handler)` | Creator **GET** routes | No user → `303 /login?next=<current path>` |
-| `authedPost(handler)` | Creator **POST** routes | No user → redirect; reads the form; checks CSRF; calls `handler(ctx, form)` |
-| `checkCsrf(ctx, form)` | Manual check (used by logout) | Compares `_csrf` with `session.csrf_token` in constant time; mismatch → 403 |
+| Export | What it does |
+|--------|--------------|
+| `ERROR_CODES` | Message key (`api/locales/en.json`) → stable snake_case code sent to clients (`validation.titleRequired` → `title_required`). Codes never change once published: add new ones instead |
+| `ApiError(status, key, params, details)` | Throwable error; `toJSON()` gives `{ error: { code, message, params?, fields?, errors? } }`. `message` is English |
+| `coded(key, params)` | A translator for the domain functions that returns `{ code, params, message }` instead of a sentence, so each problem reaches the client as a code |
+| `validationFailed({ fields?, errors? })` | `422 validation_failed`. `fields` = per-field problems (answers, registration); `errors` = an ordered list (survey definition) |
 
-```js
-route('POST', '/surveys/:id/delete', authedPost((ctx, form) => { /* ctx.user is guaranteed */ }));
-```
-
-**Why CSRF tokens if cookies are `SameSite=Lax`?** Defense in depth: `Lax` blocks most cross-site POSTs, but tokens also protect older browsers and same-site attackers (another app on the same intranet domain).
+The full list with statuses and English messages is in [docs/API.md, section 10](docs/API.md#10-error-code-reference). `api/test/i18n.test.js` checks that every message maps to a code and back.
 
 ---
 
 ### Routes
 
-Every route file exports `register*Routes({ route, repo, config, views })` and only registers handlers. Nothing runs at import time.
+Every route file exports `register*Routes(deps)` and only registers handlers. Nothing runs at import time. The full contract (bodies, examples, statuses) is in [docs/API.md](docs/API.md); this section explains the internals.
 
-#### `routes/auth.js` — creator accounts
-
-| Method | Path | Guard | Result |
-|--------|------|-------|--------|
-| GET | `/` | — | Logged in → `/surveys`; otherwise the landing page |
-| GET | `/login` | — | Login form (`next` is sanitized) |
-| POST | `/login` | rate limit | 303 to `next` · 401 bad credentials · 429 too many failures |
-| GET | `/register` | `allowRegistration` | Form, or 404 when registration is disabled |
-| POST | `/register` | `allowRegistration` | 303 `/surveys` · 422 with validation errors |
-| POST | `/logout` | CSRF (if logged in) | Deletes the session, clears the cookie |
-
-**Key internals:**
-
-- **`startSession`** — deletes any previous session (prevents session fixation), purges expired ones, creates a random 32-byte id, stores **its hash**, and sends the raw id in an `HttpOnly; SameSite=Lax` cookie (`Secure` when `COOKIE_SECURE=true`).
-- **Login timing** — when the email does not exist, the password is still checked against `DUMMY_HASH`, so response time does not reveal which emails are registered.
-- **Brute-force limiter** — keyed by `email|ip`. After `loginMaxFailures` failures in 15 minutes it answers 429 with `Retry-After`. A successful login resets the counter. Keying by email **and** IP means an attacker on another machine cannot lock a colleague out.
-- **Registration rules** — name 1–100 characters, valid email up to 254, password 8–200 characters, confirmation must match, email unique (case-insensitive).
-
----
-
-#### `routes/surveys.js` — creator dashboard
-
-All routes are wrapped in `authed` / `authedPost`.
+#### `routes/meta.js` — server description
 
 | Method | Path | Result |
 |--------|------|--------|
-| GET | `/surveys` | List of the creator's surveys with response counts |
-| GET | `/surveys/events` | Live stream (SSE) for the creator's list; registered before `/surveys/:id` |
-| GET | `/surveys/:id/events` | Live stream (SSE) for one survey's results |
-| GET | `/surveys/new` | Empty editor |
-| POST | `/surveys` | Create → 303 `/surveys/:id` · 422 re-renders the editor with errors |
-| GET | `/surveys/:id` | Detail: share link, actions, summary, responses table |
-| GET | `/surveys/:id/edit` | Editor pre-filled with the current fields |
-| POST | `/surveys/:id` | Save edits (field ids are preserved) |
-| POST | `/surveys/:id/toggle` | Open ↔ closed |
-| POST | `/surveys/:id/delete` | Delete the survey and all its responses |
-| POST | `/surveys/:id/responses/:responseId/delete` | Delete one response |
-| GET | `/surveys/:id/export.csv[?delimiter=semicolon]` | Download CSV (UTF-8 with BOM) |
-| GET | `/surveys/:id/qr.png` | Download the QR code of the share link (600px PNG) |
+| GET | `/health` | `{ status: 'ok' }` |
+| GET | `/meta` | Field types, choice types, yes/no values, `LIMITS`, `defaultOpenDays`, the server's `today`, CSV options, `allowRegistration`, `deviceIdPattern` |
+
+`/meta` exists so clients **never hard-code** rules: the editor and the respondent form read their limits and types from it. `today` is the server's date because closing dates are compared with it, not with the client's clock.
+
+---
+
+#### `routes/auth.js` — creator accounts
+
+| Method | Path | Auth | Result |
+|--------|------|------|--------|
+| POST | `/auth/register` | — | `201 { token, user }` · 422 with `fields` · 404 `registration_disabled` |
+| POST | `/auth/login` | — | `200 { token, user }` · 401 `invalid_credentials` · 429 `too_many_login_attempts` |
+| POST | `/auth/logout` | — | Ends the session of the token sent, if any. Always 204 |
+| GET | `/me` | Bearer | `{ user }` |
 
 **Key internals:**
 
-- **`ownedSurvey(ctx)`** — the single ownership gate. It loads the survey by id **and** `owner_id = ctx.user.id`; otherwise it throws 404. Returning 404 instead of 403 means another creator cannot even tell that the survey exists.
-- **`shareUrl(ctx, survey)`** — `BASE_URL` + `/s/<publicToken>`, or the request's `Host` header when `BASE_URL` is unset.
+- **`startSession`** — purges expired sessions, creates a random 32-byte token, stores **its SHA-256 hash**, and returns the raw token once.
+- **Login timing** — when the email does not exist, the password is still checked against `DUMMY_HASH`, so response time does not reveal which emails are registered.
+- **Brute-force limiter** — keyed by `email|ip`. After `loginMaxFailures` failures in 15 minutes it answers 429 with `Retry-After`. A successful login resets the counter. Keying by email **and** IP means an attacker on another machine cannot lock a colleague out.
+- **Registration rules** — name 1–100 characters, valid email up to 254, password 8–200 characters, `confirm` must match when sent, email unique (case-insensitive).
+
+---
+
+#### `routes/surveys.js` — creator endpoints
+
+All routes need a Bearer token (`authed(...)` registers them with `{ auth: true }`).
+
+| Method | Path | Result |
+|--------|------|--------|
+| GET | `/surveys` | The creator's surveys (without fields) with response counts and status |
+| GET | `/surveys/events` | Live stream (SSE) for the creator's list; registered before `/surveys/:id` |
+| POST | `/surveys` | Create → `201 { survey }` · 422 with ordered `errors` |
+| GET | `/surveys/:id` | `{ survey }` with fields, status, `shareUrl` |
+| PUT | `/surveys/:id` | Replace the definition (field ids are preserved) |
+| PATCH | `/surveys/:id` | `{ isOpen }`: open ↔ closed |
+| DELETE | `/surveys/:id` | Delete the survey and its responses → 204 |
+| GET | `/surveys/:id/events` | Live stream (SSE) for one survey |
+| GET | `/surveys/:id/responses` | Responses, newest first |
+| DELETE | `/surveys/:id/responses/:responseId` | Delete one response (idempotent 204) |
+| GET | `/surveys/:id/summary` | Key figures (`kpis`) and per-question counts with percentages: the server counts, clients only draw |
+| GET | `/surveys/:id/export.csv?delimiter=comma\|semicolon&lang=en\|es` | CSV download (UTF-8 with BOM); `lang` defaults to `Accept-Language`, then English |
+| GET | `/surveys/:id/qr.svg`, `/surveys/:id/qr.png` | QR code of `shareUrl` (PNG as an attachment) |
+
+**Key internals:**
+
+- **`ownedSurvey(ctx)`** — the single ownership gate. It loads the survey by id **and** `owner_id = ctx.user.id`; otherwise 404. Returning 404 instead of 403 means another creator cannot even tell that the survey exists.
+- **`shareUrl(survey)`** — `WEB_BASE_URL` + `/s/<publicToken>`: respondents open surveys in the **web client**, not the API.
+- **`readDefinition`** — turns the JSON body into the shape `parseSurveyInput` expects and throws `validationFailed({ errors })` with coded problems.
 - **Public token** — `newToken(18)` gives 144 random bits, so links cannot be guessed or enumerated.
 - **CSV BOM** — the `﻿` prefix makes Excel read accented characters correctly. The `;` variant exists for Excel with Spanish/European regional settings.
+- Every write calls `live.surveyChanged(survey)`.
 
 ---
 
@@ -378,22 +463,22 @@ All routes are wrapped in `authed` / `authedPost`.
 
 | Method | Path | Result |
 |--------|------|--------|
-| GET | `/s/:token` | The form, or a "closed" page |
-| POST | `/s/:token` | 303 `/thanks` · 422 with per-field errors and the values kept · 403 closed · 429 rate limited |
-| GET | `/s/:token/thanks` | Confirmation page |
-| GET | `/lang/:code?next=<path>` | Language menu links, for everyone: 303 to `safeNext(next, '/')` with a `sharevy_lang` cookie (HttpOnly, SameSite=Lax, 1 year). 404 for an unsupported code |
+| GET | `/public/surveys/:token` | Title, description, closing date, `status`, fields, `alreadyAnswered` for this `X-Device-Id` |
+| POST | `/public/surveys/:token/responses` | `201 { id }` (plus `deviceId` when none was sent) · 400 · 403 · 409 · 422 · 429 |
 
 **Order of checks on submit** (cheapest and most decisive first):
 
-1. Survey exists? Otherwise 404.
-2. Survey open? Otherwise 403.
-3. Under the rate limit for `surveyId|ip`? Otherwise 429.
-4. Answers valid (`validateAnswers`)? Otherwise 422, re-rendered with the values the person typed.
-5. Count the submission against the limit, store it, redirect.
+1. Survey exists? Otherwise 404 `not_found`.
+2. `X-Device-Id` well formed (`DEVICE_ID`, 20–100 base64url characters)? Otherwise 400 `invalid_device_id`.
+3. Survey open? Otherwise 403 `survey_closed` / `survey_expired`.
+4. Device already answered? Otherwise 409 `already_answered`.
+5. Under the rate limit for `surveyId|ip`? Otherwise 429 with `Retry-After`.
+6. Answers valid (`validateAnswers`, `parseRespondentName`)? Otherwise 422 with `fields`.
+7. Store (the unique index settles races with another 409), count against the limit, notify live streams.
 
-**One response per device:** the first accepted submission sets an HttpOnly `sharevy_device` cookie (random id, 400 days). Its hash is stored in `responses.device_hash`, and a unique index on `(survey_id, device_hash)` makes the database reject a second response, even when two submissions race. A device that already answered sees `alreadyAnsweredPage` (200 on GET, 409 on POST). Clearing cookies, private mode or another browser count as a new device: this stops accidental and casual duplicates, not determined abuse.
+`answersForm()` turns the JSON answers into the name/value pairs `validateAnswers` reads (`f_<fieldId>`, repeated for checkbox lists), so the domain function is the same one the single-server version used.
 
-No CSRF token here, on purpose: respondents are anonymous and have no session to protect. Invalid submissions do not count toward the rate limit.
+**One response per device:** the client generates a random id once and sends it as `X-Device-Id`. Its hash goes to `responses.device_hash`, and a unique index on `(survey_id, device_hash)` makes the database reject a second response, even when two submissions race. A new id (cleared site data, another browser) counts as a new device: this stops accidental and casual duplicates, not determined abuse. Invalid submissions do not count toward the rate limit.
 
 ---
 
@@ -401,17 +486,17 @@ No CSRF token here, on purpose: respondents are anonymous and have no session to
 
 #### `surveys.js` — business rules (pure functions)
 
-The heart of the app. It has no database, no HTTP and no HTML, which is why it can be unit-tested in isolation.
+The heart of the API. It has no database, no HTTP and no JSON output, which is why it can be unit-tested in isolation.
 
 **Constants**
 
 | Export | Content |
 |--------|---------|
-| `FIELD_TYPES` | `text`, `textarea`, `number`, `email`, `date`, `select`, `radio`, `yesno`, `checkbox` → English display label |
-| `fieldTypeLabels(t)` | The same map with labels in the translator's language (used by the editor) |
+| `FIELD_TYPE_IDS` | `text`, `textarea`, `number`, `email`, `date`, `select`, `radio`, `yesno`, `checkbox`, in menu order. Clients name them (`fieldType.<id>` in `web/locales`) |
 | `CHOICE_TYPES` | `select`, `radio`, `checkbox` (the types whose options the creator writes) |
 | `YES_NO` | `['yes', 'no']`: the fixed, language-independent values stored for a `yesno` question |
-| `LIMITS` | Maximum lengths and counts (title 200, 100 fields, 100 options, text answers 1 000, long text 10 000…) |
+| `LIMITS` | title 200, description 2 000, label 300, fields 100, options 100, option 200, text 1 000, textarea 10 000, respondentName 100 |
+| `DEFAULT_OPEN_DAYS` | 10 |
 
 **Field definition** (one item of `fields_json`):
 
@@ -419,37 +504,35 @@ The heart of the app. It has no database, no HTTP and no HTML, which is why it c
 { id: 'a1b2c3d4e5f6', label: 'Department', type: 'select', required: true, options: ['IT', 'HR'] }
 ```
 
-**Messages:** validation messages come from a translator passed in the options argument (`{ t }`), English by default. Routes pass `ctx.i18n.t`; unit tests can omit it. The only import besides `node:crypto` is `i18n.js`, for that English default.
+**Messages:** functions take a translator `t` in their options. The routes pass `coded` (from `errors.js`), so each problem becomes `{ code, params, message }`; CSV uses the real translator of the requested language; unit tests can omit it (English).
 
 **Functions**
 
 | Function | Input → Output | Notes |
 |----------|----------------|-------|
-| `parseSurveyInput({ title, description, fieldsJson, closesOn }, { today, currentClosesOn, t })` | → `{ value, errors[] }` | Empty `closesOn` defaults to `today` + `DEFAULT_OPEN_DAYS` (10). A past date is rejected unless it is the survey's current date (editing an expired survey). Also trims, enforces limits and ignores blank options. **Rejects repeated options in one question and two questions with the same text** (equal after trimming, ignoring case): multiple-choice answers are stored by option text, so repeats could not be told apart. **Keeps a valid existing `id`** so edits do not orphan answers; generates a new one when it is missing, invalid or duplicated |
-| `validateAnswers(fields, form, { t })` | → `{ answers, errors{fieldId: msg} }` | Reads only defined fields (`f_<id>`), so extra keys are ignored. Checks type, required, and that choices are among the options. Checkbox values are returned in option order |
-| `surveyStatus(survey, today)` | → `'open' | 'closed' | 'expired'` | `closed` = switched off by the creator; `expired` = `today` is after `closesOn`. Only `open` accepts answers |
-| `localDateString(date)`, `addDays(date, n)` | → `YYYY-MM-DD` | Server-local calendar date; calendar math without time zones |
-| `daysBetween(from, to)` | → whole days | Days from one `YYYY-MM-DD` to another; the "days left" figure on the results page |
-| `parseRespondentName(value, { t })` | → `{ name, error }` | Optional respondent name: trimmed, max. 100 characters, empty means anonymous |
-| `formatAnswer(value)` | → `string` | Arrays become `"a, b"` |
-| `answerText(field, value, t)` | → `string` | What the results table and CSV show: `yes`/`no` translated (`answer.yes`, `answer.no`), anything else through `formatAnswer` |
-| `fieldOptions(field)` | → `string[]` | Accepted values of a choice question: `YES_NO` for `yesno`, otherwise the creator's options |
-| `summarize(fields, responses, { t })` | → per choice field (yes/no included): `answered`, counts per option (`option` stored value, `label` text to show) | Feeds the summary section of the detail page |
+| `parseSurveyInput({ title, description, fieldsJson, closesOn }, { today, currentClosesOn, t })` | → `{ value, errors[] }` | Empty `closesOn` defaults to `today` + `DEFAULT_OPEN_DAYS`. A past date is rejected unless it is the survey's current date (editing an expired survey). Trims, enforces limits, ignores blank options. **Rejects repeated options in one question and two questions with the same text** (equal after trimming, ignoring case): multiple-choice answers are stored by option text, so repeats could not be told apart. **Keeps a valid existing `id`** so edits do not orphan answers; generates a new one when it is missing, invalid or duplicated |
+| `validateAnswers(fields, form, { t })` | → `{ answers, errors{fieldId: problem} }` | Reads only defined fields (`f_<id>`), so extra keys are ignored. Checks type, required, and that choices are among the options. Checkbox values are returned in option order |
+| `surveyStatus(survey, today)` | → `'open' \| 'closed' \| 'expired'` | `closed` = switched off by the creator; `expired` = `today` is after `closesOn`. Only `open` accepts answers |
+| `localDateString(date)`, `addDays(date, n)`, `daysBetween(from, to)` | → `YYYY-MM-DD` / whole days | Server-local calendar date; calendar math without time zones; "days left" |
+| `parseRespondentName(value, { t })` | → `{ name, error }` | Optional, trimmed, max 100 characters, empty means anonymous |
+| `formatAnswer(value)`, `answerText(field, value, t)` | → `string` | Arrays become `"a, b"`; `yes`/`no` translated (CSV) |
+| `fieldOptions(field)` | → `string[]` | `YES_NO` for `yesno`, otherwise the creator's options |
+| `summarize(fields, responses, { t })` | → per choice field (yes/no included): `answered`, counts per option | Feeds `/summary`, which adds percentages |
 | `csvCell(value, delimiter)` | → escaped cell | Quotes when needed. Prefixes `'` to values starting with `= + - @` (formula injection), except plain numbers like `-5` |
-| `toCsv(fields, responses, delimiter, { t })` | → full CSV text | Header (fixed columns in the translator's language) + rows in submission order (yes/no answers translated), `\r\n` line endings |
+| `toCsv(fields, responses, delimiter, { t })` | → full CSV text | Header (fixed columns in the requested language) + rows in submission order, `\r\n` line endings |
 
-**Validation per type**
+**Validation per type** (mirrored in `web/public/js/validation.js`)
 
-| Type | Accepted value |
-|------|----------------|
-| `text` | Up to 1 000 characters |
-| `textarea` | Up to 10 000 characters |
-| `number` | Anything `Number()` parses as finite. In the browser, `public/app.js` also blocks typing or pasting anything else (see below) |
-| `email` | `x@y.z` shape, up to 254 characters |
-| `date` | `YYYY-MM-DD` that is a real calendar date (`2026-02-30` is rejected) |
-| `select`, `radio` | Exactly one of the options |
-| `yesno` | `yes` or `no` (the creator writes no options; the form shows them translated) |
-| `checkbox` | Any subset of the options; `required` means at least one |
+| Type | Accepted value | Error code |
+|------|----------------|------------|
+| `text` | Up to 1 000 characters | `too_long` |
+| `textarea` | Up to 10 000 characters | `too_long` |
+| `number` | Anything `Number()` parses as finite | `invalid_number` |
+| `email` | `x@y.z` shape, up to 254 characters | `invalid_email` |
+| `date` | `YYYY-MM-DD` that is a real calendar date (`2026-02-30` is rejected) | `invalid_date` |
+| `select`, `radio` | Exactly one of the options | `invalid_option` |
+| `yesno` | `yes` or `no` | `invalid_option` |
+| `checkbox` | Any subset of the options; `required` means at least one | `invalid_option` / `required` |
 
 ---
 
@@ -470,7 +553,7 @@ The heart of the app. It has no database, no HTTP and no HTML, which is why it c
 
 - Every write on a survey filters by `owner_id`, and `deleteResponse` filters by `survey_id`. Ownership is enforced **in SQL too**, not only in the route.
 - Only positional `?` parameters are used, never string interpolation, so SQL injection is not possible.
-- `hydrateSurvey` / `hydrateResponse` convert rows (snake_case, JSON strings, `0/1`) into app objects (camelCase, parsed JSON, booleans). The rest of the code never sees raw rows, except `ctx.session`.
+- `hydrateSurvey` / `hydrateResponse` convert rows (snake_case, JSON strings, `0/1`) into app objects (camelCase, parsed JSON, booleans). Routes then shape them into the API's JSON.
 
 ---
 
@@ -478,11 +561,11 @@ The heart of the app. It has no database, no HTTP and no HTML, which is why it c
 
 | Export | What it does |
 |--------|--------------|
-| `newToken(bytes = 32)` | Random URL-safe token (session ids, CSRF tokens, survey links) |
+| `newToken(bytes = 32)` | Random URL-safe token (Bearer tokens, survey links, server-picked device ids) |
 | `hashPassword(pw)` | scrypt with a random 16-byte salt → `"scrypt$<salt>$<key>"` |
 | `verifyPassword(pw, stored)` | Recomputes and compares in constant time; `false` for malformed hashes |
-| `hashToken(token)` / `hashSessionId(id)` | SHA-256 of a cookie value (sessions and respondent devices). A leaked DB does not give usable cookies |
-| `safeEqual(a, b)` | Constant-time string comparison (used for CSRF) |
+| `hashToken(token)` | SHA-256 of a secret (Bearer tokens, device ids). A leaked DB does not give usable tokens |
+| `safeEqual(a, b)` | Constant-time string comparison |
 | `DUMMY_HASH` | Precomputed hash for the "unknown email" login path |
 
 **Why scrypt?** It is built into Node (no native dependency to compile on Windows) and is memory-hard, which makes GPU brute force expensive. The `scrypt$` prefix leaves room to switch algorithms later.
@@ -496,15 +579,12 @@ The heart of the app. It has no database, no HTTP and no HTML, which is why it c
 | `createRateLimiter({ limit, windowMs, now?, maxKeys? })` | Fixed-window counter per key: `isLimited`, `hit`, `reset`, `retryAfterSeconds`. `limit: 0` disables it |
 | `clientIp(req, trustProxy)` | Socket address, or the first `X-Forwarded-For` entry **only** when `TRUST_PROXY=true` |
 
-**Trade-offs (deliberate):**
-
 | Choice | Consequence |
 |--------|-------------|
 | In memory | Zero setup; counters reset when the process restarts and are not shared between processes |
 | Fixed window | Simple and predictable; allows a short burst at window edges |
 | `maxKeys` cap (10 000) | Memory stays bounded: expired keys are pruned first, then the oldest |
-| `now` injectable | Tests control time without waiting |
-| `X-Forwarded-For` opt-in | Otherwise any client could fake its IP to dodge the limit |
+| `X-Forwarded-For` opt-in | Otherwise any client could fake its IP. Behind the web proxy every request comes from `127.0.0.1`, so the API needs `TRUST_PROXY=true` to count people; the proxy always overwrites the header, so it cannot be faked through it |
 
 ---
 
@@ -515,135 +595,210 @@ The heart of the app. It has no database, no HTTP and no HTML, which is why it c
 | Piece | Detail |
 |-------|--------|
 | Channels | `survey:<id>` (results page) and `owner:<userId>` (survey list) |
-| Publishers | A new response (`routes/public.js`), and creating, editing, opening/closing, deleting a survey or a response (`routes/surveys.js`) |
-| `stream()` | Writes an `text/event-stream` response: `: connected` on open, `event: change` per change, `: ping` every 25 s, cleanup on disconnect |
-| Browser side | `public/app.js` opens an `EventSource` for each `[data-live][id]` element. On `change` it re-fetches the current page and swaps that element's HTML; after a reconnection it refreshes once, in case events were missed |
+| Publishers | A new response (`routes/public.js`); creating, editing, opening/closing, deleting a survey or a response (`routes/surveys.js`) |
+| `stream()` | `text/event-stream`: `retry: 3000` and `: connected` on open, `event: change` per change, `: ping` every 25 s, cleanup on disconnect. `X-Accel-Buffering: no` for buffering proxies |
 
-**Why events carry no data:** the page re-renders through the same server code as a manual refresh, so a live update can never show something different from a reload. **Limits:** events live in memory in one process; running several server processes would need a shared bus (for example Redis pub/sub).
+**Why events carry no data:** clients re-fetch the same JSON as a manual refresh, so a live update can never show something different from a reload. **Limits:** events live in memory in one process; several API processes would need a shared bus (for example Redis pub/sub).
+
+---
 
 #### `qr.js` — QR codes
 
 | Export | What it does |
 |--------|--------------|
-| `qrSvg(text, label)` | Inline SVG for the survey page, with `role="img"` and an accessible name |
-| `qrPng(text)` | 600px PNG buffer for the download route, large enough to print |
+| `qrSvg(text, label)` | SVG with `role="img"` and an accessible name |
+| `qrPng(text)` | 600px PNG, large enough to print |
 
-Both use medium error correction and a 2-module margin. The SVG is embedded without escaping because the library only emits numeric path data, never the encoded text. The QR always encodes the same URL as the share link (`BASE_URL` or the request host), so set `BASE_URL` when the app sits behind a proxy, or the code will point to the wrong address. Only `qr.js` imports `qrcode`, so replacing the library touches one file.
-
----
-
-### Presentation
-
-#### `views.js` — HTML pages
-
-Server-rendered template strings. Every page is plain HTML forms, so it works without JavaScript, except the question builder (`public/builder.js`).
-
-**Every view takes `i18n` and `currentPath`** (from `ui(ctx)`) and gets all its text from `i18n.t(key)`; without them it renders English. Text that must contain markup (a link or `<strong>` inside a sentence) uses `tHtml(i18n, key, { name: markup })`: the translation is escaped first, then each `{name}` is replaced by markup built in `views.js`.
-
-**Safety first:** `esc(value)` escapes `& < > " '`. **Every** user-controlled value goes through it, in text and in attributes. When adding a view, never interpolate raw data.
-
-| Export | Page | Notes |
-|--------|------|-------|
-| `homePage` | Landing | Login / register buttons |
-| `loginPage`, `registerPage` | Account forms | Keep typed values on error (never the password) |
-| `surveyListPage` | "My surveys" | Status badge + response count |
-| `surveyEditorPage` | New/edit | Hidden `fields_json` + `#builder` container; warns when editing a survey with responses. `public/builder.js` shows repeated questions and options as inline messages while the creator types and blocks submitting until they are fixed. On submit it also checks title, closing date, question text and options (server messages, inline, no reload); the form carries `data-limits` |
-| `surveyDetailPage` | Results | Share link with copy button, open/close/delete actions, CSV links, key figures, charts, responses table |
-| `publicFormPage` | Respondent form | `renderField` per type (`yesno`: two large side-by-side radios, `.choices.yesno`); per-field errors; values kept after an error |
-| `thanksPage`, `closedPage` | Respondent states | |
-| `errorPage` | Any error | `respondent: true` hides creator navigation |
-
-**Branding and icons:** `APP_NAME` (`Sharevy`) is used for the header and every `<title>` (`<page> · Sharevy`). The header shows `public/logo.png` (white clipboard, 128px, decorative `alt=""`) left of the name; it is a cropped copy of `assets/logo-source.png`. The favicon (`public/favicon.svg`) draws the same clipboard on a square slate background (`#1e2a3a`, the top bar color) so it stays visible on light browser tabs. `icon(name)` returns an inline SVG from the `ICONS` map; icon-only buttons always carry an `aria-label` and a `title` so they stay understandable.
-
-**Confirmation messages:** creator actions redirect with `?msg=<key>` (`created`, `saved`, `closed`, `opened`, `deleted`, `response-deleted`). `flashMessage(key, i18n)` maps only known keys to fixed, translated text; the query value is never reflected into the page.
-
-**Design tokens (corporate look):** every color, the font and the corner radius are custom properties at the top of `public/style.css`. Change them there, never in individual rules.
-
-| Token | Light | Dark | Used for |
-|-------|-------|------|----------|
-| `--topbar` | `#1e2a3a` | `#1b2633` | Top bar (the white `logo.png` sits on it) |
-| `--brand` / `--brand-dark` | `#2b4a6f` / `#1f3753` | `#3a5f8a` / `#2f5079` | Primary buttons / their hover; white text on top |
-| `--brand-text` | `#2b4a6f` | `#9fbbdc` | Links, brand-colored text, focus rings |
-| `--brand-soft` | `#e6ecf3` | `#22303f` | Hover and selected tint |
-| `--text` / `--muted` | `#1c232c` / `#56606c` | `#e4e8ee` / `#a0aab6` | Body text / secondary text |
-| `--bg` / `--surface` / `--surface-alt` | `#f3f4f6` / `#fff` / `#f7f8fa` | `#12171e` / `#1a212b` / `#161c24` | Page / panels / table headers and the respondent-name box |
-| `--border` / `--border-strong` | `#d5dae1` / `#7d8794` | `#2f3946` / `#6b7685` | Panel and table rules / form controls (>= 3:1) |
-| `--ok`, `--warn`, `--danger`, `--closed` (+ `-soft`) | muted green, ochre, brick, grey | lighter tints of the same | Status text on its tinted box (>= 4.5:1) |
-| `--radius` | `0` | `0` | Square corners everywhere; only radio buttons and donut charts stay round |
-| `--font` | `"IBM Plex Sans", "Segoe UI", system-ui, sans-serif` | same | All text |
-
-| Rule | Detail |
-|------|--------|
-| Typography | IBM Plex Sans 400/500/600 from `public/fonts/` (`@font-face` at the top of `style.css`, 400 preloaded in `layout()`). Section headings (`h2`, `h3`, KPI and table headers) are small uppercase labels with letter spacing |
-| Lines | 1px rules, a 3px accent on the top or left edge of key boxes (survey intro, KPIs, cards, messages), almost no shadows, no dashed borders |
-| Contrast | Every text pair meets WCAG AA (>= 4.5:1) in both themes; recheck any new color |
-
-**To change the brand color:** edit `--brand`, `--brand-dark`, `--brand-text`, `--brand-soft` and `--topbar` in the three palette blocks of `style.css` (light, `[data-theme="dark"]`, `prefers-color-scheme: dark`; keep the two dark blocks identical), then update `<meta name="theme-color">` in `layout()` and the `fill` of `public/favicon.svg`. Check white text on `--brand` and `--brand-text` on `--surface` still reach 4.5:1.
-
-**Light and dark theme:** every page has a theme button (`themeToggle()`, rendered `hidden` until `public/app.js` activates it). The choice is stored in `localStorage` (`sharevy-theme`); without a choice, the OS setting (`prefers-color-scheme`) decides. `public/theme.js` is loaded in `<head>` so a saved choice applies before the first paint (no flash of the wrong theme). Colors are CSS custom properties in `style.css`; the dark palette redefines them under `[data-theme="dark"]` and in the `prefers-color-scheme: dark` media query. Use `--brand-text` for brand-colored text and `--brand` for brand backgrounds.
-
-**Language menu:** next to the theme button, `languageMenu()` renders a native `<details class="lang-menu">`: the summary shows a globe and the current code (`EN`), the list has one link per `SUPPORTED_LANGUAGES` entry, named in its own language (`language.name`: "English", "Español") and pointing to `/lang/<code>?next=<current page>`; the current one has `aria-current="true"`. It works without JavaScript; `public/app.js` only closes it on an outside click or Escape. On phones the panel opens under the whole top bar so it is never cut off. Strings that the browser scripts need (keys starting with `client.`) travel in `<script type="application/json" id="i18n-client">` in `<head>`: a data block, never executed, so the CSP allows it; `<` is written as `\u003c` so the JSON cannot close the tag. `public/app.js` and `public/builder.js` read it.
-
-**Mobile first:** `public/style.css` targets phones by default (44px touch targets, 16px+ inputs, full-width buttons) and enhances layouts from 700px. On phones, the responses table turns into one card per response using each cell's `data-label`.
-
-**Desktop (≥ 1100px):** detected with CSS media queries only (no user-agent checks). The container grows to 1280px and pages get two columns; the HTML order stays the phone order, CSS grid only places the blocks.
-
-| Page | Main column | Side column |
-|------|-------------|-------------|
-| Survey detail | `.detail-main` → `#responses`: key figures, charts, table | `.detail-side`: share link, QR, manage (sticky, scrolls on its own if taller than the window) |
-| Editor | `.editor-questions` | `.editor-basics`, then the save buttons (sticky) |
-| My surveys | Cards in 3–4 columns | — |
-
-The respondent form stays narrow (720px) on purpose: short lines are easier to read.
-
-**Charts (results page):** `summaryHtml()` draws one card per choice question, as server-rendered SVG inside `#responses`, so live updates redraw them.
-
-| Question type | Chart | Why |
-|---------------|-------|-----|
-| `radio`, `select` (up to 6 options), `yesno` | Donut (`donutChart`) + legend with count and % | One answer per person: the shares add up to 100% |
-| `checkbox` | Horizontal bars (`barChart`) + a note | Several answers per person: the % add up to more than 100%, so a pie would mislead |
-| `radio`, `select` with more than 6 options | Bars | Categorical colors are never repeated |
-
-The SVG is `aria-hidden`; the legend and bar labels carry every number as text. Colors come from classes (`.slice-1`…`.slice-6` → `--cat-1`…`--cat-6`, `--bar-fill`), defined for light and dark in `style.css` from a muted palette checked with a colorblind validator (lightness band, chroma floor, CVD separation, >= 3:1 against the panel), so no inline `style` is needed. Bars and swatches are square like the rest of the interface. `kpiTiles()` renders the key figures as a `<dl class="kpis">` above the charts.
-
-**Internal helpers:** `layout()` (shared shell; `respondent: true` gives a minimal header), `errorList()`, `csrfInput()`, `renderField()` (maps each field type to its HTML control, uses `required` for native browser validation; the server is still the source of truth), and `summaryHtml()` / `donutChart()` / `barChart()` / `kpiTiles()`.
-
-**Animations:** CSS only, in the "Motion" section at the end of `public/style.css`. Short fades and small slides (150–250 ms, one standard easing `--ease`); no spins, bounces or overshoot. Rules that keep them cheap and calm:
-
-| Rule | Detail |
-|------|--------|
-| Only `transform` and `opacity` | Plus `stroke-dashoffset` for the thanks check mark; nothing that forces a re-layout. No JS animation loops, no library |
-| Page changes | `@view-transition { navigation: auto; }` cross-fades pages where supported; the top bar keeps its own `view-transition-name` |
-| Live updates | `.live-updated *` turns entrance animations off, so a swapped section only gets the highlight ring |
-| Theme switch | Short color fade on the main surfaces only (`body`, top bar, panels, cards, inputs), never on `*` |
-| Reduced motion | `prefers-reduced-motion: reduce` sets every animation and transition to ~0 and disables view transitions |
-
-**Respondent form in the browser (`public/app.js`):**
-
-| Behavior | Detail |
-|----------|--------|
-| Checks before sending | On submit (button or Enter) the answers are checked with the same rules and messages as `validateAnswers` / `parseRespondentName`. Invalid → nothing is sent, no reload; errors appear with the server's markup (`.has-error`, `.field-error`, `aria-invalid` / `aria-describedby`, the `.errors` summary with links) and the first invalid question gets the focus. A question's error clears as soon as its answer is valid. The script sets `noValidate`; the HTML keeps `required` for browsers without JavaScript, and the server always checks again |
-| Where the rules come from | `renderField` puts `data-type`, `data-required` and `data-label` on each `.field`; the form carries `data-limits` (`LIMITS` as JSON); messages come from the `i18n-client` block. Changing a rule means changing `src/surveys.js` **and** `check()` in `public/app.js` |
-| Number questions | Only digits, one decimal point and a leading `-` can be typed, pasted or dropped (`beforeinput`, with an `input` safety net). A comma becomes a point (`4,5` → `4.5`). The script turns the field into a text input with `inputmode="decimal"` (number keyboard on phones), because a native number input hides the typed text and cursor from scripts; Up/Down arrows still add or subtract 1. Without JavaScript it stays `type="number"` |
-
-**No inline JS or CSS:** the CSP forbids it, so behaviors like "copy link" or "confirm delete" are declared with `data-copy` / `data-confirm` attributes and handled by `public/app.js`.
+Medium error correction and a 2-module margin. The QR always encodes `shareUrl`, so set `WEB_BASE_URL` to the address people use, or the code will point to the wrong place. Only `qr.js` imports `qrcode`, so replacing the library touches one file.
 
 ---
 
-#### `i18n.js` — interface languages
+#### `i18n.js` — API-side texts
 
-All interface text lives in `locales/<code>.json`, one flat file per language, read once at startup.
+The API speaks English in error messages; clients translate the codes. Other languages only cover what the API itself writes for people: CSV headers and yes/no labels in CSV.
 
 | Export | What it does |
 |--------|--------------|
 | `SUPPORTED_LANGUAGES`, `DEFAULT_LANGUAGE` | `['en', 'es']`, `'en'` |
-| `LANGUAGE_COOKIE` | `sharevy_lang`, set by `GET /lang/:code` |
-| `negotiateLanguage(cookie, acceptLanguage)` | A supported cookie wins; otherwise the first supported language of `Accept-Language` by q-value (`es-MX` → `es`); `*`, nothing or only unsupported languages → `en` |
-| `createI18n(lang)` | `{ lang, t(key, params), tn(key, count, params), formatDate(yyyyMmDd) }` |
-| `clientMessages(i18n)` | The `client.*` strings (prefix removed) plus the server messages the browser also shows (`validation.*`, `respond.checkAnswers.*`, `respond.yourName`, full names), for the browser scripts |
-| `defaultI18n` | English translator, the default wherever no request is involved |
+| `isSupportedLanguage(code)` | Validates `?lang=` |
+| `negotiateLanguage(acceptLanguage)` | First supported language by q-value (`es-MX` → `es`); otherwise English |
+| `createI18n(lang)` | `{ lang, t(key, params) }`; missing keys fall back to English, then the key |
+| `defaultI18n` | English translator (used for `message` in errors) |
 
-**Locale file format**
+`api/locales/<code>.json` holds `answer.*`, `csv.*`, and the English messages of every error key. `api/test/i18n.test.js` checks that every language has the CSV and yes/no keys and keeps every `{placeholder}`.
+
+---
+
+## 6. Web client, file by file
+
+### Web server
+
+#### `server.js` — entry point
+
+Reads `PORT` (3000), `HOST` (`0.0.0.0`) and `API_URL` (`http://127.0.0.1:3001`), starts `createWebServer({ apiUrl })`, and closes on `SIGINT` / `SIGTERM`.
+
+#### `server/app.js` — static files and API proxy
+
+**Exports:** `createWebServer({ apiUrl, root })`, `APP_ROUTES`, `WEB_ROOT`.
+
+| Path | Answer |
+|------|--------|
+| `/api`, `/api/*` | **Proxied** to `apiUrl`: method, headers (minus hop-by-hop), body, status and streamed answer, so event streams flow through. `X-Forwarded-For` is set to the real client address. API down → `502 { error: { code: 'api_unavailable' } }`. A closed tab ends the upstream request too |
+| `/public/*`, `/locales/*` | Files from those folders only. Decoded `..`, `.`, backslashes and NUL are refused before touching the disk |
+| `APP_ROUTES` (`/`, `/login`, `/register`, `/surveys`, `/surveys/new`, `/surveys/<n>`, `/surveys/<n>/edit`, `/s/<token>`, `/s/<token>/thanks`) | `index.html`, status 200 |
+| Anything else | `index.html` with status 404 (the router shows "page not found") |
+| Non-GET/HEAD outside `/api` | 405 |
+
+| Header | Why |
+|--------|-----|
+| `Content-Security-Policy` | `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; ...`: only this origin's code, nothing inline. `blob:` is the QR image, fetched with the token |
+| `Cache-Control: no-cache` + `ETag` | Without a build step, module URLs never change, so the browser revalidates every file (a cheap 304) and never runs a stale module |
+| Fonts: `immutable`, 1 year | A new font version gets a new file name |
+
+**Why a proxy instead of CORS?** The browser sees one origin, so no CORS preflights, the API can stay on localhost, and share links on the LAN keep the old address. See [web/README.md](web/README.md).
+
+---
+
+### App shell
+
+#### `index.html`, `main.js`
+
+`index.html` is the only page: the top bar with the logo, an empty `<main>`, `theme.js` (applies the saved theme before paint), the stylesheet and `main.js` as a module. A `<noscript>` message explains that JavaScript is needed. `main.js` just calls `startApp()`.
+
+#### `app.js` — the application shell
+
+**Exports:** `startApp()`. Builds the `app` object every page receives:
+
+| Member | What it is |
+|--------|------------|
+| `app.user`, `app.token`, `app.meta` | Current creator (or `null`), Bearer token, the API's `/meta` |
+| `app.i18n`, `app.t`, `app.tn`, `app.languages` | Translator of the current language; language names for the menu |
+| `app.api` | The API client (`createApi`) |
+| `app.navigate(to, { replace })`, `app.render()` | Router |
+| `app.setSession(session)` | Saves or forgets `{ token, user }` |
+| `app.deviceId()`, `app.rememberDevice(id)` | Respondent device id (`storage.js`) |
+| `app.error(err, keys)` | Message for an error (`errors.js`) |
+| `app.showError(err, respondent)` | Error panel for a failed action |
+| `app.liveRegion(region, url, build, signal)` | Live updates for one region (below) |
+| `app.announce(text)` | Polite screen-reader announcement |
+
+**Boot:** pick the language (`pickLanguage`), load its locale, then in parallel `GET /meta`, `GET /me` (if a token is saved; a 401 forgets it) and every locale file (for the language menu names). Then the first render.
+
+**Router (`render`)**: aborts the previous page's `AbortController` (stops its event streams), matches the path, redirects `auth` pages to `/login?next=...` without a user, calls the page, and swaps `<main>` inside a View Transition (skipped for reduced motion or a hidden tab). It also sets `document.title` (`<page> · Sharevy`), toggles `body.respondent`, redraws the top bar and shows a flash message for known `?msg=` keys (`created`, `saved`, `closed`, `opened`, `deleted`, `response-deleted`; the query value is never reflected). A page error becomes an error panel; a 401 goes to the login page through `onUnauthorized`. Clicks on same-origin links (not `/api/`, `/public/`, downloads or new tabs) are intercepted and use `pushState`.
+
+**Live regions (`liveRegion`)**: `followEvents` keeps a stream open on `/api/v1<url>`; each `change` calls `build()` again, and only when the new DOM differs from the shown one it replaces the region, restarts the `.live-updated` highlight and announces "results updated". Refreshes never overlap (one queued at most).
+
+**Theme and language**: the theme button toggles `data-theme` on `<html>` and saves `sharevy-theme`; without a choice, `prefers-color-scheme` decides and labels follow OS changes. The language menu saves `sharevy-lang`, loads the locale and re-renders the current page without reloading; it closes on an outside click or Escape.
+
+#### `routes.js` — path → page
+
+`ROUTES` lists each path with its page and flags: `auth` (needs a creator), `respondent` (minimal top bar, no account menu), `errorKeys` (clearer messages, e.g. `not_found` on a share link → "this survey does not exist"). `matchRoute(pathname)` returns the route and params (`:id` digits, `:token` base64url). **Keep it in sync with `APP_ROUTES` in `server/app.js`**, or a reload on the new page answers 404.
+
+---
+
+### Talking to the API
+
+#### `api.js` — the only door to the API
+
+| Export | What it does |
+|--------|--------------|
+| `API_BASE` | `/api/v1` (same origin, through the proxy) |
+| `createApi({ getToken, onUnauthorized })` | `get`, `post`, `put`, `patch`, `del` (JSON in and out, `null` for 204), `file(path)` (Blob + suggested name), `authHeaders()` |
+| `ApiError` | `status`, `code`, `params`, `fields`, `errors`, `retryAfter`. Network failure → `network_error`; non-JSON 502/503/504 → `api_unavailable` |
+| `saveBlob(blob, name)` | Starts a download (CSV, QR PNG): the API needs the Bearer header, so plain links cannot |
+
+Every request sends `Authorization: Bearer <token>` when logged in and `X-Device-Id` when the caller passes `deviceId`. A 401 with a token calls `onUnauthorized` (the shell forgets the session and goes to login).
+
+#### `errors.js` — code → message
+
+`ERROR_KEYS` maps every API error code (plus `api_unavailable` and `network_error`) to a key in `web/locales`. `errorMessage(problem, t, keys)` uses page-specific `keys` first, then `ERROR_KEYS`, then the API's English `message` for codes from a newer API. `web/test/modules.test.js` checks every code has a translation in every language.
+
+#### `sse.js` — live updates over fetch
+
+`EventSource` cannot send headers, and the token must never travel in the URL, so streams are read with `fetch` and a body reader.
+
+| Export | What it does |
+|--------|--------------|
+| `createSseParser(onMessage)` | Incremental parser: joins chunks, skips comments (`: ping`), reads `event`, `data`, `retry` |
+| `backoffDelay(attempt, retryMs)` | Reconnection wait: doubles each attempt, at most 30 s |
+| `followEvents({ url, headers, onChange, onUnauthorized, signal })` | Keeps one stream open until `signal` aborts; calls `onChange` per `change` and once after each reconnection (events may have been missed); a 401 stops it |
+
+#### `storage.js` — what the browser remembers
+
+`KEYS`: `sharevy-token`, `sharevy-device`, `sharevy-lang`, `sharevy-theme`. `load` / `save` fall back to memory when storage is blocked (private mode). `deviceId(pattern)` returns the saved device id or makes one (32 random bytes, base64url). The token tradeoff is documented here and in [web/README.md](web/README.md#tradeoffs).
+
+---
+
+### Pages (containers)
+
+A page is `async (app, { params, query, signal }) → { title, body, respondent?, redirect?, status?, mounted? }`. It fetches with `app.api` (passing `signal`, so a newer navigation cancels it), composes components, and attaches action handlers. `mounted()` runs after the DOM is on screen (live streams, QR image).
+
+| File | Pages | What they do |
+|------|-------|--------------|
+| `home.js` | `homePage` | Landing with steps and login/register buttons (register only when `meta.allowRegistration`); logged-in creators go to `/surveys` |
+| `auth.js` | `loginPage`, `registerPage` | Forms; API errors in a box above the form (registration in field order); keep typed values (never the password); after login go to `safeNext(next)`; the submit button is disabled while sending |
+| `surveys.js` | `surveyListPage` (+ `surveyCards`) | Cards with status badge, response count and closing text; live via `/surveys/events` |
+| `editor.js` | `editorPage` | New / edit. Reads `/meta` for limits, types, `today` and `defaultOpenDays` (default closing date, `min` of the date input). Title and closing date are checked with the questions by the builder; API `errors[]` are shown in order above the form. Warns when editing a survey with responses |
+| `detail.js` | `detailPage` | Share link (copy button with a fallback for plain HTTP, native share sheet when supported), QR image (`qr.svg` fetched as a blob), PNG download, CSV downloads (`?lang=` = current interface language), open/close, delete (confirm), key figures, charts, responses table with delete; results live via `/surveys/:id/events` |
+| `respond.js` | `respondPage`, `thanksPage` | Respondent form, closed / expired / already-answered panels, thanks page. Sends `X-Device-Id`, keeps a `deviceId` the API returns. Checks every answer in the browser first (`attachValidation`); API `fields` errors use the same markup |
+
+**Respondent form behavior (`respond.js` + `answer-field.js`):**
+
+| Behavior | Detail |
+|----------|--------|
+| Checks before sending | On submit, every answer is checked with `checkAnswer` / `checkRespondentName` (`validation.js`). Invalid → nothing is sent; errors appear under each question (`.has-error`, `.field-error`, `aria-invalid` / `aria-describedby`), plus the `.errors` summary with a link to each, and the first invalid question gets the focus. A question's error clears as soon as its answer is valid. The form sets `noValidate` so browser bubbles do not compete |
+| Server errors | A 422 `fields` map is translated with `errors.js` and shown with the same markup; `already_answered`, `survey_closed`, `survey_expired` switch to their panels |
+| Number questions | A text input with `inputmode="decimal"` (a number input hides the typed text and cursor from scripts). Only digits, one point and a leading `-` can be typed, pasted or dropped (`beforeinput`, with an `input` safety net); a comma becomes a point; Up/Down add or subtract 1 (`number-input.js`) |
+
+---
+
+### Components (presentational)
+
+Pure functions from data (and callbacks) to DOM. They never fetch or navigate on their own, and they keep the classes, ids and roles of the single-server markup, so `style.css` applies unchanged.
+
+| File | Exports | Notes |
+|------|---------|-------|
+| `layout.js` | `APP_NAME`, `topbar`, `themeToggle`, `languageMenu`, `flash`, `errorList`, `notice`, `backLink`, `emptyState`, `statusBadge`, `statusKey`, `closingText`, `resultPanel`, `errorPanel` | The language menu is a native `<details class="lang-menu">`: a globe and the current code, one link per language named in its own language, `aria-current` on the current one; on phones it opens under the whole top bar |
+| `icons.js` | `icon(name, extraClass)` | Stroke icons on a 24×24 grid, built with `s()`. Icon-only buttons always carry an `aria-label` and a `title` |
+| `builder.js` | `createBuilder({ fields, types, choiceTypes, limits, t, basics })` → `{ element, validate(), value() }` | Question editor: add, move, duplicate, delete. Warns about repeated questions and options **while typing**; empty question text, missing options, title and closing date (`basics`) **after a submit attempt**. Same rule as the API: equal after trimming, ignoring case. Keeps field ids so edits do not orphan answers |
+| `answer-field.js` | `answerField(field, index, i18n, limits)`, `respondentNameField`, `fieldError` | One control per type (`yesno`: two large side-by-side radios, `.choices.yesno`; choices in a `fieldset` + `legend`); control id `fld_<question id>` |
+| `results.js` | `kpiTiles`, `summaryCharts`, `responsesTable` | Key figures (`<dl class="kpis">`), charts, and the table (one card per response on phones, via each cell's `data-label`). Yes/no shown translated |
+
+**Charts** (`summaryCharts`, math in `charts.js`):
+
+| Question type | Chart | Why |
+|---------------|-------|-----|
+| `radio`, `select` (up to 6 options), `yesno` | Donut + legend with count and % | One answer per person: the shares add up to 100% |
+| `checkbox` | Horizontal bars + a note | Several answers per person: the % add up to more than 100%, so a pie would mislead |
+| `radio`, `select` with more than 6 options | Bars | Categorical colors are never repeated |
+
+The SVG is `aria-hidden`; the legend and bar labels carry every number as text. Colors come from classes (`.slice-1`…`.slice-6` → `--cat-1`…`--cat-6`, `--bar-fill`), defined for light and dark in `style.css` from a muted palette checked with a colorblind validator (lightness band, chroma floor, CVD separation, >= 3:1 against the panel), so no inline `style` is needed.
+
+#### `dom.js` — safe DOM building
+
+| Export | What it does |
+|--------|--------------|
+| `h(tag, attrs, ...children)` | Element; strings become **text nodes**; `on*` functions become listeners; `value`, `checked`, `disabled`... are set as properties |
+| `s(tag, attrs, ...children)` | Same for SVG |
+| `withParts(text, parts)` | A translated sentence with nodes in its `{placeholders}` ("No account yet? {link}.") |
+
+There is no `innerHTML` anywhere in the client: user text can never become markup.
+
+---
+
+### Pure logic
+
+All tested in `web/test/modules.test.js` with `node --test`, no browser.
+
+| File | Exports | Notes |
+|------|---------|-------|
+| `i18n.js` | `SUPPORTED_LANGUAGES`, `DEFAULT_LANGUAGE`, `pickLanguage(saved, preferred)`, `createI18n(lang, messages, fallback)` → `{ lang, t, tn, formatDate }`, `interpolate` | Saved choice, then `navigator.languages` (region ignored), then English. `tn` picks `<key>.one` / `<key>.other` with `Intl.PluralRules`. Missing keys fall back to English, then the key. `formatDate` (UTC): `Nov 26, 2026` / `26 nov 2026` (`DATE_LOCALES`) |
+| `validation.js` | `checkAnswer`, `checkRespondentName`, `isValidDate` | Mirror of `validateAnswers` / `parseRespondentName`; returns `{ key, params }` or `undefined` |
+| `number-input.js` | `NUMBER_TEXT`, `normalizeNumberText`, `numberInsert`, `stepNumber` | Rules of the number filter |
+| `charts.js` | `MAX_DONUT_SLICES`, `percent`, `donutSlices`, `barWidth` | Donut dash arrays (circumference 100, small gap between slices, starts at 12 o'clock) and bar widths |
+| `format.js` | `formatTimestamp`, `addDays`, `safeNext` | ISO → `YYYY-MM-DD HH:MM:SS` (UTC); calendar math; `safeNext` keeps only same-site paths (no `//x`, no `/\x`), preventing open redirects after login |
+
+**Locale file format** (`web/locales/<code>.json`, flat keys)
 
 ```json
 {
@@ -655,40 +810,100 @@ All interface text lives in `locales/<code>.json`, one flat file per language, r
 
 | Rule | Detail |
 |------|--------|
-| Keys | Flat, dot-separated, grouped by page (`nav.`, `detail.`, `respond.`, `validation.`, `client.`…) |
-| Placeholders | `{name}`, filled by `t(key, { name })`. Unknown placeholders are left as they are |
-| Plurals | `<key>.one` / `<key>.other`, chosen by `tn(key, count)` with `Intl.PluralRules`; `{count}` is available |
-| Missing key | Falls back to English, then to the key itself |
-| Dates | `formatDate` uses `Intl` (UTC): `Nov 26, 2026` in English, `26 nov 2026` in Spanish |
-
-`test/i18n.test.js` checks that every locale file has exactly the keys of `en.json` and keeps every `{placeholder}`.
-
-**How to add a language** (e.g. Portuguese)
-
-1. Copy `locales/en.json` to `locales/pt.json` and translate the values (keep keys and `{placeholders}`).
-2. Add `'pt'` to `SUPPORTED_LANGUAGES` and a date locale (`pt: 'pt-BR'`) to `DATE_LOCALES` in `i18n.js`.
-3. Run `npm test`. The language menu lists the new language automatically, under its own `language.name` ("Português").
+| Keys | Flat, dot-separated, grouped by page (`nav.`, `detail.`, `respond.`, `validation.`, `error.`, `fieldType.`, `client.`…) |
+| Placeholders | `{name}`, filled by `t(key, { name })`; API error `params` fill them directly. Unknown placeholders stay as they are |
+| Plurals | `<key>.one` / `<key>.other` with `tn(key, count)`; `{count}` is available |
+| Language name | `language.name` ("English", "Español") names the language in the menu |
 
 ---
 
-## 6. Common changes: where to touch
+### Look and feel
+
+#### Design tokens (corporate look)
+
+Every color, the font and the corner radius are custom properties at the top of `web/public/style.css`. Change them there, never in individual rules.
+
+| Token | Light | Dark | Used for |
+|-------|-------|------|----------|
+| `--topbar` | `#1e2a3a` | `#1b2633` | Top bar (the white `logo.png` sits on it) |
+| `--brand` / `--brand-dark` | `#2b4a6f` / `#1f3753` | `#3a5f8a` / `#2f5079` | Primary buttons / their hover; white text on top |
+| `--brand-text` | `#2b4a6f` | `#9fbbdc` | Links, brand-colored text, focus rings |
+| `--brand-soft` | `#e6ecf3` | `#22303f` | Hover and selected tint |
+| `--text` / `--muted` | `#1c232c` / `#56606c` | `#e4e8ee` / `#a0aab6` | Body text / secondary text |
+| `--bg` / `--surface` / `--surface-alt` | `#f3f4f6` / `#fff` / `#f7f8fa` | `#12171e` / `#1a212b` / `#161c24` | Page / panels / table headers and the respondent-name box |
+| `--border` / `--border-strong` | `#d5dae1` / `#7d8794` | `#2f3946` / `#6b7685` | Panel and table rules / form controls (>= 3:1) |
+| `--ok`, `--warn`, `--danger`, `--closed` (+ `-soft`) | muted green, ochre, brick, grey | lighter tints of the same | Status text on its tinted box (>= 4.5:1) |
+| `--radius` | `0` | `0` | Square corners everywhere; only radio buttons, the round result icon and donut charts stay round |
+| `--font` | `"IBM Plex Sans", "Segoe UI", system-ui, sans-serif` | same | All text |
+
+| Rule | Detail |
+|------|--------|
+| Typography | IBM Plex Sans 400/500/600 from `web/public/fonts/` (`@font-face` at the top of `style.css`, 400 preloaded in `index.html`). Section headings (`h2`, `h3`, KPI and table headers) are small uppercase labels with letter spacing |
+| Lines | 1px rules, a 3px accent on the top or left edge of key boxes (survey intro, KPIs, cards, messages), almost no shadows, no dashed borders |
+| Contrast | Every text pair meets WCAG AA (>= 4.5:1) in both themes; recheck any new color |
+
+**To change the brand color:** edit `--brand`, `--brand-dark`, `--brand-text`, `--brand-soft` and `--topbar` in the three palette blocks of `style.css` (light, `[data-theme="dark"]`, `prefers-color-scheme: dark`; keep the two dark blocks identical), then update `<meta name="theme-color">` in `web/index.html` and the `fill` of `web/public/favicon.svg`. Check white text on `--brand` and `--brand-text` on `--surface` still reach 4.5:1.
+
+#### Branding
+
+`APP_NAME` (`Sharevy`, in `components/layout.js`) is used for the header and every title (`<page> · Sharevy`). The header shows `web/public/logo.png` (white clipboard, decorative `alt=""`) left of the name; it is a cropped copy of `assets/logo-source.png`. The favicon (`web/public/favicon.svg`) draws the same clipboard on a square slate background (`#1e2a3a`, the top bar color) so it stays visible on light browser tabs.
+
+#### Theme
+
+`web/public/theme.js` runs in `<head>` and applies a saved `sharevy-theme` before the first paint (no flash of the wrong theme). The dark palette redefines the tokens under `[data-theme="dark"]` and in the `prefers-color-scheme: dark` media query. Use `--brand-text` for brand-colored text and `--brand` for brand backgrounds.
+
+#### Layout
+
+**Mobile first:** `style.css` targets phones by default (44px touch targets, 16px+ inputs, full-width buttons) and enhances layouts from 700px.
+
+**Desktop (≥ 1100px):** CSS media queries only (no user-agent checks). The container grows and pages get two columns; the DOM order stays the phone order, CSS grid only places the blocks.
+
+| Page | Main column | Side column |
+|------|-------------|-------------|
+| Survey detail | `.detail-main`: key figures, charts, table | `.detail-side`: share link, QR, manage (sticky, scrolls on its own if taller than the window) |
+| Editor | `.editor-questions` | `.editor-basics`, then the save buttons (sticky) |
+| My surveys | Cards in 3–4 columns | — |
+
+The respondent form stays narrow (720px) on purpose: short lines are easier to read.
+
+#### Animations
+
+CSS only, in the "Motion" section at the end of `style.css`. Short fades and small slides (150–250 ms, one easing `--ease`); no spins, bounces or overshoot.
+
+| Rule | Detail |
+|------|--------|
+| Only `transform` and `opacity` | Plus `stroke-dashoffset` for the thanks check mark; nothing that forces a re-layout. No JS animation loops, no library |
+| Page changes | `app.js` swaps pages inside `document.startViewTransition` where supported; the top bar keeps its own `view-transition-name` |
+| Live updates | `.live-updated *` turns entrance animations off, so a refreshed region only gets the highlight ring |
+| Theme switch | Short color fade on the main surfaces only, never on `*` |
+| Reduced motion | `prefers-reduced-motion: reduce` sets every animation and transition to ~0, and `app.js` skips view transitions |
+
+---
+
+## 7. Common changes: where to touch
 
 | I want to… | Files |
 |------------|-------|
-| **Add a field type** (e.g. `phone`) | `surveys.js` (`FIELD_TYPE_IDS` + a `validateAnswers` case) → a `fieldType.<id>` label in every `locales/*.json` → `views.js` (`renderField` / `INPUT_TYPES`) → `test/surveys.test.js`. The builder picks it up automatically from `FIELD_TYPES` |
-| **Add a page or endpoint** | The matching `routes/*.js` + a function in `views.js` (pass `...ui(ctx)`; new text goes in every `locales/*.json`) (+ a `repo.js` method if it needs data) + `test/app.test.js` |
-| **Add a column** | `db.js` (schema + an `ALTER TABLE` for existing databases) → `repo.js` (query + hydrate) |
-| **Add a setting** | `config.js` → the consumer → the README configuration table |
-| **Change limits** | `LIMITS` in `surveys.js` (survey content) or `config.js` (rate limits) |
-| **Add an icon** | Add its path to `ICONS` in `views.js` (and in `public/builder.js` if the builder uses it) |
-| **Change or translate a text** | Edit the key in `locales/en.json` and `locales/es.json`. Browser-script text uses `client.*` keys |
-| **Add a language** | A new `locales/<code>.json` + `SUPPORTED_LANGUAGES` and `DATE_LOCALES` in `i18n.js` (see [`i18n.js`](#i18njs--interface-languages)) |
+| **Add a field type** (e.g. `phone`) | API: `FIELD_TYPE_IDS` + a `validateAnswers` case in `api/src/surveys.js` (+ a new error key in `api/locales/*.json` and `ERROR_CODES` if it has its own message) → `api/test/surveys.test.js`. Web: `fieldType.<id>` in every `web/locales/*.json` → the control in `components/answer-field.js` → the same rule in `validation.js` (`checkAnswer`) → `web/test/modules.test.js`. The builder reads the list from `/meta` automatically. Update `docs/API.md` |
+| **Add an endpoint** | A handler in the matching `api/src/routes/*.js` (`{ auth: true }` for creators, `ownedSurvey` for a survey) + a `repo.js` method if it needs data + `api/test/*.api.test.js` + `docs/API.md`. New error → key in `api/locales/en.json` (and `es.json`), code in `ERROR_CODES`, translation in `web/locales/*.json`, mapping in `web/public/js/errors.js` |
+| **Add a page** | A container in `web/public/js/pages/` + its entry in `routes.js` **and** the path in `APP_ROUTES` (`web/server/app.js`) + new text in every `web/locales/*.json` + `web/test/server.test.js` for the new path |
+| **Add a language** (e.g. `pt`) | Web: copy `web/locales/en.json` to `pt.json` and translate (keep keys and `{placeholders}`), add `'pt'` to `SUPPORTED_LANGUAGES` and `DATE_LOCALES` in `web/public/js/i18n.js`. API (CSV headers, yes/no): copy `api/locales/en.json` to `pt.json`, add `'pt'` to `SUPPORTED_LANGUAGES` in `api/src/i18n.js`. Run `npm test`. The menu lists it automatically, under its own `language.name` |
+| **Change a limit** | `LIMITS` in `api/src/surveys.js` (survey content; clients read it from `/meta`, so the web needs no change) or `api/src/config.js` (rate limits, session length) |
+| **Change a validation rule** | Both sides: `api/src/surveys.js` (`parseSurveyInput` / `validateAnswers`) **and** the web mirror (`components/builder.js` for the editor, `validation.js` for answers) + tests in both packages. The API stays the source of truth |
+| **Add a column** | `api/src/db.js` (schema + a new step at the end of `MIGRATIONS`) → `repo.js` (query + hydrate) → the route's JSON |
+| **Add a setting** | API: `api/src/config.js` → the consumer. Web: `web/server.js`. Then the configuration tables in `README.md` (and `docs/API.md` for the API) |
+| **Change or translate a text** | `web/locales/en.json` and `es.json` (`api/locales` only for CSV and English error messages) |
+| **Add an icon** | Its path in `ICONS` in `web/public/js/components/icons.js` |
+| **Build a new client** | Read `docs/API.md`; call `GET /api/v1/meta` at start-up for the rules; send `Authorization: Bearer` and `X-Device-Id`; translate error `code`s. Add its origin to `CORS_ORIGINS` only if it is a browser app on another origin |
 
 **Checklist before committing**
 
-- [ ] `npm test` is green
-- [ ] Every new HTML interpolation uses `esc()`
-- [ ] Every new interface text is a key in every `locales/*.json` (`test/i18n.test.js` checks it)
-- [ ] Every new creator route uses `authed` / `authedPost` and `ownedSurvey`
+- [ ] `npm test` is green at the root (API and web)
+- [ ] New API errors have a code in `ERROR_CODES` and a translation for that code in every `web/locales/*.json` (both packages' tests check it)
+- [ ] Every new interface text is a key in every `web/locales/*.json` (`web/test/modules.test.js` checks it)
+- [ ] Every new creator endpoint is registered with `{ auth: true }` and uses `ownedSurvey`
 - [ ] New SQL lives in `repo.js` and uses `?` parameters
-- [ ] No inline `<script>` or `style=""` (the CSP would block it)
+- [ ] No `innerHTML`, no inline `<script>` or `style=""` (the CSP would block it)
+- [ ] A changed rule is changed on both sides (API and web mirror)
+- [ ] A new page is in both `routes.js` and `APP_ROUTES`
+- [ ] `docs/API.md` describes any change to the contract
