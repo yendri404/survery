@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import { connect } from 'node:net';
 import { after, before, describe, test } from 'node:test';
 import { createWebServer } from '../server/app.js';
 
@@ -50,6 +51,40 @@ describe('web server', () => {
     for (const res of api.streams) res.end();
     await close(web);
     await close(api.server);
+  });
+
+  test('request targets that are not plain paths are refused, so the proxy cannot reach other hosts', async () => {
+    // A server standing for any other service on the network; it must never be reached through the proxy.
+    let internalHits = 0;
+    const internal = createServer((req, res) => { internalHits += 1; res.end('internal secret'); });
+    const internalUrl = new URL(await listen(internal));
+    const apiHitsBefore = api.seen.length;
+
+    // Sends a raw HTTP request line, because fetch always normalizes the target to a plain path.
+    const rawStatus = (target) => new Promise((resolve, reject) => {
+      const { hostname, port } = new URL(base);
+      const socket = connect(Number(port), hostname, () => {
+        socket.write(`GET ${target} HTTP/1.1\r\nHost: ${hostname}:${port}\r\nConnection: close\r\n\r\n`);
+      });
+      let data = '';
+      socket.on('data', (chunk) => { data += chunk; });
+      socket.on('end', () => resolve(Number(data.split(' ')[1])));
+      socket.on('error', reject);
+    });
+
+    try {
+      for (const target of [
+        `http://${internalUrl.host}/api/v1/health`, // absolute-form target
+        `//${internalUrl.host}/api/v1/health`, // scheme-relative target
+        `/\\${internalUrl.host}/api/v1/health`, // backslash, parsed like "//"
+      ]) {
+        assert.equal(await rawStatus(target), 400, target);
+      }
+      assert.equal(internalHits, 0, 'no request may reach another host');
+      assert.equal(api.seen.length, apiHitsBefore, 'refused targets are not forwarded to the API either');
+    } finally {
+      await close(internal);
+    }
   });
 
   test('app routes answer the single page with a strict CSP and security headers', async () => {

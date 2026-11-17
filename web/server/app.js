@@ -126,8 +126,11 @@ export function createWebServer({ apiUrl = 'http://127.0.0.1:3001', root = WEB_R
   }
 
   /** Forwards one request to the API and streams the answer back (event streams included). */
-  function proxy(req, res) {
-    const target = new URL(req.url, api);
+  function proxy(req, res, pathname, search) {
+    // Always built on the configured API origin: nothing in the request may choose the host.
+    const target = new URL(api.origin);
+    target.pathname = pathname;
+    target.search = search;
     const headers = {
       ...withoutHopByHop(req.headers),
       host: target.host,
@@ -152,13 +155,19 @@ export function createWebServer({ apiUrl = 'http://127.0.0.1:3001', root = WEB_R
   }
 
   return createServer(async (req, res) => {
+    // Only plain paths are accepted. Absolute-form ("http://host/..."), scheme-relative ("//host/...")
+    // and backslash targets ("/\host/...", parsed like "//") could otherwise point the proxy at another host.
+    if (typeof req.url !== 'string' || !req.url.startsWith('/') || req.url.startsWith('//') || req.url.includes('\\')) {
+      return sendText(res, 400, 'Bad request.');
+    }
     let pathname;
+    let search;
     try {
-      pathname = new URL(req.url, 'http://localhost').pathname;
+      ({ pathname, search } = new URL(req.url, 'http://localhost'));
     } catch {
       return sendText(res, 400, 'Bad request.');
     }
-    if (pathname === '/api' || pathname.startsWith('/api/')) return proxy(req, res);
+    if (pathname === '/api' || pathname.startsWith('/api/')) return proxy(req, res, pathname, search);
     if (req.method !== 'GET' && req.method !== 'HEAD') return sendText(res, 405, 'Method not allowed.', { Allow: 'GET, HEAD' });
 
     if (Object.keys(STATIC_DIRS).some((prefix) => pathname.startsWith(prefix))) {
