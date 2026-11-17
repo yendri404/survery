@@ -44,7 +44,7 @@ function compileRoute(method, path, handler) {
 
 export function createApp({ db, config }) {
   const repo = createRepo(db);
-  const publicDir = new URL('../public/', import.meta.url);
+  const publicDir = new URL('../../public/', import.meta.url);
   const assets = new Map(
     Object.entries(ASSET_TYPES).map(([name, type]) => [name, { type, body: readFileSync(new URL(name, publicDir)) }]),
   );

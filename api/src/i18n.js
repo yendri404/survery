@@ -13,7 +13,7 @@ const DATE_LOCALES = { en: 'en-US', es: 'es-ES' };
 
 const MESSAGES = Object.fromEntries(SUPPORTED_LANGUAGES.map((lang) => [
   lang,
-  JSON.parse(readFileSync(new URL(`../locales/${lang}.json`, import.meta.url), 'utf8')),
+  JSON.parse(readFileSync(new URL(`../../locales/${lang}.json`, import.meta.url), 'utf8')),
 ]));
 
 const isSupported = (code) => typeof code === 'string' && SUPPORTED_LANGUAGES.includes(code);

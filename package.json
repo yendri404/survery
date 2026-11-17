@@ -1,18 +1,15 @@
 {
   "name": "sharevy",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Sharevy — self-hosted survey app: creators have accounts, respondents answer anonymously via a shared link.",
-  "type": "module",
+  "description": "Sharevy — self-hosted survey app. api/ is the JSON REST API; the web client talks to it over HTTP + JSON.",
   "engines": {
     "node": ">=22.13"
   },
   "scripts": {
-    "start": "node src/server.js",
-    "test": "node --test test/",
-    "create-user": "node scripts/create-user.js"
-  },
-  "dependencies": {
-    "qrcode": "1.5.4"
+    "start": "npm run start:api",
+    "start:api": "npm --prefix api start",
+    "test": "npm --prefix api test",
+    "create-user": "npm --prefix api run create-user --"
   }
 }

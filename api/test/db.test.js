@@ -74,3 +74,9 @@ test('openDatabase adds a per-device column with a unique index per survey', () 
     db.close();
   });
 });
+
+test('the default database path is data/surveys.db at the repository root, not the cwd', async () => {
+  const { loadConfig, REPO_ROOT } = await import('../src/config.js');
+  assert.equal(loadConfig({}).dbPath, join(REPO_ROOT, 'data', 'surveys.db'));
+  assert.equal(loadConfig({ DB_PATH: ':memory:' }).dbPath, ':memory:');
+});

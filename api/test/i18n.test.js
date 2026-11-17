@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, createI18n, negotiateLanguage } from '../src/i18n.js';
 
-const load = (lang) => JSON.parse(readFileSync(new URL(`../locales/${lang}.json`, import.meta.url), 'utf8'));
+const load = (lang) => JSON.parse(readFileSync(new URL(`../../locales/${lang}.json`, import.meta.url), 'utf8'));
 const placeholders = (text) => new Set([...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]));
 
 test('every locale file has exactly the same keys as English', () => {

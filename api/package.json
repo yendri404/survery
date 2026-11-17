@@ -1,0 +1,18 @@
+{
+  "name": "sharevy-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sharevy REST API: JSON over HTTP for any client (web, mobile).",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/",
+    "create-user": "node scripts/create-user.js"
+  },
+  "dependencies": {
+    "qrcode": "1.5.4"
+  }
+}
