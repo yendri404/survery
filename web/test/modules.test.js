@@ -161,6 +161,16 @@ describe('server-sent events', () => {
     assert.equal(parser.retry, 3000);
   });
 
+  test('a CRLF line ending split between two chunks is one line break', () => {
+    const events = [];
+    const parser = createSseParser((event) => events.push(event));
+    parser.push('event: change\r');
+    parser.push('\ndata: 1\r');
+    parser.push('\n\r');
+    parser.push('\n');
+    assert.deepEqual(events, [{ event: 'change', data: '1' }]);
+  });
+
   test('followEvents reconnects after the stream ends or fails, and refreshes once reconnected', async () => {
     const encoder = new TextEncoder();
     // Each body sends a short retry, one change event, then ends (as when the proxy drops the stream).

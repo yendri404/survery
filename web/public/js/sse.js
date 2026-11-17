@@ -8,10 +8,12 @@ export function createSseParser(onMessage) {
   let buffer = '';
   let event = '';
   let data = [];
+  let endedWithCr = false; // a CRLF may be split across chunks: then its "\n" is not a second line break
   const parser = {
     retry: undefined,
     push(chunk) {
-      buffer += chunk;
+      buffer += endedWithCr && chunk.startsWith('\n') ? chunk.slice(1) : chunk;
+      endedWithCr = buffer.endsWith('\r');
       const lines = buffer.split(/\r\n|\r|\n/);
       buffer = lines.pop(); // an unfinished line waits for the next chunk
       for (const line of lines) {
