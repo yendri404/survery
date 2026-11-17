@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { connect } from 'node:net';
 import { after, before, describe, test } from 'node:test';
-import { createWebServer } from '../server/app.js';
+import { closeServer, createWebServer } from '../server/app.js';
 
 const listen = (server) => new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${server.address().port}`)));
 const close = (server) => new Promise((resolve) => { server.closeAllConnections?.(); server.close(() => resolve()); });
@@ -219,6 +219,20 @@ describe('web server', () => {
     clearTimeout(timer);
     if (outcome !== 'ended') await reader.cancel();
     assert.equal(outcome, 'ended');
+  });
+
+  test('shutting down closes open event streams instead of waiting for them', async () => {
+    const own = createWebServer({ apiUrl: `http://127.0.0.1:${api.server.address().port}` });
+    const ownBase = await listen(own);
+    const res = await fetch(`${ownBase}/api/v1/surveys/events`);
+    await res.body.getReader().read(); // the stream is open
+    let timer;
+    const outcome = await Promise.race([
+      closeServer(own).then(() => 'closed'),
+      new Promise((resolve) => { timer = setTimeout(() => resolve('still open'), 2000); }),
+    ]);
+    clearTimeout(timer);
+    assert.equal(outcome, 'closed');
   });
 
   test('an unreachable API answers 502 with a JSON error the client can translate', async () => {

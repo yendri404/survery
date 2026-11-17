@@ -63,6 +63,16 @@ function sendText(res, status, text, headers = {}) {
 }
 
 /**
+ * Stops accepting requests and ends the open ones too: proxied event streams never finish on their
+ * own, so waiting for them (plain `server.close()`) would keep the process alive forever.
+ */
+export function closeServer(server) {
+  const closed = new Promise((resolve) => server.close(() => resolve()));
+  server.closeAllConnections();
+  return closed;
+}
+
+/**
  * Static web server for the browser client, plus a reverse proxy for the API.
  *
  * - `/api/*` is forwarded to `apiUrl` as is (method, body, status, headers, streamed event

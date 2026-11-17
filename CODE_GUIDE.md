@@ -638,11 +638,11 @@ The API speaks English in error messages; clients translate the codes. Other lan
 
 #### `server.js` — entry point
 
-Reads `PORT` (3000), `HOST` (`0.0.0.0`) and `API_URL` (`http://127.0.0.1:3001`), starts `createWebServer({ apiUrl })`, and closes on `SIGINT` / `SIGTERM`.
+Reads `PORT` (3000), `HOST` (`0.0.0.0`) and `API_URL` (`http://127.0.0.1:3001`), starts `createWebServer({ apiUrl })`, and on `SIGINT` / `SIGTERM` stops with `closeServer`, which also ends open proxied event streams (otherwise they would keep the process alive).
 
 #### `server/app.js` — static files and API proxy
 
-**Exports:** `createWebServer({ apiUrl, root })`, `APP_ROUTES`, `WEB_ROOT`.
+**Exports:** `createWebServer({ apiUrl, root })`, `closeServer(server)` (close + `closeAllConnections`, resolves when closed), `APP_ROUTES`, `WEB_ROOT`.
 
 | Path | Answer |
 |------|--------|
