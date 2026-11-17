@@ -1,0 +1,64 @@
+# Sharevy with Docker. One command builds and starts everything:
+#
+#   docker compose up -d --build
+#
+# Then open http://<this machine's IP>:3000 (or the port in SHAREVY_PORT).
+# Data (accounts, surveys, answers) lives in the `sharevy-data` volume and survives rebuilds.
+
+name: sharevy
+
+services:
+  # REST API. Not published: only the web service reaches it, through this project's network.
+  api:
+    build: .
+    image: sharevy:latest
+    command: ["node", "api/src/server.js"]
+    environment:
+      HOST: 0.0.0.0
+      PORT: "3001"
+      DB_PATH: /data/surveys.db
+      # The web service is the only client and overwrites X-Forwarded-For, so the API may trust it
+      # (real client IPs for rate limits, and share links built from the address people open).
+      # The API logs a warning about TRUST_PROXY on a non-loopback host: here the port is not
+      # published, so it is expected.
+      TRUST_PROXY: "true"
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
+      # Pin the address used in share links and QR codes, e.g. http://192.168.1.20:3000.
+      # Empty: the address the browser opened.
+      WEB_BASE_URL: ${WEB_BASE_URL:-}
+    volumes:
+      - sharevy-data:/data
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:3001/api/v1/meta"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  # Web client: static files plus the /api proxy. The only published port.
+  web:
+    build: .
+    image: sharevy:latest
+    command: ["node", "web/server.js"]
+    environment:
+      HOST: 0.0.0.0
+      PORT: "3000"
+      API_URL: http://api:3001
+    ports:
+      - "${SHAREVY_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:3000/"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  sharevy-data:

@@ -68,6 +68,32 @@ The operator's `Sharevy server.bat` (kept on the desktop, outside this repositor
 
 Both run hidden in the background and log to `data/*.log`. Overrides: `SHAREVY_DIR`, `SHAREVY_WEB_PORT`, `SHAREVY_API_PORT`.
 
+### Docker
+
+One command builds the image and starts both processes:
+
+```bash
+docker compose up -d --build
+```
+
+Open `http://<this machine's IP>:3000`. The image is `node:26.13.1-alpine` (the smallest official
+Node image, same Node version as the tests) with npm removed; `compose.yml` runs it twice: `api`
+(not published, reachable only by `web`) and `web` (port `3000`, or `SHAREVY_PORT`). Data lives in
+the `sharevy-data` volume, so rebuilding or updating never touches it.
+
+| Task | Command |
+|------|---------|
+| Logs | `docker compose logs -f` |
+| Stop | `docker compose down` (keeps the data volume) |
+| Update after `git pull` | `docker compose up -d --build` |
+| Create a creator account | `docker compose exec api node api/scripts/create-user.js <email> <name> <password>` |
+| Bring an existing database | Stop the old server first (so the file is complete), then: `docker compose stop api`, `docker compose cp data/surveys.db api:/data/surveys.db`, `docker compose run --rm -u root api chown node:node /data/surveys.db`, `docker compose start api` |
+| Back up the database | `docker compose cp api:/data/surveys.db ./surveys-backup.db` |
+
+Settings: `SHAREVY_PORT`, `ALLOW_REGISTRATION` and `WEB_BASE_URL` can be set in the shell or in a
+`.env` file next to `compose.yml`. The API logs a warning about `TRUST_PROXY` on a non-loopback
+host: in Docker its port is not published, so only the web container can reach it.
+
 ## Configuration (environment variables)
 
 **API** (`api/src/config.js`)
