@@ -121,6 +121,12 @@ describe('CORS', () => {
     assert.equal(loadConfig({ BASE_URL: 'https://legacy.local' }).webBaseUrl, 'https://legacy.local', 'BASE_URL still works as a fallback');
   });
 
+  test('FUN is on only for true, 1, yes or on (any case); off when unset or anything else', () => {
+    assert.equal(loadConfig({}).fun, false);
+    for (const value of ['true', '1', 'yes', 'on', 'TRUE', ' On ']) assert.equal(loadConfig({ FUN: value }).fun, true, value);
+    for (const value of ['false', '0', 'no', 'off', '']) assert.equal(loadConfig({ FUN: value }).fun, false, value);
+  });
+
   test('by default the API listens on loopback behind the web proxy and trusts its X-Forwarded-For', () => {
     const defaults = loadConfig({});
     assert.equal(defaults.host, '127.0.0.1');
@@ -222,6 +228,25 @@ describe('login rate limiting', () => {
 
     await new Client(app.base).register('safe@corp.local');
     assert.equal((await attacker.login('safe@corp.local')).status, 200, 'other accounts are not affected');
+  });
+
+  test('wrong passwords sent all at once are counted before checking, so only the limit gets through', async () => {
+    await new Client(app.base).register('burst@corp.local');
+    const attacker = new Client(app.base);
+    const burst = await Promise.all(Array.from({ length: 12 }, (_, i) => attacker.login('burst@corp.local', `wrong-${i}`)));
+    const statuses = burst.map((r) => r.status);
+    assert.equal(statuses.filter((s) => s === 401).length, 3, statuses.join());
+    assert.equal(statuses.filter((s) => s === 429).length, 9, statuses.join());
+    assert.equal((await attacker.login('burst@corp.local')).status, 429, 'the right password waits too');
+  });
+
+  test('a correct login clears the failures counted before it', async () => {
+    await new Client(app.base).register('typo@corp.local');
+    const user = new Client(app.base);
+    for (let i = 0; i < 2; i++) assert.equal((await user.login('typo@corp.local', 'wrong-pass')).status, 401);
+    assert.equal((await user.login('typo@corp.local')).status, 200);
+    for (let i = 0; i < 3; i++) assert.equal((await user.login('typo@corp.local', 'wrong-pass')).status, 401, `failure ${i + 1} after the reset`);
+    assert.equal((await user.login('typo@corp.local')).status, 429);
   });
 });
 

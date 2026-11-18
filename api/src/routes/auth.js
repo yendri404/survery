@@ -27,14 +27,14 @@ export function registerAuthRoutes({ route, repo, config }) {
     const limitKey = `${email.toLowerCase()}|${clientIp(ctx.req, config.trustProxy)}`;
 
     if (loginFailures.isLimited(limitKey)) throw tooManyRequests('login.tooManyAttempts', loginFailures.retryAfterSeconds(limitKey));
+    // Counted before the (slow) password check and cleared only on success: guesses sent all at
+    // once cannot all pass the limit check before any of them is counted.
+    loginFailures.hit(limitKey);
 
     const user = email ? repo.findUserByEmail(email) : undefined;
     // The dummy hash keeps the timing the same whether or not the account exists.
     const valid = await verifyPassword(password, user?.password_hash ?? DUMMY_HASH);
-    if (!user || !valid) {
-      loginFailures.hit(limitKey);
-      throw new ApiError(401, 'login.invalid');
-    }
+    if (!user || !valid) throw new ApiError(401, 'login.invalid');
     loginFailures.reset(limitKey);
     startSession(ctx, user, 200);
   });
