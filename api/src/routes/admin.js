@@ -28,8 +28,11 @@ export function registerAdminRoutes({ route, repo, config, today, live }) {
     sendJson(ctx.res, status, { token });
   }
 
-  /** Whether the master password exists, so the admin page shows "create" or "log in". */
-  route('GET', '/admin/status', (ctx) => sendJson(ctx.res, 200, { configured: Boolean(repo.getAdmin()) }));
+  /**
+   * Whether the master password exists, so the admin page shows "create" or "log in", and whether
+   * FUN is on (the login page then shows its playful line).
+   */
+  route('GET', '/admin/status', (ctx) => sendJson(ctx.res, 200, { configured: Boolean(repo.getAdmin()), fun: Boolean(config.fun) }));
 
   /** Creates the master password: only while none exists (the first request wins), then logs in. */
   route('POST', '/admin/setup', async (ctx) => {

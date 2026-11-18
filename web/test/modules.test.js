@@ -857,6 +857,15 @@ describe('admin panel (/..command/)', () => {
     assert.equal(matchRoute('/surveys/12').route.page.name, 'detailPage', 'other routes unchanged');
   });
 
+  test('panel login text: the plain line, or the playful one only when the API says FUN is on', async () => {
+    const { adminLoginIntroKey } = await import('../public/js/components/admin.js');
+    assert.equal(adminLoginIntroKey({ fun: false }), 'admin.loginIntro');
+    assert.equal(adminLoginIntroKey({}), 'admin.loginIntro', 'an older API without the field');
+    assert.equal(adminLoginIntroKey({ fun: true }), 'admin.loginFun');
+    assert.equal(es['admin.loginFun'], 'No deberías estar aquí, pero si sabes lo que haces...');
+    assert.equal(en['admin.loginFun'], "You shouldn't be here, but if you know what you're doing...");
+  });
+
   test('user cards: name, email and survey count; the selected one is marked; delete and set password call back', async (t) => {
     useFakeDom(t);
     const { adminUserCards } = await import('../public/js/components/admin.js');

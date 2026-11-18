@@ -1,5 +1,5 @@
 import { ApiError } from '../api.js';
-import { adminHref, adminSurveyCards, adminUserCards } from '../components/admin.js';
+import { adminHref, adminLoginIntroKey, adminSurveyCards, adminUserCards } from '../components/admin.js';
 import { icon } from '../components/icons.js';
 import { emptyState, errorList } from '../components/layout.js';
 import { h, setErrorBox } from '../dom.js';
@@ -59,7 +59,8 @@ function setupView(app) {
   };
 }
 
-function loginView(app) {
+/** The panel's login; `status` is /admin/status (its `fun` picks the line under the heading). */
+function loginView(app, status) {
   const { t } = app;
   const password = h('input', { type: 'password', name: 'password', required: true, autocomplete: 'current-password' });
   const form = passwordForm(app, {
@@ -77,7 +78,7 @@ function loginView(app) {
   });
   return {
     title: t('admin.title'),
-    body: [h('div', { class: 'panel narrow' }, h('h1', {}, t('admin.title')), h('p', { class: 'muted' }, t('admin.loginIntro')), form)],
+    body: [h('div', { class: 'panel narrow' }, h('h1', {}, t('admin.title')), h('p', { class: 'muted' }, t(adminLoginIntroKey(status))), form)],
     mounted: () => password.focus(),
   };
 }
@@ -89,12 +90,12 @@ function loginView(app) {
  */
 export async function adminPage(app, { query, signal }) {
   const { t } = app;
-  const { configured } = await app.adminApi.get('/admin/status', { signal });
-  if (!configured) {
+  const status = await app.adminApi.get('/admin/status', { signal });
+  if (!status.configured) {
     app.setAdminToken(null); // a token from before a reset in the database is dead anyway
     return setupView(app);
   }
-  if (!app.adminToken) return loginView(app);
+  if (!app.adminToken) return loginView(app, status);
 
   const selectedId = Number(query.get('user')) || null;
   const [{ users }, surveys] = await Promise.all([

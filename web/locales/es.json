@@ -293,6 +293,7 @@
   "admin.confirm": "Repite la contraseña maestra",
   "admin.create": "Crear y entrar",
   "admin.loginIntro": "Escribe la contraseña maestra.",
+  "admin.loginFun": "No deberías estar aquí, pero si sabes lo que haces...",
   "admin.login": "Entrar",
   "admin.logout": "Salir del panel",
   "admin.users": "Usuarios",

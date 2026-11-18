@@ -2,6 +2,9 @@ import { h } from '../dom.js';
 import { icon } from './icons.js';
 import { closingText, emptyState, statusBadge } from './layout.js';
 
+/** Text key of the panel login's line: the playful one only when the API says FUN is on. */
+export const adminLoginIntroKey = (status) => (status?.fun === true ? 'admin.loginFun' : 'admin.loginIntro');
+
 /** The admin page's address, optionally with a user selected (`?user=<id>`). */
 export const adminHref = (userId) => (userId ? `/..command/?user=${userId}` : '/..command/');
 

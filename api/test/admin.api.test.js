@@ -27,7 +27,7 @@ describe('admin: master password', () => {
 
   test('a new instance has no master password; admin endpoints need the admin token', async () => {
     const c = new Client(app.base);
-    assert.deepEqual((await c.request('/admin/status')).json, { configured: false });
+    assert.deepEqual((await c.request('/admin/status')).json, { configured: false, fun: false });
     const res = await c.request('/admin/users');
     assert.equal(res.status, 401);
     assert.equal(res.json.error.code, 'unauthorized');
@@ -45,7 +45,7 @@ describe('admin: master password', () => {
     const mismatch = await c.request('/admin/setup', { method: 'POST', body: { password: MASTER, confirm: 'something-else-123' } });
     assert.equal(mismatch.status, 422);
     assert.equal(mismatch.json.error.fields.confirm.code, 'password_mismatch');
-    assert.deepEqual((await c.request('/admin/status')).json, { configured: false });
+    assert.deepEqual((await c.request('/admin/status')).json, { configured: false, fun: false });
   });
 
   test('the first setup creates the only master password and logs in; any later setup is refused', async () => {
@@ -60,7 +60,7 @@ describe('admin: master password', () => {
       assert.equal(lost.status, 409);
       assert.equal(lost.json.error.code, 'admin_exists');
     }
-    assert.deepEqual((await c.request('/admin/status')).json, { configured: true });
+    assert.deepEqual((await c.request('/admin/status')).json, { configured: true, fun: false });
     assert.equal(app.db.prepare('SELECT COUNT(*) AS n FROM admin').get().n, 1);
     // The winner's token works; the password is stored hashed.
     c.token = won[0].json.token;
@@ -108,7 +108,7 @@ describe('admin: login, guard and reset', () => {
     app.db.exec('DELETE FROM admin');
     assert.equal((await a.request('/admin/users')).status, 401);
     const c = new Client(app.base);
-    assert.deepEqual((await c.request('/admin/status')).json, { configured: false });
+    assert.deepEqual((await c.request('/admin/status')).json, { configured: false, fun: false });
     password = 'a-brand-new-master-1';
     assert.equal((await c.request('/admin/setup', { method: 'POST', body: { password } })).status, 201);
     assert.equal((await a.request('/admin/users')).status, 401, 'tokens from before the reset stay dead');
@@ -232,5 +232,13 @@ describe('admin: login limit under a burst', () => {
     assert.equal(statuses.filter((s) => s === 401).length, 3, statuses.join());
     assert.equal(statuses.filter((s) => s === 429).length, 9, statuses.join());
     assert.equal((await c.request('/admin/login', { method: 'POST', body: { password: MASTER } })).status, 429, 'the right password waits too');
+  });
+});
+
+describe('admin: FUN', () => {
+  test('/admin/status says whether FUN is on, so the login page can show its message', async (t) => {
+    const app = await startApi({ fun: true });
+    t.after(() => app.close());
+    assert.deepEqual((await new Client(app.base).request('/admin/status')).json, { configured: false, fun: true });
   });
 });

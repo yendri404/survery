@@ -335,6 +335,7 @@ The database file (`data/surveys.db`) is the same one the single-server version 
 | `loginMaxFailures` | `LOGIN_MAX_FAILURES` | `10` | `routes/auth.js` |
 | `loginWindowMs` | — | 15 min | `routes/auth.js` |
 | `submissionLimit` | `SUBMISSION_LIMIT` | `60` (`0` = off) | `routes/public.js` |
+| `fun` | `FUN` (`true`/`1`/`yes`/`on`, any case) | `false` | `routes/admin.js` (`/admin/status`), shown by the web admin login (`adminLoginIntroKey`) |
 | `submissionWindowMs` | — | 10 min | `routes/public.js` |
 | `now` | — (tests only) | `() => new Date()` | `app.js` → `today()`, the clock used for closing dates |
 

@@ -109,6 +109,7 @@ host: in Docker its port is not published, so only the web container can reach i
 | `TRUST_PROXY` | `true` on a loopback `HOST`, else `false` | `true` reads the client IP from `X-Forwarded-For`, which the web proxy always overwrites. An explicit value always wins; never set `true` on an API reachable directly (see [Security notes](#security-notes)). |
 | `LOGIN_MAX_FAILURES` | `10` | Failed logins allowed per email + IP every 15 minutes before answering 429. |
 | `SUBMISSION_LIMIT` | `60` | Responses accepted per survey + IP every 10 minutes (`0` disables). Raise it if many people answer from one shared PC. |
+| `FUN` | unset | `true`, `1`, `yes` or `on`: the admin panel's login (`/..command/`) greets with "You shouldn't be here, but if you know what you're doing..." (Spanish: "No deberías estar aquí, pero si sabes lo que haces...") instead of the plain line. Set it on the API service. |
 
 **Web client** (`web/server.js`)
 

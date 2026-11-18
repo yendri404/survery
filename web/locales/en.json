@@ -293,6 +293,7 @@
   "admin.confirm": "Repeat the master password",
   "admin.create": "Create and enter",
   "admin.loginIntro": "Enter the master password.",
+  "admin.loginFun": "You shouldn't be here, but if you know what you're doing...",
   "admin.login": "Enter",
   "admin.logout": "Leave the panel",
   "admin.users": "Users",

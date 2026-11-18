@@ -604,7 +604,7 @@ user and every survey. It is stored hashed in the single row of the `admin` tabl
 
 ### `GET /admin/status`
 
-`200 { "configured": false }` while no master password exists (the web page then offers to create it), `true` after.
+`200 { "configured": false, "fun": false }`. `configured` is `false` while no master password exists (the web page then offers to create it), `true` after. `fun` mirrors the `FUN` setting (see [Configuration](#11-configuration)): the web client's admin login then shows a playful line instead of the plain one.
 
 ### `POST /admin/setup`
 
@@ -665,6 +665,7 @@ Environment variables of the API process:
 | `TRUST_PROXY` | `true` when `HOST` is loopback (`127.0.0.1`, `::1`, `localhost`), else `false` | `true` only behind a reverse proxy you control: the client IP comes from `X-Forwarded-For`. The `web/` server is such a proxy (it always overwrites that header); without it every person would count as `127.0.0.1` for the rate limits. An explicit value always wins; the API warns at start-up when it is `true` on a non-loopback host. |
 | `LOGIN_MAX_FAILURES` | `10` | Failed logins per email + IP every 15 minutes before `429`. |
 | `SUBMISSION_LIMIT` | `60` | Responses per survey + IP every 10 minutes (`0` disables). |
+| `FUN` | unset | `true`, `1`, `yes` or `on` (any case): `GET /admin/status` answers `fun: true`, and the web client's admin login shows a playful line. Anything else is off. |
 
 The database schema only grows (additive migrations run on every start), so databases from earlier versions keep all their data.
 
