@@ -356,6 +356,15 @@ th, td { border-bottom: 1px solid var(--border); padding: .55rem .75rem; text-al
 th { background: var(--surface-alt); color: var(--muted); font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; border-bottom: 1px solid var(--border-strong); }
 tbody tr:hover { background: var(--surface-alt); }
 td { font-variant-numeric: tabular-nums; }
+/* Long paragraph answers: cut to 5 lines with an ellipsis; a tap opens the whole text. Looks like
+   plain text (it is a button only so keyboards and screen readers can open it too). */
+.answer-clamp {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; line-clamp: 5; overflow: hidden;
+  min-width: 14rem; max-width: 32rem; min-height: 0; padding: 0; border: 0; background: none;
+  color: inherit; font: inherit; font-weight: 400; text-align: left; white-space: pre-line; cursor: zoom-in;
+}
+.answer-clamp:hover { background: none; border: 0; text-decoration: underline dotted var(--muted); }
+.answer-clamp[aria-expanded="true"] { display: block; -webkit-line-clamp: unset; line-clamp: none; overflow: visible; cursor: zoom-out; }
 .nowrap { white-space: nowrap; }
 .row-actions { width: 1%; }
 

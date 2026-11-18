@@ -123,6 +123,8 @@
   "detail.publicResultsHint": "Turn it off to make the link stop working. Turning it on again creates a new link.",
   "detail.responses": "Responses ({count})",
   "detail.exportCsv": "Download CSV",
+  "detail.showFullAnswer": "Show the whole answer",
+  "detail.showLessAnswer": "Show less",
   "detail.summary": "Summary",
   "detail.answered": "({count} answered)",
   "detail.chart.multipleNote": "People could choose more than one option, so the percentages can add up to more than 100%.",

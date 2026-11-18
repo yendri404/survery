@@ -119,11 +119,32 @@ export function kpiTiles({ kpis }, i18n) {
  * Every answer: a table on wide screens, one card per response on phones (CSS). Without
  * `onDelete(response)` the table is read-only (public results): no delete buttons, no actions column.
  */
+/** A paragraph answer is "long" past 5 lines or about 5 lines of text in a table column. */
+const LONG_TEXT = { lines: 5, chars: 240 };
+export const isLongText = (text) => text.split('\n').length > LONG_TEXT.lines || text.length > LONG_TEXT.chars;
+
+/**
+ * A long paragraph answer: cut to 5 lines with "…" (CSS) so one answer does not stretch every row;
+ * a tap (or Enter/Space, it is a button) shows the whole text, another tap cuts it again.
+ */
+function clampedAnswer(text, t) {
+  let open = false;
+  const button = h('button', { type: 'button', class: 'answer-clamp', 'aria-expanded': 'false', title: t('detail.showFullAnswer') }, text);
+  button.addEventListener('click', () => {
+    open = !open;
+    button.setAttribute('aria-expanded', String(open));
+    button.setAttribute('title', t(open ? 'detail.showLessAnswer' : 'detail.showFullAnswer'));
+  });
+  return button;
+}
+
 export function responsesTable(fields, responses, { t }, onDelete) {
   if (!responses.length) return [emptyState(t(onDelete ? 'detail.noAnswers' : 'results.noAnswers'))];
   const answerText = (field, value) => {
     const text = Array.isArray(value) ? value.join(', ') : optionText(field.type, value ?? '', t);
-    return text || h('span', { class: 'muted' }, '-');
+    if (!text) return h('span', { class: 'muted' }, '-');
+    // Only paragraph answers (textarea) are cut; short answers never get long enough to need it.
+    return field.type === 'textarea' && isLongText(text) ? clampedAnswer(text, t) : text;
   };
   const rows = responses.map((r) => h('tr', {},
     h('td', { 'data-label': t('detail.columnResponse') }, `#${r.number}`),

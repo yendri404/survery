@@ -123,6 +123,8 @@
   "detail.publicResultsHint": "Al desactivarlo, el enlace deja de funcionar. Si lo vuelves a activar, se crea un enlace nuevo.",
   "detail.responses": "Respuestas ({count})",
   "detail.exportCsv": "Descargar CSV",
+  "detail.showFullAnswer": "Ver la respuesta completa",
+  "detail.showLessAnswer": "Ver menos",
   "detail.summary": "Resumen",
   "detail.answered": "({count} respondieron)",
   "detail.chart.multipleNote": "Cada persona podía elegir más de una opción, así que los porcentajes pueden sumar más de 100%.",

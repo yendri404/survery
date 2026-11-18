@@ -352,6 +352,43 @@ describe('results table', () => {
     const labels = findAll(wrap, (n) => n.tag === 'button').map((b) => b.attrs['aria-label']);
     assert.deepEqual(labels, ['Delete response #2', 'Delete response #1']);
   });
+
+  test('long paragraph answers start cut to 5 lines and open fully on a tap; short ones and other types stay as text', async (t) => {
+    const saved = { Node: globalThis.Node, SVGElement: globalThis.SVGElement, document: globalThis.document };
+    Object.assign(globalThis, {
+      Node: FakeNode,
+      SVGElement: FakeSvg,
+      document: { createElement: (tag) => new FakeNode(tag), createElementNS: (_ns, tag) => new FakeSvg(tag), createTextNode: (text) => ({ text }) },
+    });
+    t.after(() => Object.assign(globalThis, saved));
+    const { responsesTable, isLongText } = await import('../public/js/components/results.js');
+    const { t: tr } = createI18n('en', en, en);
+    const long = 'Detail. '.repeat(60);
+    const sixLines = ['1', '2', '3', '4', '5', '6'].join('\n');
+    assert.equal(isLongText(long), true);
+    assert.equal(isLongText(sixLines), true);
+    assert.equal(isLongText('Short comment.'), false);
+    assert.equal(isLongText(['1', '2', '3', '4', '5'].join('\n')), false);
+
+    const fields = [{ id: 'p', label: 'Comments', type: 'textarea' }, { id: 's', label: 'Word', type: 'text' }];
+    const responses = [
+      { id: 1, number: 1, submittedAt: '2026-11-01T10:00:00Z', respondentName: null, answers: { p: long, s: long } },
+      { id: 2, number: 2, submittedAt: '2026-11-01T10:00:00Z', respondentName: null, answers: { p: 'Short comment.' } },
+    ];
+    const [, wrap] = responsesTable(fields, responses, { t: tr });
+    const clamps = findAll(wrap, (n) => n.attrs.class === 'answer-clamp');
+    assert.equal(clamps.length, 1, 'only the long paragraph answer is cut');
+    const [clamp] = clamps;
+    assert.equal(clamp.tag, 'button');
+    assert.equal(clamp.textContent, long);
+    assert.equal(clamp.attrs['aria-expanded'], 'false');
+    assert.equal(clamp.attrs.title, 'Show the whole answer');
+    clamp.listeners.click();
+    assert.equal(clamp.attrs['aria-expanded'], 'true');
+    assert.equal(clamp.attrs.title, 'Show less');
+    clamp.listeners.click();
+    assert.equal(clamp.attrs['aria-expanded'], 'false');
+  });
 });
 
 describe('public results (read-only views)', () => {
