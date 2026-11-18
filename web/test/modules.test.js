@@ -939,28 +939,61 @@ describe('admin panel (/..command/)', () => {
   });
 });
 
-describe('survey templates (import file reading)', () => {
-  const file = (text, size = text.length) => ({ size, text: async () => text });
+describe('survey templates (export / import)', () => {
+  const survey = {
+    id: 12, title: 'Team lunch: 2027?', description: 'Plan it.', requireName: true, isOpen: true, closesOn: '2026-12-01',
+    publicToken: 'secret-token', shareUrl: 'http://x/s/secret-token', responseCount: 40,
+    fields: [
+      { id: 'a1', label: 'Department', type: 'radio', required: true, options: ['IT', 'HR'] },
+      { id: 'b2', label: 'Score', type: 'scale', required: false, options: [], min: 1, max: 5 },
+      { id: 'c3', label: 'Comments', type: 'textarea', required: false, options: [] },
+    ],
+  };
 
-  test('a file is read as a JSON object, or refused before asking the API (too large, not JSON, not an object)', async () => {
-    const { TEMPLATE_MAX_BYTES, readTemplateFile } = await import('../public/js/template.js');
-    assert.deepEqual(await readTemplateFile(file('{"format":"sharevy-survey-template","signature":"x"}')), { format: 'sharevy-survey-template', signature: 'x' });
-    assert.equal(await readTemplateFile(file('{}', TEMPLATE_MAX_BYTES + 1)), undefined);
-    assert.equal(await readTemplateFile(file('not json {')), undefined);
-    assert.equal(await readTemplateFile(file('[1, 2]')), undefined);
-    assert.equal(await readTemplateFile(file('"text"')), undefined);
-    assert.equal(await readTemplateFile(file('null')), undefined);
-    assert.equal(await readTemplateFile(undefined), undefined);
+  test('export: only what a new survey needs (no ids, answers, links or dates), with a format tag', async () => {
+    const { surveyTemplate } = await import('../public/js/template.js');
+    assert.deepEqual(surveyTemplate(survey), {
+      format: 'sharevy-survey-template',
+      version: 1,
+      title: 'Team lunch: 2027?',
+      description: 'Plan it.',
+      requireName: true,
+      fields: [
+        { label: 'Department', type: 'radio', required: true, options: ['IT', 'HR'] },
+        { label: 'Score', type: 'scale', required: false, min: 1, max: 5 },
+        { label: 'Comments', type: 'textarea', required: false },
+      ],
+    });
   });
 
-  test('every refusal reads "unsupported file", in every language, also for the API code', async () => {
-    const { ERROR_KEYS } = await import('../public/js/errors.js');
-    assert.equal(ERROR_KEYS.template_unsupported, 'template.unsupported');
-    assert.match(es['template.unsupported'], /^Archivo no soportado\./);
-    assert.match(en['template.unsupported'], /^Unsupported file\./);
-    assert.match(locale('pt')['template.unsupported'], /^Arquivo não suportado\./);
-    for (const old of ['template.invalid', 'template.notSharevy', 'template.newerVersion', 'template.noQuestions', 'template.tooLarge']) {
-      for (const lang of SUPPORTED_LANGUAGES) assert.equal(locale(lang)[old], undefined, `${lang} still has ${old}`);
+  test('file name: the title made safe for files, plus .sharevy.json', async () => {
+    const { templateFileName } = await import('../public/js/template.js');
+    assert.equal(templateFileName('Team lunch: 2027?'), 'Team lunch 2027.sharevy.json');
+    assert.equal(templateFileName('Encuesta / clima "laboral"'), 'Encuesta clima laboral.sharevy.json');
+    assert.equal(templateFileName('???'), 'survey.sharevy.json');
+  });
+
+  test('import: an exported file reads back the same; unknown keys are dropped', async () => {
+    const { parseTemplate, surveyTemplate } = await import('../public/js/template.js');
+    const exported = surveyTemplate(survey);
+    assert.deepEqual(parseTemplate(JSON.stringify(exported)), { template: exported });
+    const extra = { ...exported, publicToken: 'x', fields: [{ ...exported.fields[0], id: 'zz', answers: [1] }] };
+    assert.deepEqual(parseTemplate(JSON.stringify(extra)).template.fields, [exported.fields[0]]);
+    // Optional parts may be missing.
+    const minimal = parseTemplate(JSON.stringify({ format: 'sharevy-survey-template', version: 1, fields: [{ label: 'Q', type: 'text' }] }));
+    assert.deepEqual(minimal.template, { format: 'sharevy-survey-template', version: 1, title: '', description: '', requireName: false, fields: [{ label: 'Q', type: 'text', required: false }] });
+  });
+
+  test('import refuses what is not a Sharevy template, a newer version, or one without questions', async () => {
+    const { parseTemplate } = await import('../public/js/template.js');
+    assert.deepEqual(parseTemplate('not json {'), { error: 'template.invalid' });
+    assert.deepEqual(parseTemplate('[1, 2]'), { error: 'template.invalid' });
+    assert.deepEqual(parseTemplate(JSON.stringify({ title: 'x', fields: [] })), { error: 'template.notSharevy' });
+    assert.deepEqual(parseTemplate(JSON.stringify({ format: 'sharevy-survey-template', version: 2, fields: [{ label: 'Q', type: 'text' }] })), { error: 'template.newerVersion' });
+    assert.deepEqual(parseTemplate(JSON.stringify({ format: 'sharevy-survey-template', version: 1, fields: [] })), { error: 'template.noQuestions' });
+    assert.deepEqual(parseTemplate(JSON.stringify({ format: 'sharevy-survey-template', version: 1, fields: ['x', null] })), { error: 'template.noQuestions' });
+    for (const key of ['template.invalid', 'template.notSharevy', 'template.newerVersion', 'template.noQuestions', 'template.tooLarge']) {
+      for (const lang of SUPPORTED_LANGUAGES) assert.ok(locale(lang)[key], `${lang} misses ${key}`);
     }
   });
 });

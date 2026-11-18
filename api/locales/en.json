@@ -1,5 +1,4 @@
 {
-  "template.unsupported": "Unsupported file. Only survey templates exported by this Sharevy can be imported.",
   "login.tooManyAttempts": "Too many failed login attempts. Try again in {minutes} minute(s).",
   "admin.exists": "The master password already exists. To replace it, delete it in the database.",
   "admin.notConfigured": "The master password has not been created yet.",

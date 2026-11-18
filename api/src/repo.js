@@ -64,13 +64,6 @@ export function createRepo(db) {
       q('DELETE FROM users WHERE id = ?').run(id);
     },
 
-    // Server secrets
-    /** The secret called `name`, made with `make()` the first time (concurrent first calls agree on one). */
-    secret(name, make) {
-      q('INSERT INTO app_secrets (name, value) VALUES (?, ?) ON CONFLICT(name) DO NOTHING').run(name, make());
-      return q('SELECT value FROM app_secrets WHERE name = ?').get(name).value;
-    },
-
     // Admin (master password, single row)
     getAdmin() {
       return q('SELECT * FROM admin WHERE id = 1').get();

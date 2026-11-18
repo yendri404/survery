@@ -51,7 +51,6 @@ api/                         REST API, JSON only (port 3001)
 │   ├── i18n.js              The few texts the API writes for people (CSV headers, yes/no), English messages
 │   ├── repo.js              All SQL queries (the only file that talks to the DB)
 │   ├── surveys.js           Business rules: survey definitions, answers, summary, CSV
-│   ├── templates.js         Survey templates: canonical form, HMAC signature, strict check
 │   └── routes/
 │       ├── meta.js          /health and /meta (the rules clients must not hard-code)
 │       ├── auth.js          Register, login, logout, /me
@@ -278,10 +277,6 @@ erDiagram
         text device_hash "sha256 of X-Device-Id; unique per survey"
         text submitted_at "UTC"
     }
-    app_secrets {
-        text name PK "e.g. template_key"
-        text value "made once, kept"
-    }
     admin {
         int id PK "always 1: a single row"
         text password_hash "master password, scrypt"
@@ -341,7 +336,6 @@ The database file (`data/surveys.db`) is the same one the single-server version 
 | `loginMaxFailures` | `LOGIN_MAX_FAILURES` | `10` | `routes/auth.js` |
 | `loginWindowMs` | — | 15 min | `routes/auth.js` |
 | `submissionLimit` | `SUBMISSION_LIMIT` | `60` (`0` = off) | `routes/public.js` |
-| `templateSecret` | `TEMPLATE_SECRET` | `null`: `repo.secret('template_key')`, made once per database | `app.js` → `templateKey` for `routes/surveys.js` (template export and check) |
 | `fun` | `FUN` (`true`/`1`/`yes`/`on`, any case) | `false` | `routes/admin.js` (`/admin/status`), shown by the web admin login (`adminLoginIntroKey`) |
 | `submissionWindowMs` | — | 10 min | `routes/public.js` |
 | `now` | — (tests only) | `() => new Date()` | `app.js` → `today()`, the clock used for closing dates |
@@ -476,8 +470,6 @@ All routes need a Bearer token (`authed(...)` registers them with `{ auth: true 
 | DELETE | `/surveys/:id/responses/:responseId` | Delete one response (idempotent 204) |
 | GET | `/surveys/:id/summary` | Key figures (`kpis`) and per-question counts with percentages: the server counts, clients only draw |
 | GET | `/surveys/:id/export.csv?delimiter=comma\|semicolon\|auto&lang=en\|es&tz=<IANA>` | CSV download named after the survey (UTF-8 with BOM); `auto` = `;` only when a number answer has decimals; `lang` defaults to `Accept-Language`, then English |
-| GET | `/surveys/:id/template` | The definition as a signed template file, `<title>.sharevy.json` (`templates.js`: `templateOf` + `signTemplate` with `templateKey`) |
-| POST | `/templates/check` | `{ template }` when the body is a template this server signed, unchanged (`verifyTemplate`: strict canonical shape + HMAC, constant-time compare); else `422 template_unsupported`. Saves nothing |
 | GET | `/surveys/:id/qr.svg`, `/surveys/:id/qr.png` | QR code of `shareUrl` (PNG as an attachment) |
 
 **Key internals:**
@@ -881,7 +873,7 @@ All tested in `web/test/modules.test.js` with `node --test`, no browser.
 | `validation.js` | `checkAnswer`, `checkRespondentName`, `checkScaleRange`, `isValidDate` | Mirror of `validateAnswers` / `parseRespondentName` and of the scale range rules of `parseSurveyInput`; returns `{ key, params }` or `undefined` |
 | `number-input.js` | `NUMBER_TEXT`, `normalizeNumberText`, `numberInsert`, `stepNumber` | Rules of the number filter |
 | `charts.js` | `MAX_DONUT_SLICES`, `percent`, `donutSlices`, `barWidth`, `columnHeight` | Donut dash arrays (circumference 100, small gap between slices, starts at 12 o'clock), bar widths and histogram column heights |
-| `template.js` | `readTemplateFile`, `TEMPLATE_MAX_BYTES` | Reads a picked template file as a JSON object (`JSON.parse`, never run), or `undefined` when missing, over 1 MB, not JSON or not an object. The API makes templates (`GET /surveys/:id/template`, signed: "Export as template" on the survey page downloads it) and judges them (`POST /templates/check`): any refusal shows "Unsupported file". An accepted template goes to `app.pendingTemplate`, which `editorPage` uses once to fill a new survey; the editor and `POST /surveys` validate the content when it is created |
+| `template.js` | `surveyTemplate`, `parseTemplate`, `templateFileName`, `TEMPLATE_FORMAT`, `TEMPLATE_VERSION`, `TEMPLATE_MAX_BYTES` | A survey's definition as a file (`{ format: 'sharevy-survey-template', version: 1, title, description, requireName, fields }`; fields keep label, type, required, options when any, min/max for scales; never ids, answers, links, owner or dates). Made in the browser ("Export as template" on the survey page, `<title>.sharevy.json`). `parseTemplate` checks the shape only (JSON object, format tag, version not newer, at least one question) and keeps known keys; "Import template" on the survey list puts it in `app.pendingTemplate`, which `editorPage` uses once to fill a new survey. The editor and the API validate the content when it is created. No API endpoint involved |
 | `format.js` | `formatTimestamp`, `localDateTime`, `viewerTimeZone`, `addDays`, `safeNext` | ISO → `YYYY-MM-DD HH:MM:SS` in the viewer's time zone (the API stays UTC); `localDateTime` → local date + `HH:MM` (last-response figure); the zone sent as `tz` with CSV exports; calendar math; `safeNext` keeps only same-site paths (no `//x`, no `/\x`), preventing open redirects after login |
 
 **Locale file format** (`web/locales/<code>.json`, flat keys)

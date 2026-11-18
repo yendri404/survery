@@ -38,9 +38,6 @@ export function loadConfig(env = process.env) {
     loginWindowMs: 15 * 60 * 1000,
     // Admin panel sessions are short: the master password opens every account.
     adminSessionTtlMs: 8 * 60 * 60 * 1000,
-    // Key that signs exported survey templates. Unset: a random key made once and kept in the database
-    // (templates only import into this server). The same value on several servers lets them share templates.
-    templateSecret: env.TEMPLATE_SECRET || null,
     // FUN=true|1|yes|on: the admin panel's login greets with a playful line instead of the plain one.
     fun: ['true', '1', 'yes', 'on'].includes(String(env.FUN ?? '').trim().toLowerCase()),
     // Responses accepted per survey+IP within the window (0 disables the limit).

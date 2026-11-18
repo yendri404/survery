@@ -419,33 +419,6 @@ with `", "`. Cells starting with `=`, `+`, `-`, `@`, tab or carriage return get 
 plain numbers) so spreadsheets do not run them as formulas. Unknown values answer
 `400 invalid_parameter` with `params.name` = `delimiter` or `lang`.
 
-### `GET /surveys/:id/template`
-
-The survey's definition as a template file to start other surveys from: `200`, `application/json`,
-`Content-Disposition: attachment` named `<title>.sharevy.json`.
-
-```json
-{
-  "format": "sharevy-survey-template", "version": 1,
-  "title": "...", "description": "...", "requireName": false,
-  "fields": [{ "label": "Department", "type": "radio", "required": true, "options": ["IT", "HR"] },
-             { "label": "Score", "type": "scale", "required": false, "min": 1, "max": 5 }],
-  "signature": "<43 characters>"
-}
-```
-
-Never ids, answers, links, owner or dates. `options` only when the question has some; `min`/`max` only for `scale`.
-`signature` is an HMAC-SHA256 of the content with the server's template key (`TEMPLATE_SECRET`, else a key made once
-and kept in the database).
-
-### `POST /templates/check`
-
-Body: the content of a template file, as is. `200 { "template": { ...without signature } }` only when this server (or
-one with the same `TEMPLATE_SECRET`) exported it and nothing changed; anything else (an edited value, an extra or
-missing key, a value of the wrong kind, no or another signature, another format or version) is
-`422 template_unsupported`. Nothing is saved: the client fills its new-survey editor with it, and `POST /surveys`
-validates the content as usual.
-
 ### `GET /surveys/:id/qr.svg` and `GET /surveys/:id/qr.png`
 
 QR code of `shareUrl`. SVG: `image/svg+xml`, with `role="img"` and an English `aria-label`.
@@ -699,7 +672,6 @@ Environment variables of the API process:
 | `TRUST_PROXY` | `true` when `HOST` is loopback (`127.0.0.1`, `::1`, `localhost`), else `false` | `true` only behind a reverse proxy you control: the client IP comes from `X-Forwarded-For`. The `web/` server is such a proxy (it always overwrites that header); without it every person would count as `127.0.0.1` for the rate limits. An explicit value always wins; the API warns at start-up when it is `true` on a non-loopback host. |
 | `LOGIN_MAX_FAILURES` | `10` | Failed logins per email + IP every 15 minutes before `429`. |
 | `SUBMISSION_LIMIT` | `60` | Responses per survey + IP every 10 minutes (`0` disables). |
-| `TEMPLATE_SECRET` | unset | Key that signs survey templates (`GET /surveys/:id/template`, `POST /templates/check`). Unset: a random key made once and kept in the database (`app_secrets`). The same value on several servers lets them import each other's templates; changing it makes earlier exports unsupported. |
 | `FUN` | unset | `true`, `1`, `yes` or `on` (any case): `GET /admin/status` answers `fun: true`, and the web client's admin login shows a playful line. Anything else is off. |
 
 The database schema only grows (additive migrations run on every start), so databases from earlier versions keep all their data.
@@ -724,7 +696,6 @@ The database schema only grows (additive migrations run on every start), so data
 | `registration_disabled` | 404 | Registration is disabled. Ask an administrator for an account. |
 | `invalid_credentials` | 401 | Invalid email or password. |
 | `too_many_login_attempts` | 429 | Too many failed login attempts. Try again in {minutes} minute(s). |
-| `template_unsupported` | 422 | Unsupported file. Only survey templates exported by this Sharevy can be imported. |
 | `admin_exists` | 409 | The master password already exists. To replace it, delete it in the database. |
 | `admin_not_configured` | 409 | The master password has not been created yet. |
 | `admin_password_length` | 422 | The master password must be between 12 and 200 characters. (in `fields.password`) |

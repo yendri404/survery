@@ -4,7 +4,6 @@ import { ApiError, coded, validationFailed } from '../errors.js';
 import { attachmentDisposition, forwardedOrigin, isoUtc, readJson, sendJson, sendNoContent } from '../http.js';
 import { createI18n, isSupportedLanguage, negotiateLanguage } from '../i18n.js';
 import { qrPng, qrSvg } from '../qr.js';
-import { signTemplate, templateOf, verifyTemplate } from '../templates.js';
 import { csvDelimiterFor, daysBetween, fileSafeName, isTimeZone, parseSurveyInput, summarize, surveyStatus, toCsv } from '../surveys.js';
 
 const CSV_DELIMITERS = { comma: ',', semicolon: ';' };
@@ -129,7 +128,7 @@ export function surveyTools({ repo, config, today }) {
 }
 
 /** Creator endpoints: every one needs a Bearer token and only sees the creator's own surveys. */
-export function registerSurveyRoutes({ route, repo, config, today, live, templateKey }) {
+export function registerSurveyRoutes({ route, repo, config, today, live }) {
   const authed = (method, path, handler) => route(method, path, handler, { auth: true });
   const { shareUrl, surveyJson, readDefinition, changeState } = surveyTools({ repo, config, today });
 
@@ -231,28 +230,6 @@ export function registerSurveyRoutes({ route, repo, config, today, live, templat
     });
     // UTF-8 BOM so Excel detects accents correctly.
     ctx.res.end('﻿' + csv);
-  });
-
-  /** The survey's definition as a signed template file (<title>.sharevy.json): see templates.js. */
-  authed('GET', '/surveys/:id/template', (ctx) => {
-    const survey = ownedSurvey(ctx);
-    ctx.res.writeHead(200, {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Content-Disposition': attachmentDisposition(`${fileSafeName(survey.title, `survey-${survey.id}`)}.sharevy.json`),
-    });
-    ctx.res.end(`${JSON.stringify(signTemplate(templateKey, templateOf(survey)), null, 2)}
-`);
-  });
-
-  /**
-   * Checks a template file before it fills a new survey: { template } when this server (or one with
-   * the same TEMPLATE_SECRET) exported it unchanged; 422 template_unsupported for anything else.
-   * Nothing is saved: the creator reviews it in the editor and creates it with POST /surveys.
-   */
-  authed('POST', '/templates/check', async (ctx) => {
-    const template = verifyTemplate(templateKey, await readJson(ctx.req));
-    if (!template) throw new ApiError(422, 'template.unsupported');
-    sendJson(ctx.res, 200, { template });
   });
 
   authed('GET', '/surveys/:id/qr.svg', async (ctx) => {

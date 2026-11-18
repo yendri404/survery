@@ -322,7 +322,11 @@
   "admin.exists": "The master password already exists. To replace it, delete it in the database.",
   "admin.notConfigured": "The master password has not been created yet.",
   "admin.passwordLength": "The master password must be between 12 and 200 characters.",
-  "template.unsupported": "Unsupported file. Only survey templates exported by this Sharevy can be imported.",
+  "template.invalid": "This file is not a valid template (it is not readable JSON).",
+  "template.notSharevy": "This file is not a Sharevy survey template.",
+  "template.newerVersion": "This template was made by a newer version of Sharevy. Update this server to import it.",
+  "template.noQuestions": "This template has no questions.",
+  "template.tooLarge": "This file is too large to be a template (1 MB at most).",
   "detail.exportTemplate": "Export as template",
   "list.importTemplate": "Import template",
   "editor.fromTemplate": "Loaded from the template \"{file}\". Review it and choose the closing date before creating the survey."

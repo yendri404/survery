@@ -6,6 +6,7 @@ import {
 import { h, slot } from '../dom.js';
 import { viewerTimeZone } from '../format.js';
 import { rememberedAnswersView } from '../storage.js';
+import { surveyTemplate, templateFileName } from '../template.js';
 
 /** Briefly shows `text` on a button ("Copied!"), then restores its label. */
 function flashButton(btn, text) {
@@ -95,8 +96,12 @@ export async function detailPage(app, { params, signal }) {
     showSurvey(survey);
     publicSlot.node.querySelector?.('input[type="checkbox"]')?.focus();
   });
-  /** Downloads the survey's questions as a template file, signed by the API (only this Sharevy imports it). */
-  const exportTemplate = () => download(`${path}/template`, `survey-${id}.sharevy.json`);
+  /** Downloads the survey's questions as a template file (made here: no API call). */
+  const exportTemplate = () => {
+    const json = `${JSON.stringify(surveyTemplate(current), null, 2)}
+`;
+    saveBlob(new Blob([json], { type: 'application/json' }), templateFileName(current.title));
+  };
   const deleteSurvey = () => {
     if (!window.confirm(t('detail.deleteConfirm'))) return;
     act(async () => {

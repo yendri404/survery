@@ -54,12 +54,6 @@ CREATE TABLE IF NOT EXISTS admin_sessions (
   expires_at INTEGER NOT NULL
 );
 
--- Server secrets made once and kept (e.g. 'template_key', which signs exported survey templates).
-CREATE TABLE IF NOT EXISTS app_secrets (
-  name TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
-
 CREATE INDEX IF NOT EXISTS idx_surveys_owner ON surveys(owner_id);
 CREATE INDEX IF NOT EXISTS idx_responses_survey ON responses(survey_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);

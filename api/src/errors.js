@@ -50,8 +50,6 @@ export const ERROR_CODES = {
   'register.disabled': 'registration_disabled',
   'login.invalid': 'invalid_credentials',
   'login.tooManyAttempts': 'too_many_login_attempts',
-  // Survey templates
-  'template.unsupported': 'template_unsupported',
   // Admin panel (master password)
   'admin.exists': 'admin_exists',
   'admin.notConfigured': 'admin_not_configured',
