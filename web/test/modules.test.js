@@ -4,7 +4,7 @@ import { describe, test } from 'node:test';
 import { ERROR_CODES } from '../../api/src/errors.js';
 import { barWidth, columnHeight, donutSlices, percent } from '../public/js/charts.js';
 import { ERROR_KEYS, errorMessage } from '../public/js/errors.js';
-import { addDays, formatTimestamp, safeNext } from '../public/js/format.js';
+import { addDays, formatTimestamp, localDateTime, safeNext } from '../public/js/format.js';
 import { SUPPORTED_LANGUAGES, createI18n, pickLanguage } from '../public/js/i18n.js';
 import { NUMBER_TEXT, normalizeNumberText, numberInsert, stepNumber } from '../public/js/number-input.js';
 import { backoffDelay, coalesce, createSseParser, followEvents } from '../public/js/sse.js';
@@ -68,9 +68,16 @@ describe('i18n', () => {
 });
 
 describe('format', () => {
-  test('timestamps show as "YYYY-MM-DD HH:MM:SS" (UTC)', () => {
-    assert.equal(formatTimestamp('2026-11-17T10:05:00Z'), '2026-11-17 10:05:00');
+  test('timestamps show as "YYYY-MM-DD HH:MM:SS" in the viewer\'s time zone', () => {
+    assert.equal(formatTimestamp('2026-11-17T10:05:00Z', 'UTC'), '2026-11-17 10:05:00');
+    assert.equal(formatTimestamp('2026-11-17T02:05:09Z', 'America/Caracas'), '2026-11-16 22:05:09'); // UTC-4: the day before
+    assert.equal(formatTimestamp('2026-11-17T20:00:00Z', 'Asia/Kolkata'), '2026-11-18 01:30:00'); // UTC+5:30
     assert.equal(formatTimestamp(''), '');
+  });
+
+  test('localDateTime splits a timestamp into the local date and HH:MM', () => {
+    assert.deepEqual(localDateTime('2026-11-17T02:05:09Z', 'America/Caracas'), { date: '2026-11-16', time: '22:05' });
+    assert.equal(localDateTime(null), null);
   });
 
   test('addDays is calendar math', () => {

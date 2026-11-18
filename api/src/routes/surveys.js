@@ -4,7 +4,7 @@ import { ApiError, coded, validationFailed } from '../errors.js';
 import { forwardedOrigin, isoUtc, readJson, sendJson, sendNoContent } from '../http.js';
 import { createI18n, isSupportedLanguage, negotiateLanguage } from '../i18n.js';
 import { qrPng, qrSvg } from '../qr.js';
-import { daysBetween, parseSurveyInput, summarize, surveyStatus, toCsv } from '../surveys.js';
+import { daysBetween, isTimeZone, parseSurveyInput, summarize, surveyStatus, toCsv } from '../surveys.js';
 
 const CSV_DELIMITERS = { comma: ',', semicolon: ';' };
 const QR_LABEL = 'QR code that opens this survey';
@@ -174,8 +174,11 @@ export function registerSurveyRoutes({ route, repo, config, today, live }) {
     if (!delimiter) throw new ApiError(400, 'error.invalidParameter', { name: 'delimiter' });
     const lang = query.get('lang') ?? negotiateLanguage(ctx.req.headers['accept-language']);
     if (!isSupportedLanguage(lang)) throw new ApiError(400, 'error.invalidParameter', { name: 'lang' });
+    // Optional: show submission times in the viewer's zone (the web client sends its own).
+    const timeZone = query.get('tz') ?? undefined;
+    if (timeZone !== undefined && !isTimeZone(timeZone)) throw new ApiError(400, 'error.invalidParameter', { name: 'tz' });
 
-    const csv = toCsv(survey.fields, repo.listResponses(survey.id), delimiter, { t: createI18n(lang).t });
+    const csv = toCsv(survey.fields, repo.listResponses(survey.id), delimiter, { t: createI18n(lang).t, timeZone });
     ctx.res.writeHead(200, {
       'Content-Type': 'text/csv; charset=utf-8',
       'Content-Disposition': `attachment; filename="sharevy-survey-${survey.id}-responses.csv"`,

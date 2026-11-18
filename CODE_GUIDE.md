@@ -813,7 +813,7 @@ All tested in `web/test/modules.test.js` with `node --test`, no browser.
 | `validation.js` | `checkAnswer`, `checkRespondentName`, `checkScaleRange`, `isValidDate` | Mirror of `validateAnswers` / `parseRespondentName` and of the scale range rules of `parseSurveyInput`; returns `{ key, params }` or `undefined` |
 | `number-input.js` | `NUMBER_TEXT`, `normalizeNumberText`, `numberInsert`, `stepNumber` | Rules of the number filter |
 | `charts.js` | `MAX_DONUT_SLICES`, `percent`, `donutSlices`, `barWidth`, `columnHeight` | Donut dash arrays (circumference 100, small gap between slices, starts at 12 o'clock), bar widths and histogram column heights |
-| `format.js` | `formatTimestamp`, `addDays`, `safeNext` | ISO → `YYYY-MM-DD HH:MM:SS` (UTC); calendar math; `safeNext` keeps only same-site paths (no `//x`, no `/\x`), preventing open redirects after login |
+| `format.js` | `formatTimestamp`, `localDateTime`, `viewerTimeZone`, `addDays`, `safeNext` | ISO → `YYYY-MM-DD HH:MM:SS` in the viewer's time zone (the API stays UTC); `localDateTime` → local date + `HH:MM` (last-response figure); the zone sent as `tz` with CSV exports; calendar math; `safeNext` keeps only same-site paths (no `//x`, no `/\x`), preventing open redirects after login |
 
 **Locale file format** (`web/locales/<code>.json`, flat keys)
 

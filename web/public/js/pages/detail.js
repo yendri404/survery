@@ -4,6 +4,7 @@ import {
   closingLine, managePanel, openCloseButton, resultsContent, sharePanel, statusNotice, surveyDescription, surveyHeading,
 } from '../components/survey-detail.js';
 import { h, slot } from '../dom.js';
+import { viewerTimeZone } from '../format.js';
 
 /** Briefly shows `text` on a button ("Copied!"), then restores its label. */
 function flashButton(btn, text) {
@@ -66,7 +67,8 @@ export async function detailPage(app, { params, signal }) {
   });
   const resultsActions = {
     // Comma is the API's default delimiter; semicolon suits Excel with regional settings that use ";".
-    onExport: (delimiter) => download(`${path}/export.csv?${delimiter === 'semicolon' ? 'delimiter=semicolon&' : ''}lang=${i18n.lang}`, `sharevy-survey-${id}-responses.csv`),
+    // tz: times in the CSV match the ones on screen (the viewer's zone).
+    onExport: (delimiter) => download(`${path}/export.csv?${delimiter === 'semicolon' ? 'delimiter=semicolon&' : ''}lang=${i18n.lang}&tz=${encodeURIComponent(viewerTimeZone())}`, `sharevy-survey-${id}-responses.csv`),
     onDeleteResponse: (response) => {
       if (!window.confirm(t('detail.deleteResponseConfirm', { number: response.number }))) return;
       act(async () => {

@@ -388,6 +388,7 @@ For `scale`, `counts` has one entry per whole number from `min` to `max` (as tex
 |-------|--------|---------|
 | `delimiter` | `comma`, `semicolon` (Excel with regional settings that use `;`) | `comma` |
 | `lang` | `en`, `es`: language of the fixed headers and of yes/no answers | `Accept-Language`, then `en` |
+| `tz` | IANA time zone (`America/Caracas`): submission times are shown in that zone and the header names it (`Submitted at (America/Caracas)`). The web client sends the viewer's zone. An unknown zone is a `400 invalid_parameter` (`params.name: "tz"`) | UTC (`Submitted at (UTC)`) |
 
 ```
 200

@@ -11,6 +11,7 @@
   "answer.no": "No",
   "csv.responseNumber": "Response #",
   "csv.submittedAt": "Submitted at (UTC)",
+  "csv.submittedAtZone": "Submitted at ({zone})",
   "csv.name": "Name",
   "respond.alreadyAnswered": "You already answered this survey from this device. Thank you!",
   "respond.closedOn": "This survey closed on {date} and no longer accepts answers.",

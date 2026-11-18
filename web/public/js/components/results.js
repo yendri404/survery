@@ -1,6 +1,6 @@
 import { MAX_DONUT_SLICES, barWidth, columnHeight, donutSlices, percent } from '../charts.js';
 import { h, s } from '../dom.js';
-import { formatTimestamp } from '../format.js';
+import { formatTimestamp, localDateTime } from '../format.js';
 import { icon } from './icons.js';
 import { closingText, emptyState, statusKey } from './layout.js';
 
@@ -105,13 +105,13 @@ export function kpiTiles({ kpis }, i18n) {
   const closing = kpis.status === 'open'
     ? (kpis.daysLeft > 0 ? tn('detail.kpi.daysLeft', kpis.daysLeft) : t('detail.kpi.lastDay'))
     : t(statusKey(kpis.status));
-  const newest = kpis.lastResponseAt; // ISO 8601 UTC
+  const newest = localDateTime(kpis.lastResponseAt); // the viewer's local date and time
   const tile = (label, value, sub) => h('div', { class: 'kpi' },
     h('dt', {}, label), h('dd', { class: 'kpi-value' }, value), sub ? h('dd', { class: 'kpi-sub' }, sub) : null);
   return h('dl', { class: 'kpis' },
     tile(t('detail.kpi.responses'), String(kpis.total)),
     tile(t('detail.kpi.named'), String(kpis.named), kpis.total ? t('detail.kpi.anonymous', { count: kpis.anonymous }) : ''),
-    tile(t('detail.kpi.lastResponse'), newest ? formatDate(newest.slice(0, 10)) : '—', newest ? `${newest.slice(11, 16)} UTC` : ''),
+    tile(t('detail.kpi.lastResponse'), newest ? formatDate(newest.date) : '—', newest ? newest.time : ''),
     tile(t('detail.kpi.closing'), closing, closingText(kpis.closesOn, kpis.status, i18n)));
 }
 

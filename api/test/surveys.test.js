@@ -145,6 +145,14 @@ test('toCsv writes header and rows in submission order, numbered per survey', ()
   assert.equal(csv, 'Response #,Submitted at (UTC),Name,Name\r\n1,2026-01-01 00:00:00,,Ana\r\n2,2026-01-02 00:00:00,Bo B.,Bo\r\n');
 });
 
+test('toCsv shows submission times in a time zone when given one', () => {
+  const rows = [{ id: 1, number: 1, submittedAt: '2026-01-01 00:00:00', respondentName: null, answers: { name0001: 'Ana' } }];
+  // Stored times are UTC; Caracas is UTC-4 (the day before), Kolkata UTC+5:30.
+  assert.equal(toCsv(fields.slice(0, 1), rows, ',', { timeZone: 'America/Caracas' }),
+    'Response #,Submitted at (America/Caracas),Name,Name\r\n1,2025-12-31 20:00:00,,Ana\r\n');
+  assert.match(toCsv(fields.slice(0, 1), rows, ',', { timeZone: 'Asia/Kolkata' }), /\r\n1,2026-01-01 05:30:00,,Ana\r\n$/);
+});
+
 test('yes/no questions need no options and accept only yes or no', () => {
   assert.ok(FIELD_TYPE_IDS.includes('yesno'));
   const { value, errors } = parseSurveyInput({

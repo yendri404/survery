@@ -136,7 +136,7 @@
   "detail.kpi.lastDay": "Last day",
   "detail.allAnswers": "All answers",
   "detail.columnResponse": "Response",
-  "detail.columnSent": "Sent (UTC)",
+  "detail.columnSent": "Sent",
   "detail.columnName": "Name",
   "detail.columnActions": "Actions",
   "detail.anonymous": "Anonymous",

@@ -376,11 +376,37 @@ export function csvCell(value, delimiter = ',') {
   return s;
 }
 
-export function toCsv(fields, responses, delimiter = ',', { t = englishT } = {}) {
-  const header = [t('csv.responseNumber'), t('csv.submittedAt'), t('csv.name'), ...fields.map((f) => f.label)];
+/** True for an IANA time zone name the runtime knows ("America/Caracas", "UTC"). */
+export function isTimeZone(value) {
+  if (typeof value !== 'string' || !value) return false;
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** A stored UTC time ("YYYY-MM-DD HH:MM:SS") as the same format in `timeZone`. */
+function inTimeZone(utc, timeZone) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(new Date(`${utc.replace(' ', 'T')}Z`));
+  const p = Object.fromEntries(parts.map((x) => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}`;
+}
+
+/**
+ * Responses as CSV. Submission times are UTC unless `timeZone` (IANA name) is given; then they are
+ * shown in that zone and the header names it.
+ */
+export function toCsv(fields, responses, delimiter = ',', { t = englishT, timeZone } = {}) {
+  const sentHeader = timeZone ? t('csv.submittedAtZone', { zone: timeZone }) : t('csv.submittedAt');
+  const sent = (utc) => (timeZone ? inTimeZone(utc, timeZone) : utc);
+  const header = [t('csv.responseNumber'), sentHeader, t('csv.name'), ...fields.map((f) => f.label)];
   const rows = responses
     .slice()
     .sort((a, b) => a.id - b.id)
-    .map((r) => [r.number, r.submittedAt, r.respondentName ?? '', ...fields.map((f) => answerText(f, r.answers[f.id], t))]);
+    .map((r) => [r.number, sent(r.submittedAt), r.respondentName ?? '', ...fields.map((f) => answerText(f, r.answers[f.id], t))]);
   return [header, ...rows].map((row) => row.map((c) => csvCell(c, delimiter)).join(delimiter)).join('\r\n') + '\r\n';
 }

@@ -287,6 +287,15 @@ describe('creator surveys', () => {
     assert.equal(bad.json.error.code, 'invalid_parameter');
     assert.deepEqual(bad.json.error.params, { name: 'delimiter' });
     assert.equal((await c.request(`/surveys/${survey.id}/export.csv?lang=fr`)).json.error.params.name, 'lang');
+    assert.deepEqual((await c.request(`/surveys/${survey.id}/export.csv?tz=Mars/Olympus`)).json.error.params, { name: 'tz' });
+
+    // tz: times in the viewer's zone, named in the header; without it, UTC as before.
+    const stored = (await c.request(`/surveys/${survey.id}/responses`)).json.responses[0].submittedAt; // ISO, UTC
+    const local = await c.request(`/surveys/${survey.id}/export.csv?tz=America/Caracas&lang=es`, { raw: true });
+    const [head, row] = local.text.slice(1).split('\r\n');
+    assert.equal(head.split(',')[1], 'Enviada el (America/Caracas)');
+    const shifted = new Date(Date.parse(stored) - 4 * 3600_000).toISOString().slice(0, 19).replace('T', ' '); // UTC-4, no DST
+    assert.equal(row.split(',')[1], shifted);
   });
 
   test('QR code of the share link as SVG and PNG', async () => {

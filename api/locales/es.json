@@ -3,5 +3,6 @@
   "answer.no": "No",
   "csv.responseNumber": "N.º de respuesta",
   "csv.submittedAt": "Enviada el (UTC)",
+  "csv.submittedAtZone": "Enviada el ({zone})",
   "csv.name": "Nombre"
 }

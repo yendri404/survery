@@ -1,7 +1,32 @@
 /** Small pure helpers for dates and URLs. */
 
-/** "2026-11-17T10:05:00Z" -> "2026-11-17 10:05:00" (UTC), the way answers were always listed. */
-export const formatTimestamp = (iso) => (iso ? String(iso).replace('T', ' ').replace(/(\.\d+)?Z$/, '') : '');
+/**
+ * Date and time parts of an ISO timestamp in a time zone (default: the viewer's own), as
+ * zero-padded strings. Undefined `timeZone` means the browser's local zone.
+ */
+function zonedParts(iso, timeZone) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(new Date(iso));
+  return Object.fromEntries(parts.map((p) => [p.type, p.value]));
+}
+
+/** "2026-11-17T10:05:00Z" -> "2026-11-17 06:05:00" in the viewer's time zone (here UTC-4). */
+export function formatTimestamp(iso, timeZone) {
+  if (!iso) return '';
+  const p = zonedParts(iso, timeZone);
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}`;
+}
+
+/** { date: 'YYYY-MM-DD', time: 'HH:MM' } of a timestamp in the viewer's time zone, or null. */
+export function localDateTime(iso, timeZone) {
+  if (!iso) return null;
+  const p = zonedParts(iso, timeZone);
+  return { date: `${p.year}-${p.month}-${p.day}`, time: `${p.hour}:${p.minute}` };
+}
+
+/** The viewer's IANA time zone (e.g. "America/Caracas"), sent with CSV exports. */
+export const viewerTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 /** Adds whole days to a YYYY-MM-DD date (pure calendar math, no time zone involved). */
 export function addDays(dateString, days) {
