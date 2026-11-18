@@ -32,8 +32,8 @@ COPY web/server web/server
 COPY web/public web/public
 COPY web/locales web/locales
 
-# The database lives in /data (a volume), never inside the image.
-VOLUME /data
+# The database lives in /data: mount a volume there (compose.yml does; on Railway, add a Railway
+# Volume at /data). No VOLUME instruction: some platforms (Railway) reject it.
 USER node
 EXPOSE 3000 3001
 
