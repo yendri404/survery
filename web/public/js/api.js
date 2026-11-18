@@ -17,8 +17,21 @@ export class ApiError extends Error {
   }
 }
 
-/** File name from `Content-Disposition: attachment; filename="x.csv"`. */
-const attachmentName = (header, fallback) => /filename="([^"]+)"/.exec(header ?? '')?.[1] ?? fallback;
+/**
+ * File name from `Content-Disposition`: the exact UTF-8 `filename*=UTF-8''...` when present (accents
+ * kept), else the ASCII `filename="..."`, else `fallback`.
+ */
+function attachmentName(header, fallback) {
+  const encoded = /filename\*=UTF-8''([^;\s]+)/i.exec(header ?? '')?.[1];
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded);
+    } catch {
+      // Malformed encoding: fall back to the ASCII name.
+    }
+  }
+  return /filename="([^"]+)"/.exec(header ?? '')?.[1] ?? fallback;
+}
 
 /**
  * `getToken()` gives the current token (or null). `onUnauthorized()` runs when the API rejects

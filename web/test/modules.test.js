@@ -519,6 +519,16 @@ describe('new client version', () => {
     assert.deepEqual(changes, ['changed']);
   });
 
+  test('downloads keep the exact UTF-8 file name the API sends (filename*), else the ASCII one', async () => {
+    const file = (disposition) => createApi({
+      getToken: () => 't',
+      fetchImpl: async () => new Response('x', { status: 200, headers: disposition ? { 'Content-Disposition': disposition } : {} }),
+    }).file('/surveys/1/export.csv', 'fallback.csv');
+    assert.equal((await file("attachment; filename=\"Encuesta ano.csv\"; filename*=UTF-8''Encuesta%20a%C3%B1o.csv")).name, 'Encuesta año.csv');
+    assert.equal((await file('attachment; filename="Lunch.csv"')).name, 'Lunch.csv');
+    assert.equal((await file(null)).name, 'fallback.csv');
+  });
+
   test('the API client reports the version of every answer, including errors', async () => {
     const seen = [];
     const answers = [

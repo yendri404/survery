@@ -16,7 +16,7 @@ export function registerMetaRoutes({ route, config, today }) {
     defaultOpenDays: DEFAULT_OPEN_DAYS,
     // The server's calendar date: closing dates are compared with it, not with the client's clock.
     today: today(),
-    csv: { delimiters: ['comma', 'semicolon'], languages: SUPPORTED_LANGUAGES },
+    csv: { delimiters: ['comma', 'semicolon', 'auto'], languages: SUPPORTED_LANGUAGES },
     allowRegistration: config.allowRegistration,
     deviceIdPattern: DEVICE_ID.source,
   }));

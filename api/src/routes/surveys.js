@@ -1,10 +1,10 @@
 import { newToken } from '../auth.js';
 import { DEFAULT_WEB_BASE_URL } from '../config.js';
 import { ApiError, coded, validationFailed } from '../errors.js';
-import { forwardedOrigin, isoUtc, readJson, sendJson, sendNoContent } from '../http.js';
+import { attachmentDisposition, forwardedOrigin, isoUtc, readJson, sendJson, sendNoContent } from '../http.js';
 import { createI18n, isSupportedLanguage, negotiateLanguage } from '../i18n.js';
 import { qrPng, qrSvg } from '../qr.js';
-import { daysBetween, isTimeZone, parseSurveyInput, summarize, surveyStatus, toCsv } from '../surveys.js';
+import { csvDelimiterFor, daysBetween, fileSafeName, isTimeZone, parseSurveyInput, summarize, surveyStatus, toCsv } from '../surveys.js';
 
 const CSV_DELIMITERS = { comma: ',', semicolon: ';' };
 const QR_LABEL = 'QR code that opens this survey';
@@ -196,18 +196,22 @@ export function registerSurveyRoutes({ route, repo, config, today, live }) {
   authed('GET', '/surveys/:id/export.csv', (ctx) => {
     const survey = ownedSurvey(ctx);
     const query = ctx.url.searchParams;
-    const delimiter = CSV_DELIMITERS[query.get('delimiter') ?? 'comma'];
-    if (!delimiter) throw new ApiError(400, 'error.invalidParameter', { name: 'delimiter' });
+    const delimiterName = query.get('delimiter') ?? 'comma';
+    if (delimiterName !== 'auto' && !CSV_DELIMITERS[delimiterName]) throw new ApiError(400, 'error.invalidParameter', { name: 'delimiter' });
     const lang = query.get('lang') ?? negotiateLanguage(ctx.req.headers['accept-language']);
     if (!isSupportedLanguage(lang)) throw new ApiError(400, 'error.invalidParameter', { name: 'lang' });
     // Optional: show submission times in the viewer's zone (the web client sends its own).
     const timeZone = query.get('tz') ?? undefined;
     if (timeZone !== undefined && !isTimeZone(timeZone)) throw new ApiError(400, 'error.invalidParameter', { name: 'tz' });
 
-    const csv = toCsv(survey.fields, repo.listResponses(survey.id), delimiter, { t: createI18n(lang).t, timeZone });
+    const responses = repo.listResponses(survey.id);
+    // auto: ";" only when some number answer has decimals (see csvDelimiterFor).
+    const delimiter = delimiterName === 'auto' ? csvDelimiterFor(survey.fields, responses) : CSV_DELIMITERS[delimiterName];
+    const csv = toCsv(survey.fields, responses, delimiter, { t: createI18n(lang).t, timeZone });
     ctx.res.writeHead(200, {
       'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="sharevy-survey-${survey.id}-responses.csv"`,
+      // Named after the survey ("Team lunch.csv"); its id when the title leaves nothing usable.
+      'Content-Disposition': attachmentDisposition(`${fileSafeName(survey.title, `survey-${survey.id}`)}.csv`),
     });
     // UTF-8 BOM so Excel detects accents correctly.
     ctx.res.end('﻿' + csv);

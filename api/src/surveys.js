@@ -376,6 +376,35 @@ export function csvCell(value, delimiter = ',') {
   return s;
 }
 
+/**
+ * A survey title usable as a file name on any system: characters Windows, macOS or Linux refuse
+ * (\ / : * ? " < > | and control characters) are dropped, spaces collapsed, at most 100 characters.
+ * `fallback` when nothing usable is left.
+ */
+export function fileSafeName(title, fallback) {
+  const name = String(title ?? '')
+    .replace(/[\\/:*?"<>|]/g, '')
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 100)
+    .replace(/^[\s.]+|[\s.]+$/g, '');
+  return name || fallback;
+}
+
+/**
+ * CSV delimiter chosen from the answers: ";" when some number answer has decimals (spreadsheets set
+ * to a comma decimal separator then read the columns right), "," otherwise.
+ */
+export function csvDelimiterFor(fields, responses) {
+  const numberIds = fields.filter((f) => f.type === 'number').map((f) => f.id);
+  const hasDecimals = responses.some((r) => numberIds.some((id) => {
+    const value = Number(r.answers[id]);
+    return r.answers[id] !== undefined && r.answers[id] !== '' && Number.isFinite(value) && !Number.isInteger(value);
+  }));
+  return hasDecimals ? ';' : ',';
+}
+
 /** True for an IANA time zone name the runtime knows ("America/Caracas", "UTC"). */
 export function isTimeZone(value) {
   if (typeof value !== 'string' || !value) return false;

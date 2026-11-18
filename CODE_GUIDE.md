@@ -453,7 +453,7 @@ All routes need a Bearer token (`authed(...)` registers them with `{ auth: true 
 | GET | `/surveys/:id/responses` | Responses, newest first |
 | DELETE | `/surveys/:id/responses/:responseId` | Delete one response (idempotent 204) |
 | GET | `/surveys/:id/summary` | Key figures (`kpis`) and per-question counts with percentages: the server counts, clients only draw |
-| GET | `/surveys/:id/export.csv?delimiter=comma\|semicolon&lang=en\|es` | CSV download (UTF-8 with BOM); `lang` defaults to `Accept-Language`, then English |
+| GET | `/surveys/:id/export.csv?delimiter=comma\|semicolon\|auto&lang=en\|es&tz=<IANA>` | CSV download named after the survey (UTF-8 with BOM); `auto` = `;` only when a number answer has decimals; `lang` defaults to `Accept-Language`, then English |
 | GET | `/surveys/:id/qr.svg`, `/surveys/:id/qr.png` | QR code of `shareUrl` (PNG as an attachment) |
 
 **Key internals:**

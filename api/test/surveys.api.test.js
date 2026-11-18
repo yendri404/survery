@@ -270,7 +270,8 @@ describe('creator surveys', () => {
     const csv = await c.request(`/surveys/${survey.id}/export.csv`, { raw: true });
     assert.equal(csv.status, 200);
     assert.equal(csv.headers.get('content-type'), 'text/csv; charset=utf-8');
-    assert.match(csv.headers.get('content-disposition'), new RegExp(`attachment; filename="sharevy-survey-${survey.id}-responses.csv"`));
+    // Named after the survey (title "Workplace survey"), not its id.
+    assert.match(csv.headers.get('content-disposition'), /^attachment; filename="Workplace survey\.csv"; filename\*=UTF-8''Workplace%20survey\.csv$/);
     assert.deepEqual([...csv.bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
     const lines = csv.text.slice(1).split('\r\n');
     assert.equal(lines[0], 'Response #,Submitted at (UTC),Name,Your name,Department,Tools,Remote?');

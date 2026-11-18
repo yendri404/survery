@@ -96,7 +96,7 @@ Rules clients must not hard-code. No auth.
   "scale": { "defaultMin": 1, "defaultMax": 10, "lowest": -1000, "highest": 1000, "maxSteps": 100 },
   "defaultOpenDays": 10,
   "today": "2026-11-17",
-  "csv": { "delimiters": ["comma", "semicolon"], "languages": ["en", "es"] },
+  "csv": { "delimiters": ["comma", "semicolon", "auto"], "languages": ["en", "es"] },
   "allowRegistration": true,
   "deviceIdPattern": "^[A-Za-z0-9_-]{20,100}$"
 }
@@ -399,21 +399,21 @@ For `scale`, `counts` has one entry per whole number from `min` to `max` (as tex
 
 | Query | Values | Default |
 |-------|--------|---------|
-| `delimiter` | `comma`, `semicolon` (Excel with regional settings that use `;`) | `comma` |
+| `delimiter` | `comma`, `semicolon` (Excel with regional settings that use `;`), or `auto`: `semicolon` when some `number` answer has decimals, `comma` otherwise (what the web client uses) | `comma` |
 | `lang` | `en`, `es`: language of the fixed headers and of yes/no answers | `Accept-Language`, then `en` |
 | `tz` | IANA time zone (`America/Caracas`): submission times are shown in that zone and the header names it (`Submitted at (America/Caracas)`). The web client sends the viewer's zone. An unknown zone is a `400 invalid_parameter` (`params.name: "tz"`) | UTC (`Submitted at (UTC)`) |
 
 ```
 200
 Content-Type: text/csv; charset=utf-8
-Content-Disposition: attachment; filename="sharevy-survey-7-responses.csv"
+Content-Disposition: attachment; filename="Team lunch.csv"; filename*=UTF-8''Team%20lunch.csv
 
 ﻿Response #,Submitted at (UTC),Name,Department,Work remotely?\r\n
 3,2026-11-17 10:05:00,Marta Gómez,HR,Yes\r\n
 ```
 
 The first column is the response `number` within the survey (not the app-wide `id`).
-UTF-8 with a BOM (so Excel reads accents), `\r\n` line ends, oldest response first, checkbox answers joined
+The file is named after the survey title (characters file systems refuse removed, at most 100; `survey-<id>` if nothing is left), with an ASCII `filename` and the exact UTF-8 `filename*`. UTF-8 with a BOM (so Excel reads accents), `\r\n` line ends, oldest response first, checkbox answers joined
 with `", "`. Cells starting with `=`, `+`, `-`, `@`, tab or carriage return get a leading `'` (unless they are
 plain numbers) so spreadsheets do not run them as formulas. Unknown values answer
 `400 invalid_parameter` with `params.name` = `delimiter` or `lang`.

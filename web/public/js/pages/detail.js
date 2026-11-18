@@ -66,9 +66,10 @@ export async function detailPage(app, { params, signal }) {
     saveBlob(blob, name);
   });
   const resultsActions = {
-    // Comma is the API's default delimiter; semicolon suits Excel with regional settings that use ";".
-    // tz: times in the CSV match the ones on screen (the viewer's zone).
-    onExport: (delimiter) => download(`${path}/export.csv?${delimiter === 'semicolon' ? 'delimiter=semicolon&' : ''}lang=${i18n.lang}&tz=${encodeURIComponent(viewerTimeZone())}`, `sharevy-survey-${id}-responses.csv`),
+    // One CSV: delimiter=auto gives ";" only when some number answer has decimals, "," otherwise.
+    // tz: times in the CSV match the ones on screen (the viewer's zone). The API names the file
+    // after the survey; the fallback is only used if that header is missing.
+    onExport: () => download(`${path}/export.csv?delimiter=auto&lang=${i18n.lang}&tz=${encodeURIComponent(viewerTimeZone())}`, `survey-${id}.csv`),
     onDeleteResponse: (response) => {
       if (!window.confirm(t('detail.deleteResponseConfirm', { number: response.number }))) return;
       act(async () => {

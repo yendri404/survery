@@ -138,7 +138,7 @@ host: in Docker its port is not published, so only the web container can reach i
 - Short, sober animations (page fades, a light entrance for cards and charts, a check mark that draws itself after answering); turned off when the device asks for reduced motion.
 - English and Spanish interface, chosen from the language menu next to the theme button (see [Languages](#languages)).
 - QR code of the share link on every survey, downloadable as PNG to print or send.
-- CSV export (comma, or semicolon for Excel with regional settings that use `;`). UTF-8 with BOM, headers in the creator's interface language.
+- CSV export: one button; the file is named after the survey and uses `;` only when some number answer has decimals (`,` otherwise). UTF-8 with BOM, headers in the creator's interface language, times in the viewer's time zone.
 
 ## Languages
 
