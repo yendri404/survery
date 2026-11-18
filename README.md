@@ -138,7 +138,26 @@ host: in Docker its port is not published, so only the web container can reach i
 - Short, sober animations (page fades, a light entrance for cards and charts, a check mark that draws itself after answering); turned off when the device asks for reduced motion.
 - English and Spanish interface, chosen from the language menu next to the theme button (see [Languages](#languages)).
 - QR code of the share link on every survey, downloadable as PNG to print or send.
+- Admin panel at `/..command/` (see [Admin panel](#admin-panel)): one master password per instance; manage every user (change password, delete) and their surveys (edit, close/reopen, delete).
 - CSV export: one button; the file is named after the survey and uses `;` only when some number answer has decimals (`,` otherwise). UTF-8 with BOM, headers in the creator's interface language, times in the viewer's time zone.
+
+## Admin panel
+
+`/..command/` is the instance's admin panel. Nothing links to it: type the address.
+
+- **First visit:** the page asks to create the **master password** (12 to 200 characters). There is only one per instance, and **the first person to open the page creates it**. On a public server (Railway...), open it right after deploying.
+- **Then:** the page asks for that password. Inside, the left column shows every user as a small card (change their password, delete them with all their surveys); click one to see their surveys on the right (edit, open the form, close/reopen, delete).
+- **Admin sessions** last 8 hours and only for that browser tab. "Leave the panel" ends them.
+- **Changing or recovering the master password** is not possible from the web, on purpose. Delete it in the database; the next visit to `/..command/` creates a new one, and every open admin session ends:
+
+  ```sh
+  # On the server, from the repository folder (Node is already there; use your DB_PATH):
+  node -e "new (require('node:sqlite').DatabaseSync)('data/surveys.db').exec('DELETE FROM admin')"
+  # Or with the sqlite3 tool:
+  sqlite3 data/surveys.db "DELETE FROM admin;"
+  ```
+
+  With Docker, run the same `node -e` line inside the API container (`docker compose exec api ...`) with `/data/surveys.db`; on Railway, from the API service's shell, with its `DB_PATH`.
 
 ## Languages
 
@@ -173,6 +192,7 @@ The API sends stable error **codes**; the client translates them. To add a langu
 | Share links | 144-bit random tokens; anyone holding the link can answer. |
 | One response per device | The client sends a random id in `X-Device-Id`; the API stores only its hash, with a unique index per survey. It stops accidental and casual duplicates, not determined abuse. |
 | CSV | Formula injection (`= + - @`) is neutralized. |
+| Admin panel | One master password per instance (scrypt), created by the first visit to `/..command/` and replaced only by deleting it in the database. Admin tokens are separate from creator tokens (neither opens the other's endpoints), last 8 hours, live in `sessionStorage`, and end when the master password is deleted. Failed admin logins are limited per IP. |
 
 ## Tests
 

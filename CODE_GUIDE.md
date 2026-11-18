@@ -18,7 +18,7 @@ A file-by-file tour of the code: what each module does, what it exports, and why
 5. [API, file by file](#5-api-file-by-file)
    - [Bootstrap](#bootstrap) — `server.js`, `config.js`, `db.js`
    - [HTTP core](#http-core) — `app.js`, `http.js`, `errors.js`
-   - [Routes](#routes) — `routes/meta.js`, `routes/auth.js`, `routes/surveys.js`, `routes/public.js`, `routes/results.js`
+   - [Routes](#routes) — `routes/meta.js`, `routes/auth.js`, `routes/surveys.js`, `routes/public.js`, `routes/results.js`, `routes/admin.js`
    - [Domain](#domain) — `surveys.js`
    - [Infrastructure](#infrastructure) — `repo.js`, `auth.js`, `rate-limit.js`, `live.js`, `qr.js`, `i18n.js`
 6. [Web client, file by file](#6-web-client-file-by-file)
@@ -56,7 +56,8 @@ api/                         REST API, JSON only (port 3001)
 │       ├── auth.js          Register, login, logout, /me
 │       ├── surveys.js       Creator endpoints: CRUD, results, summary, CSV, QR, event streams
 │       ├── public.js        Respondents: read a survey by token, submit a response
-│       └── results.js       Public results (read-only, no account): survey, summary, responses, event stream
+│       ├── results.js       Public results (read-only, no account): survey, summary, responses, event stream
+│       └── admin.js         Admin panel: master password (setup, login), every user and survey
 ├── locales/                 en.json, es.json (API-side texts only)
 ├── scripts/create-user.js   Create a creator account from the command line
 └── test/                    node:test suites (in-memory database)
@@ -75,15 +76,15 @@ web/                         Browser client (port 3000), no dependencies, no bui
 │   │   ├── errors.js        API error code -> message key
 │   │   ├── sse.js           Event streams read with fetch (parser + reconnection), refresh coalescing
 │   │   ├── version.js       Notices a newer client on the server (X-Sharevy-Version)
-│   │   ├── storage.js       localStorage keys, device id
+│   │   ├── storage.js       localStorage keys, device id, admin token (sessionStorage)
 │   │   ├── dom.js           h()/s() DOM builders, withParts(), setErrorBox(), slot()
 │   │   ├── i18n.js          Language choice, t/tn, dates
 │   │   ├── validation.js    Respondent answer checks (mirror of the API rules)
 │   │   ├── number-input.js  Number question typing filter
 │   │   ├── charts.js        Donut, bar and histogram math
 │   │   ├── format.js        Timestamps, addDays, safeNext
-│   │   ├── pages/           Containers: home, auth, surveys, editor, detail, respond, results
-│   │   └── components/      Presentational: layout, icons, builder, answer-field, results, survey-cards, survey-detail
+│   │   ├── pages/           Containers: home, auth, surveys, editor, detail, respond, results, admin
+│   │   └── components/      Presentational: layout, icons, builder, answer-field, results, survey-cards, survey-detail, admin
 │   ├── style.css, theme.js, logo.png, favicon.svg
 │   └── fonts/               IBM Plex Sans woff2 + license
 └── test/                    server.test.js (stub API), modules.test.js (pure modules)
@@ -275,11 +276,24 @@ erDiagram
         text device_hash "sha256 of X-Device-Id; unique per survey"
         text submitted_at "UTC"
     }
+    admin {
+        int id PK "always 1: a single row"
+        text password_hash "master password, scrypt"
+        text session_key "random per admin row"
+        text created_at "UTC"
+    }
+    admin_sessions {
+        text id PK "sha256 of the admin Bearer token"
+        text session_key "must match admin.session_key"
+        int expires_at "epoch ms (8 h)"
+    }
 ```
 
 **Why JSON columns for fields and answers?** Every survey has a different shape. Storing the definition (`fields_json`) and the answers keyed by field id (`answers_json`) avoids a dynamic schema, and keeps old answers readable after the survey is edited, because field ids are stable.
 
 All foreign keys use `ON DELETE CASCADE`: deleting a survey deletes its responses; deleting a user deletes their sessions and surveys.
+
+`admin` and `admin_sessions` stand apart (no foreign keys): the single master password of the admin panel and its sessions. An admin session is valid only while its `session_key` matches the current `admin` row, so deleting that row (the documented reset) ends every admin token, even from a plain `sqlite3` shell where foreign keys are off.
 
 The database file (`data/surveys.db`) is the same one the single-server version used: migrations are additive, so existing data keeps working. Dates are stored as SQLite UTC text and leave the API as ISO 8601 (`isoUtc`).
 
@@ -611,6 +625,26 @@ A creator turns them on with `PATCH /surveys/:id { publicResults: true }`; the t
 | GET | `/public/results/:token/responses` | Same JSON as `/surveys/:id/responses` (`responseJson`), names included |
 | GET | `/public/results/:token/events` | Live stream (SSE) on the survey's `survey:<id>` channel |
 
+---
+
+#### `routes/admin.js` — admin panel (master password)
+
+One master password per instance, in the single `admin` row. Routes registered with `{ admin: true }` need an **admin** token: `app.js` checks `repo.getAdminSession(hash)`, which only matches sessions of the current `admin` row. Creator tokens (`sessions`) and admin tokens (`admin_sessions`) never open each other's routes.
+
+| Method | Path | Result |
+|--------|------|--------|
+| GET | `/admin/status` | `{ configured }`: the web page shows "create" or "log in" |
+| POST | `/admin/setup` | Creates the master password (12–200 characters) only while none exists: `INSERT ... ON CONFLICT DO NOTHING` on `id = 1`, so of simultaneous setups exactly one wins; the rest get `409 admin_exists`. Logs in (`201 { token }`) |
+| POST | `/admin/login` | `{ token }`; failures limited per IP (`loginMaxFailures` / `loginWindowMs`) |
+| POST | `/admin/logout` | Ends the admin token sent |
+| GET | `/admin/users` | Every user with `surveyCount`, newest first |
+| PUT | `/admin/users/:id/password` | New password (8–200, like registration); ends that user's sessions (`repo.setUserPassword`) |
+| DELETE | `/admin/users/:id` | Deletes the user with their surveys and answers (cascade) |
+| GET | `/admin/users/:id/surveys` | That user's surveys (creator list JSON + `ownerId`) |
+| GET, PUT, PATCH, DELETE | `/admin/surveys/:id` | Any survey, with the creator endpoints' rules: `surveyTools` from `routes/surveys.js` (`surveyJson`, `readDefinition`, `changeState`) is shared, and each change notifies the owner's live streams |
+
+There is no endpoint to change or recover the master password, on purpose: the reset is deleting the row (README, "Admin panel").
+
 A private, revoked or unknown token is 404 `not_found` ("These results are not public."). No write route exists under `/public/results/`.
 
 ---
@@ -769,6 +803,7 @@ A page is `async (app, { params, query, signal }) → { title, body, respondent?
 | `surveys.js` | `surveyListPage` (cards from `components/survey-cards.js`) | Cards with status badge, response count and closing text; live via `/surveys/events` |
 | `editor.js` | `editorPage` | New / edit. Reads `/meta` for limits, types, `today` and `defaultOpenDays` (default closing date, `min` of the date input). Title and closing date are checked with the questions by the builder; API `errors[]` are shown in order above the form. A "Name is required" checkbox (`.choice.switch`, from `survey.requireName`, unchecked for new surveys) is sent as `requireName`. Warns when editing a survey with responses |
 | `detail.js` | `detailPage` | Container for the parts in `components/survey-detail.js`: share link (copy button with a fallback for plain HTTP, native share sheet when supported), QR image (`qr.svg` fetched as a blob), PNG download, CSV downloads (`?lang=` = current interface language), open/close, delete (confirm), the public results switch (`publicResultsPanel`: `PATCH { publicResults }`, updated in place, link copied with the share link's copy helper), key figures, charts, every answer (table or "by question", the choice kept with `rememberedAnswersView` across live updates and visits) with delete; results live via `/surveys/:id/events`. Each live update also refreshes the survey state shown outside the results (title and status badge, closing date, description, closed/expired notice, open/close button, public results panel), and open/close always uses that latest state |
+| `admin.js` | `adminPage`, `adminEditorPage` | `/..command/` (no link anywhere; route `respondent: true`, so no account menu). Without a master password: the create form; without an admin token: the login; else two columns: `adminUserCards` and, for `?user=<id>`, `adminSurveyCards`. Actions call `app.adminApi` (its own token, in `sessionStorage`), then reload the panel with a `?msg=` flash. `adminEditorPage` is `editorPage` with the `admin` option (admin API, links back to the panel) |
 | `results.js` | `publicResultsPage` | `/r/:token`, no account: the same heading, closing line, description, key figures, charts and answers (table or "by question", names included) as `detail.js`, read-only (`resultsContent` without actions). Live via `/public/results/:token/events`; when the creator makes the results private, the next refresh gets a 404 and the page re-renders as the "These results are not public." panel |
 | `respond.js` | `respondPage`, `thanksPage` | Respondent form, closed / expired / already-answered panels, thanks page. Sends `X-Device-Id`, keeps a `deviceId` the API returns. Checks every answer in the browser first (`attachValidation`); API `fields` errors use the same markup |
 
@@ -797,6 +832,7 @@ Pure functions from data (and callbacks) to DOM. They never fetch or navigate on
 | `results.js` | `kpiTiles`, `summaryCharts`, `responsesTable`, `answerText`, `respondentName`, `deleteResponseForm`, `isLongText`, `scrollbarMargins` | Key figures (`<dl class="kpis">`), charts, and the table (one card per response on phones, via each cell's `data-label`). On wider screens the whole table scrolls sideways with a thick accent-colored scroll bar at the bottom of the header row that follows the reader down to the end of the table (CSS `position: sticky`, no scroll handler, so it never lags; `scrollbarMargins` sets its resting place; a synced copy, the table's own bar is hidden) plus a "slide the bar" hint, both shown only while the table overflows; the table itself is a focusable region, so arrow keys scroll it; a `ResizeObserver` keeps them current until the page's `signal` aborts. Yes/no shown translated, long paragraph answers cut to 5 lines. Without `onDelete` the table is read-only (no delete buttons, no actions column) |
 | `answers-by-question.js` | `answersSection`, `answersByQuestion`, `answersForQuestion`, `defaultAnswersView` | The "Table" / "By question" switch (`aria-pressed` buttons) and the "by question" view: a labeled `<select>` of every question with previous/next buttons, and each non-empty answer to it (same text as the table) with name or "Anonymous", `#N` and time, newest first, plus how many left it empty. Default view: "by question" for more than 5 questions, else the table. The container passes the remembered `state` and gets each new pick through `onChange` |
 | `survey-detail.js` | `surveyHeading`, `closingLine`, `surveyDescription`, `statusNotice`, `openCloseButton`, `sharePanel`, `publicResultsPanel`, `managePanel`, `resultsContent` | The parts of one survey's page (`resultsContent` without actions is the read-only public view; `answersView` carries the remembered answers view and the page `signal`). The state parts are rebuilt by `pages/detail.js` on each live update (through `slot`); the panels take their actions as callbacks |
+| `admin.js` | `adminUserCards`, `adminSurveyCards`, `adminHref` | Users as small square cards (pick = link to `?user=<id>` with `aria-current`; change password in a `<details>` and delete, both icon buttons) and one user's surveys (edit in the admin editor, open the form in a new tab, close/reopen, delete) |
 | `survey-cards.js` | `surveyCards` | The creator's surveys as cards (status badge, response count, closing text), or the empty state |
 
 **Charts** (`summaryCharts`, math in `charts.js`):
