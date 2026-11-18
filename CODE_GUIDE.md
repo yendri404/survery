@@ -681,7 +681,7 @@ The API speaks English in error messages; clients translate the codes. Other lan
 
 | Export | What it does |
 |--------|--------------|
-| `SUPPORTED_LANGUAGES`, `DEFAULT_LANGUAGE` | `['en', 'es']`, `'en'` |
+| `SUPPORTED_LANGUAGES`, `DEFAULT_LANGUAGE` | `['en', 'es', 'pt']`, `'en'` |
 | `isSupportedLanguage(code)` | Validates `?lang=` |
 | `negotiateLanguage(acceptLanguage)` | First supported language by q-value (`es-MX` → `es`); otherwise English |
 | `createI18n(lang)` | `{ lang, t(key, params) }`; missing keys fall back to English, then the key |
@@ -967,7 +967,7 @@ CSS only, in the "Motion" section at the end of `style.css`. Short fades and sma
 | **Change a validation rule** | Both sides: `api/src/surveys.js` (`parseSurveyInput` / `validateAnswers`) **and** the web mirror (`components/builder.js` for the editor, `validation.js` for answers) + tests in both packages. The API stays the source of truth |
 | **Add a column** | `api/src/db.js` (schema + a new step at the end of `MIGRATIONS`) → `repo.js` (query + hydrate) → the route's JSON |
 | **Add a setting** | API: `api/src/config.js` → the consumer. Web: `web/server.js`. Then the configuration tables in `README.md` (and `docs/API.md` for the API) |
-| **Change or translate a text** | `web/locales/en.json` and `es.json` (`api/locales` only for CSV and English error messages) |
+| **Change or translate a text** | `web/locales/en.json`, `es.json` and `pt.json` (`api/locales` only for CSV and English error messages) |
 | **Add an icon** | Its path in `ICONS` in `web/public/js/components/icons.js` |
 | **Build a new client** | Read `docs/API.md`; call `GET /api/v1/meta` at start-up for the rules; send `Authorization: Bearer` and `X-Device-Id`; translate error `code`s. Add its origin to `CORS_ORIGINS` only if it is a browser app on another origin |
 

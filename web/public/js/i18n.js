@@ -2,10 +2,10 @@
  * Interface translations. Each language lives in web/locales/<code>.json as flat "dot.separated"
  * keys. Values may contain {name} placeholders; plurals use "<key>.one" and "<key>.other".
  */
-export const SUPPORTED_LANGUAGES = ['en', 'es'];
+export const SUPPORTED_LANGUAGES = ['en', 'es', 'pt'];
 export const DEFAULT_LANGUAGE = 'en';
 
-const DATE_LOCALES = { en: 'en-US', es: 'es-ES' };
+const DATE_LOCALES = { en: 'en-US', es: 'es-ES', pt: 'pt-BR' };
 
 const isSupported = (code) => typeof code === 'string' && SUPPORTED_LANGUAGES.includes(code);
 
@@ -37,7 +37,7 @@ export function createI18n(lang, messages = {}, fallback = {}) {
 
   const t = (key, params = {}) => interpolate(messages[key] ?? fallback[key] ?? key, params);
   const tn = (key, count, params = {}) => t(`${key}.${plurals.select(count) === 'one' ? 'one' : 'other'}`, { count, ...params });
-  /** "2026-11-26" -> "Nov 26, 2026" (en) or "26 nov 2026" (es). */
+  /** "2026-11-26" -> "Nov 26, 2026" (en), "26 nov 2026" (es) or "26 de nov. de 2026" (pt). */
   const formatDate = (dateString) => (dateString ? dates.format(new Date(`${dateString}T00:00:00Z`)) : '');
 
   return { lang: code, t, tn, formatDate };

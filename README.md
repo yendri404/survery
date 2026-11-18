@@ -137,7 +137,7 @@ host: in Docker its port is not published, so only the web container can reach i
 - Light and dark theme (follows the device setting until changed with the theme button).
 - Corporate look: IBM Plex Sans, square corners and a muted slate palette, with WCAG AA text contrast in both themes.
 - Short, sober animations (page fades, a light entrance for cards and charts, a check mark that draws itself after answering); turned off when the device asks for reduced motion.
-- English and Spanish interface, chosen from the language menu next to the theme button (see [Languages](#languages)).
+- English, Spanish and Portuguese (Brazil) interface, chosen from the language menu next to the theme button (see [Languages](#languages)).
 - QR code of the share link on every survey, downloadable as PNG to print or send.
 - Admin panel at `/..command/` (see [Admin panel](#admin-panel)): one master password per instance; manage every user (change password, delete) and their surveys (edit, close/reopen, delete).
 - CSV export: one button; the file is named after the survey and uses `;` only when some number answer has decimals (`,` otherwise). UTF-8 with BOM, headers in the creator's interface language, times in the viewer's time zone.
@@ -162,7 +162,7 @@ host: in Docker its port is not published, so only the web container can reach i
 
 ## Languages
 
-The interface is available in **English** and **Spanish**, on creator and respondent pages.
+The interface is available in **English**, **Spanish** and **Portuguese** (Brazilian), on creator and respondent pages.
 
 | Who decides | How |
 |-------------|-----|
@@ -174,8 +174,8 @@ Surveys themselves (titles, questions, options) are shown exactly as their creat
 
 | Texts | Live in |
 |-------|---------|
-| Everything the interface shows | `web/locales/en.json`, `web/locales/es.json` |
-| What the API writes for people (CSV headers, yes/no in CSV, English error messages) | `api/locales/en.json`, `api/locales/es.json` |
+| Everything the interface shows | `web/locales/en.json`, `web/locales/es.json`, `web/locales/pt.json` |
+| What the API writes for people (CSV headers, yes/no in CSV, English error messages) | `api/locales/en.json`, `api/locales/es.json`, `api/locales/pt.json` |
 
 The API sends stable error **codes**; the client translates them. To add a language, see "Add a language" in [CODE_GUIDE.md](CODE_GUIDE.md#7-common-changes-where-to-touch).
 
@@ -245,7 +245,7 @@ data/                   surveys.db and logs (not in git)
 
 ## Font and license
 
-The interface uses **IBM Plex Sans** (weights 400, 500, 600; latin subset, which covers English and Spanish), served from `web/public/fonts/`. No request leaves the server, so it works offline in a private network.
+The interface uses **IBM Plex Sans** (weights 400, 500, 600; latin subset, which covers English, Spanish and Portuguese), served from `web/public/fonts/`. No request leaves the server, so it works offline in a private network.
 
 | Item | Detail |
 |------|--------|

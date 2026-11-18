@@ -46,7 +46,9 @@ describe('i18n', () => {
   test('the saved choice wins, then the browser languages by order (region ignored), then English', () => {
     assert.equal(pickLanguage('es', ['en-US']), 'es');
     assert.equal(pickLanguage('fr', ['fr-FR', 'es-MX', 'en']), 'es');
-    assert.equal(pickLanguage(null, ['de', 'pt']), 'en');
+    assert.equal(pickLanguage(null, ['de', 'fr']), 'en');
+    assert.equal(pickLanguage(null, ['de', 'pt-BR', 'es']), 'pt', 'Portuguese, any region');
+    assert.deepEqual(SUPPORTED_LANGUAGES, ['en', 'es', 'pt']);
     assert.equal(pickLanguage(undefined, undefined), 'en');
   });
 
@@ -63,6 +65,9 @@ describe('i18n', () => {
   test('dates read as short month names in each language', () => {
     assert.equal(createI18n('en', en).formatDate('2026-11-26'), 'Nov 26, 2026');
     assert.equal(createI18n('es', es).formatDate('2026-11-26'), '26 nov 2026');
+    assert.equal(createI18n('pt', locale('pt')).formatDate('2026-11-26'), '26 de nov. de 2026');
+    assert.equal(locale('pt')['language.name'], 'Português');
+    assert.equal(createI18n('pt', locale('pt'), en).tn('list.responses', 2), '2 respostas');
     assert.equal(createI18n('en', en).formatDate(''), '');
   });
 });

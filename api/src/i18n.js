@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
  * other languages only cover what the API itself writes for people: CSV headers and yes/no labels.
  * Each language lives in api/locales/<code>.json as flat "dot.separated" keys with {name} placeholders.
  */
-export const SUPPORTED_LANGUAGES = ['en', 'es'];
+export const SUPPORTED_LANGUAGES = ['en', 'es', 'pt'];
 export const DEFAULT_LANGUAGE = 'en';
 
 const MESSAGES = Object.fromEntries(SUPPORTED_LANGUAGES.map((lang) => [

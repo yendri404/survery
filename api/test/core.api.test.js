@@ -31,7 +31,7 @@ describe('API basics', () => {
     assert.deepEqual(res.json.yesNoValues, ['yes', 'no']);
     assert.deepEqual(res.json.limits, LIMITS);
     assert.equal(res.json.defaultOpenDays, 10);
-    assert.deepEqual(res.json.csv, { delimiters: ['comma', 'semicolon', 'auto'], languages: ['en', 'es'] });
+    assert.deepEqual(res.json.csv, { delimiters: ['comma', 'semicolon', 'auto'], languages: ['en', 'es', 'pt'] });
     assert.equal(res.json.allowRegistration, true);
     assert.match(res.json.today, /^\d{4}-\d{2}-\d{2}$/);
     assert.equal(res.json.deviceIdPattern, '^[A-Za-z0-9_-]{20,100}$');

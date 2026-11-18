@@ -36,7 +36,8 @@ test('every {param} placeholder in English exists in each translation', () => {
 
 test('negotiateLanguage reads Accept-Language, then falls back to English', () => {
   assert.equal(DEFAULT_LANGUAGE, 'en');
-  assert.deepEqual(SUPPORTED_LANGUAGES, ['en', 'es']);
+  assert.deepEqual(SUPPORTED_LANGUAGES, ['en', 'es', 'pt']);
+  assert.equal(negotiateLanguage('pt-BR,pt;q=0.9,en;q=0.5'), 'pt');
   assert.equal(negotiateLanguage('es-ES,es;q=0.9'), 'es');
   assert.equal(negotiateLanguage('fr, es;q=0.5'), 'es');
   assert.equal(negotiateLanguage('fr;q=0.9, es;q=0.95'), 'es');
@@ -47,6 +48,8 @@ test('negotiateLanguage reads Accept-Language, then falls back to English', () =
 
 test('createI18n translates, interpolates and falls back to English, then the key', () => {
   assert.equal(createI18n('es').t('answer.yes'), 'Sí');
+  assert.equal(createI18n('pt').t('answer.yes'), 'Sim');
+  assert.equal(createI18n('pt').t('answer.no'), 'Não');
   assert.equal(createI18n('en').t('validation.titleTooLong', { max: 200 }), 'Title must be at most 200 characters.');
   assert.equal(createI18n('es').t('validation.required'), 'This field is required.', 'API messages are English');
   assert.equal(createI18n('es').t('no.such.key'), 'no.such.key');
