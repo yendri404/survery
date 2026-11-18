@@ -476,7 +476,7 @@ All routes need a Bearer token (`authed(...)` registers them with `{ auth: true 
 
 - **`ownedSurvey(ctx)`** — the single ownership gate. It loads the survey by id **and** `owner_id = ctx.user.id`; otherwise 404. Returning 404 instead of 403 means another creator cannot even tell that the survey exists.
 - **`resultsUrl(ctx, survey)`** — same base + `/r/<resultsToken>` while the results are public, else `null`. `PATCH { publicResults: true }` keeps an existing token or makes one with `newSurveyToken()`; `false` sets it to NULL, so a revoked link never works again.
-- **Shared with `routes/results.js`:** `responseJson`, `summaryJson(survey, responses, today)`, `webUrl(config, ctx, path)` and `newSurveyToken()` are exported, so the public results reuse the same JSON shapes.
+- **Shared with `routes/results.js`:** `responseJson` and `summaryJson(survey, responses, today)` are exported, so the public results reuse the same JSON shapes.
 - **`shareUrl(ctx, survey)`** — base + `/s/<publicToken>`: respondents open surveys in the **web client**, not the API. Base: `WEB_BASE_URL`; else, with `trustProxy`, `forwardedOrigin(req)` (`http.js`: `X-Forwarded-Proto` + a `hostname[:port]` `X-Forwarded-Host`); else `DEFAULT_WEB_BASE_URL`.
 - **`readDefinition`** — turns the JSON body into the shape `parseSurveyInput` expects and throws `validationFailed({ errors })` with coded problems.
 - **Public token** — `newSurveyToken()` (`newToken(18)`) gives 144 random bits (results tokens too), so links cannot be guessed or enumerated.

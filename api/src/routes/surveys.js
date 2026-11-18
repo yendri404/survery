@@ -15,13 +15,13 @@ const percent = (count, answered) => (answered ? Math.round((count / answered) *
 export const responseJson = (r) => ({ id: r.id, number: r.number, submittedAt: isoUtc(r.submittedAt), respondentName: r.respondentName, answers: r.answers });
 
 /** A new unguessable token for a survey link (answer link or public results link). */
-export const newSurveyToken = () => newToken(18);
+const newSurveyToken = () => newToken(18);
 
 /**
  * An address in the web client: WEB_BASE_URL when set, else the address the browser used (only
  * through a trusted proxy). Share links, QR codes and results links all point there.
  */
-export function webUrl(config, ctx, path) {
+function webUrl(config, ctx, path) {
   const base = config.webBaseUrl ?? (config.trustProxy ? forwardedOrigin(ctx.req) : undefined) ?? DEFAULT_WEB_BASE_URL;
   return `${base}${path}`;
 }

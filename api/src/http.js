@@ -1,6 +1,6 @@
 import { ApiError } from './errors.js';
 
-export const BODY_LIMIT_BYTES = 1_000_000;
+const BODY_LIMIT_BYTES = 1_000_000;
 
 /**
  * Reads an application/json body and returns it as a plain object.
