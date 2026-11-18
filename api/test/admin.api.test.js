@@ -216,3 +216,21 @@ describe('admin: users and their surveys', () => {
     assert.ok(!(await a.request('/admin/users')).json.users.some((u) => u.id === userId));
   });
 });
+
+describe('admin: login limit under a burst', () => {
+  let app;
+  before(async () => {
+    app = await startApi({ loginMaxFailures: 3 });
+    assert.equal((await new Client(app.base).request('/admin/setup', { method: 'POST', body: { password: MASTER } })).status, 201);
+  });
+  after(() => app.close());
+
+  test('wrong passwords sent all at once are counted before checking, so only the limit gets through', async () => {
+    const c = new Client(app.base);
+    const burst = await Promise.all(Array.from({ length: 12 }, (_, i) => c.request('/admin/login', { method: 'POST', body: { password: `wrong-guess-${i}-xx` } })));
+    const statuses = burst.map((r) => r.status);
+    assert.equal(statuses.filter((s) => s === 401).length, 3, statuses.join());
+    assert.equal(statuses.filter((s) => s === 429).length, 9, statuses.join());
+    assert.equal((await c.request('/admin/login', { method: 'POST', body: { password: MASTER } })).status, 429, 'the right password waits too');
+  });
+});

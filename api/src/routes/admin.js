@@ -50,14 +50,14 @@ export function registerAdminRoutes({ route, repo, config, today, live }) {
     const body = await readJson(ctx.req);
     const limitKey = clientIp(ctx.req, config.trustProxy);
     if (loginFailures.isLimited(limitKey)) throw tooManyRequests('login.tooManyAttempts', loginFailures.retryAfterSeconds(limitKey));
+    // Counted before the (slow) password check and cleared only on success: guesses sent all at
+    // once cannot all pass the limit check before any of them is counted.
+    loginFailures.hit(limitKey);
     const admin = repo.getAdmin();
     // Checked even without an admin, so timing says nothing more than the status endpoint does.
     const valid = await verifyPassword(text(body.password), admin?.password_hash ?? DUMMY_HASH);
     if (!admin) throw new ApiError(409, 'admin.notConfigured');
-    if (!valid) {
-      loginFailures.hit(limitKey);
-      throw new ApiError(401, 'login.invalid');
-    }
+    if (!valid) throw new ApiError(401, 'login.invalid');
     loginFailures.reset(limitKey);
     startSession(ctx, admin, 200);
   });
