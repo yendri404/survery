@@ -368,6 +368,34 @@ td { font-variant-numeric: tabular-nums; }
 .nowrap { white-space: nowrap; }
 .row-actions { width: 1%; }
 
+/* Every answer: "All answers" with the Table / By question switch on the same rule. */
+.answers-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: .5rem 1rem; margin: 1.75rem 0 .75rem; padding-bottom: .4rem; border-bottom: 1px solid var(--border); }
+.answers-head h3 { margin: 0; padding: 0; border: 0; }
+.view-switch { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--radius); }
+.view-switch button { min-height: 36px; padding: .3rem .9rem; border: 0; border-radius: 0; background: var(--surface); color: var(--brand-text); font-size: .85rem; }
+.view-switch button + button { border-left: 1px solid var(--border-strong); }
+.view-switch button:hover { background: var(--brand-soft); }
+.view-switch button[aria-pressed="true"] { background: var(--brand-text); color: var(--surface); }
+
+/* Table scroll buttons: hidden on phones (cards, no sideways scroll) and when the table fits. On
+   wider screens they stick to the top of the window while the table is in view. */
+.table-toolbar { display: none; }
+
+/* By question: one question at a time, each answer in its own row. */
+.question-picker { display: grid; gap: .35rem; margin-bottom: 1rem; }
+.question-picker label { font-weight: 600; font-size: .9rem; }
+.picker-row { display: flex; gap: .5rem; align-items: center; }
+.picker-row select { flex: 1; min-width: 0; margin: 0; }
+.picker-row .icon-button { flex: none; }
+.answer-list { list-style: none; padding: 0; margin: 0; display: grid; gap: .5rem; }
+.answer-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .35rem .75rem; padding: .6rem .75rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.answer-value { white-space: pre-line; overflow-wrap: anywhere; }
+.answer-value .answer-clamp { min-width: 0; max-width: none; }
+.answer-meta { grid-column: 1; margin: 0; display: flex; flex-wrap: wrap; gap: .15rem .9rem; font-size: .8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.answer-name { color: var(--text); font-weight: 500; }
+.answer-actions { grid-column: 2; grid-row: 1 / span 2; }
+.unanswered { margin: 0 0 .75rem; }
+
 /* Phones: each response row becomes a card, with the column name next to every value. */
 @media (max-width: 699px) {
   table.responsive thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
@@ -395,6 +423,18 @@ td { font-variant-numeric: tabular-nums; }
   .hbars li { grid-template-columns: minmax(8rem, 30%) 1fr auto; }
   .bar-label { grid-column: auto; }
   .table-wrap { overflow-x: auto; }
+  @media (prefers-reduced-motion: no-preference) { .table-wrap { scroll-behavior: smooth; } }
+  .table-toolbar { display: flex; justify-content: flex-end; gap: .5rem; position: sticky; top: 0; z-index: 3; padding: .4rem 0; background: var(--bg); }
+  /* #, Sent and Name stay at the left (fixed widths, so each knows where the previous one ends)
+     and the delete column at the right; opaque, so the answers pass under them. */
+  .responses-table { --col-number: 4.5rem; --col-sent: 12rem; --col-name: 11rem; }
+  .responses-table .sticky-col, .responses-table .row-actions { position: sticky; z-index: 1; background: var(--surface); }
+  .responses-table th.sticky-col, .responses-table th.row-actions { z-index: 2; background: var(--surface-alt); }
+  .responses-table tbody tr:hover > .sticky-col, .responses-table tbody tr:hover > .row-actions { background: var(--surface-alt); }
+  .responses-table .col-number { left: 0; width: var(--col-number); min-width: var(--col-number); max-width: var(--col-number); }
+  .responses-table .col-sent { left: var(--col-number); width: var(--col-sent); min-width: var(--col-sent); max-width: var(--col-sent); }
+  .responses-table .col-name { left: calc(var(--col-number) + var(--col-sent)); width: var(--col-name); min-width: var(--col-name); max-width: var(--col-name); overflow-wrap: anywhere; box-shadow: inset -1px 0 0 var(--border-strong), 6px 0 6px -4px var(--shadow); }
+  .responses-table .row-actions { right: 0; box-shadow: inset 1px 0 0 var(--border), -6px 0 6px -4px var(--shadow); }
   .hero h1 { font-size: 2.6rem; }
   .hero .button-row { justify-content: center; }
 }

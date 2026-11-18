@@ -14,6 +14,7 @@ const ICONS = {
   logout: [['path', { d: 'M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10' }]],
   check: [['path', { d: 'M5 12l5 5 9-10' }]],
   back: [['path', { d: 'M15 6l-6 6 6 6' }]],
+  forward: [['path', { d: 'M9 6l6 6-6 6' }]],
   alert: [['path', { d: 'M12 3l10 18H2L12 3zM12 10v5M12 18h.01' }]],
   qr: [['path', { d: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2v2h-2zM14 18h2v2h-2zM18 18h2v2h-2zM16 16h2v2h-2z' }]],
   calendar: [['rect', { x: 3, y: 5, width: 18, height: 16, rx: 2 }], ['path', { d: 'M3 10h18M8 3v4M16 3v4' }]],

@@ -164,7 +164,7 @@ sequenceDiagram
     participant S as public/js/app.js
     participant Rt as routes.js
     participant Pg as pages/detail.js
-    participant C as components/results.js
+    participant C as components/ (survey-detail.js, results.js)
 
     U->>W: GET /surveys/7
     W-->>U: index.html (status 200; 404 for unknown paths)
@@ -174,7 +174,7 @@ sequenceDiagram
     Rt-->>S: { page: detailPage, auth: true }
     S->>Pg: detailPage(app, { params, query, signal })
     Pg->>Pg: GET survey, /summary, /responses (via api.js)
-    Pg->>C: kpiTiles(), summaryCharts(), responsesTable()
+    Pg->>C: resultsContent(): kpiTiles(), summaryCharts(), answersSection()
     C-->>Pg: DOM nodes
     Pg-->>S: { title, body, mounted }
     S->>U: swap <main> (view transition), set title, mounted() opens the live stream
@@ -754,7 +754,7 @@ Every request sends `Authorization: Bearer <token>` when logged in and `X-Device
 
 #### `storage.js` — what the browser remembers
 
-`KEYS`: `sharevy-token`, `sharevy-device`, `sharevy-lang`, `sharevy-theme`. `load` / `save` fall back to memory when storage is blocked (private mode). `deviceId(pattern)` returns the saved device id or makes one (32 random bytes, base64url). The token tradeoff is documented here and in [web/README.md](web/README.md#tradeoffs).
+`KEYS`: `sharevy-token`, `sharevy-device`, `sharevy-lang`, `sharevy-theme`. `load` / `save` fall back to memory when storage is blocked (private mode). `deviceId(pattern)` returns the saved device id or makes one (32 random bytes, base64url). `answersViewKeys(scope)` and `rememberedAnswersView(scope)` keep the answers view a person picked on a results page (`table` or `byQuestion`) and the question shown in the "by question" view, per survey (`scope` is `survey:<id>` on the creator page, `results:<token>` on public results); `onChange` saves only what changed, so a view never picked keeps following the default. The token tradeoff is documented here and in [web/README.md](web/README.md#tradeoffs).
 
 ---
 
@@ -768,8 +768,8 @@ A page is `async (app, { params, query, signal }) → { title, body, respondent?
 | `auth.js` | `loginPage`, `registerPage` | Forms; API errors in a box above the form (registration in field order); keep typed values (never the password); after login go to `safeNext(next)`; the submit button is disabled while sending |
 | `surveys.js` | `surveyListPage` (cards from `components/survey-cards.js`) | Cards with status badge, response count and closing text; live via `/surveys/events` |
 | `editor.js` | `editorPage` | New / edit. Reads `/meta` for limits, types, `today` and `defaultOpenDays` (default closing date, `min` of the date input). Title and closing date are checked with the questions by the builder; API `errors[]` are shown in order above the form. A "Name is required" checkbox (`.choice.switch`, from `survey.requireName`, unchecked for new surveys) is sent as `requireName`. Warns when editing a survey with responses |
-| `detail.js` | `detailPage` | Container for the parts in `components/survey-detail.js`: share link (copy button with a fallback for plain HTTP, native share sheet when supported), QR image (`qr.svg` fetched as a blob), PNG download, CSV downloads (`?lang=` = current interface language), open/close, delete (confirm), the public results switch (`publicResultsPanel`: `PATCH { publicResults }`, updated in place, link copied with the share link's copy helper), key figures, charts, responses table with delete; results live via `/surveys/:id/events`. Each live update also refreshes the survey state shown outside the results (title and status badge, closing date, description, closed/expired notice, open/close button, public results panel), and open/close always uses that latest state |
-| `results.js` | `publicResultsPage` | `/r/:token`, no account: the same heading, closing line, description, key figures, charts and responses table (names included) as `detail.js`, read-only (`resultsContent` without actions). Live via `/public/results/:token/events`; when the creator makes the results private, the next refresh gets a 404 and the page re-renders as the "These results are not public." panel |
+| `detail.js` | `detailPage` | Container for the parts in `components/survey-detail.js`: share link (copy button with a fallback for plain HTTP, native share sheet when supported), QR image (`qr.svg` fetched as a blob), PNG download, CSV downloads (`?lang=` = current interface language), open/close, delete (confirm), the public results switch (`publicResultsPanel`: `PATCH { publicResults }`, updated in place, link copied with the share link's copy helper), key figures, charts, every answer (table or "by question", the choice kept with `rememberedAnswersView` across live updates and visits) with delete; results live via `/surveys/:id/events`. Each live update also refreshes the survey state shown outside the results (title and status badge, closing date, description, closed/expired notice, open/close button, public results panel), and open/close always uses that latest state |
+| `results.js` | `publicResultsPage` | `/r/:token`, no account: the same heading, closing line, description, key figures, charts and answers (table or "by question", names included) as `detail.js`, read-only (`resultsContent` without actions). Live via `/public/results/:token/events`; when the creator makes the results private, the next refresh gets a 404 and the page re-renders as the "These results are not public." panel |
 | `respond.js` | `respondPage`, `thanksPage` | Respondent form, closed / expired / already-answered panels, thanks page. Sends `X-Device-Id`, keeps a `deviceId` the API returns. Checks every answer in the browser first (`attachValidation`); API `fields` errors use the same markup |
 
 **Respondent form behavior (`respond.js` + `answer-field.js`):**
@@ -794,8 +794,9 @@ Pure functions from data (and callbacks) to DOM. They never fetch or navigate on
 | `icons.js` | `icon(name, extraClass)` | Stroke icons on a 24×24 grid, built with `s()`. Icon-only buttons always carry an `aria-label` and a `title` |
 | `builder.js` | `createBuilder({ fields, types, choiceTypes, scale, limits, t, basics })` → `{ element, validate(), value() }` | Question editor: add, move, duplicate, delete. Warns about repeated questions and options **while typing**; empty question text, missing options, title and closing date (`basics`) **after a submit attempt**. Same rule as the API: equal after trimming, ignoring case. Scale questions show "From" / "To" (prefilled from `/meta` `scale`), a live warning for a wrong range (`checkScaleRange`) and a slider preview. Keeps field ids so edits do not orphan answers |
 | `answer-field.js` | `answerField(field, index, i18n, limits)`, `respondentNameField(i18n, limits, { required })`, `fieldError` | One control per type (`yesno`: two large side-by-side radios, `.choices.yesno`; choices in a `fieldset` + `legend`); control id `fld_<question id>` |
-| `results.js` | `kpiTiles`, `summaryCharts`, `responsesTable` | Key figures (`<dl class="kpis">`), charts, and the table (one card per response on phones, via each cell's `data-label`). Yes/no shown translated. Without `onDelete` the table is read-only (no delete buttons, no actions column) |
-| `survey-detail.js` | `surveyHeading`, `closingLine`, `surveyDescription`, `statusNotice`, `openCloseButton`, `sharePanel`, `publicResultsPanel`, `managePanel`, `resultsContent` | The parts of one survey's page (`resultsContent` without actions is the read-only public view). The state parts are rebuilt by `pages/detail.js` on each live update (through `slot`); the panels take their actions as callbacks |
+| `results.js` | `kpiTiles`, `summaryCharts`, `responsesTable`, `answerText`, `respondentName`, `deleteResponseForm`, `isLongText` | Key figures (`<dl class="kpis">`), charts, and the table (one card per response on phones, via each cell's `data-label`). On wider screens #, Sent and Name stay fixed at the left (and the delete column at the right) while the answers scroll sideways, and ◀ ▶ buttons above the table (sticky at the top of the window, hidden when the table fits) scroll it by 80% of its width; a `ResizeObserver` keeps them current until the page's `signal` aborts. Yes/no shown translated, long paragraph answers cut to 5 lines. Without `onDelete` the table is read-only (no delete buttons, no actions column) |
+| `answers-by-question.js` | `answersSection`, `answersByQuestion`, `answersForQuestion`, `defaultAnswersView` | The "Table" / "By question" switch (`aria-pressed` buttons) and the "by question" view: a labeled `<select>` of every question with previous/next buttons, and each non-empty answer to it (same text as the table) with name or "Anonymous", `#N` and time, newest first, plus how many left it empty. Default view: "by question" for more than 5 questions, else the table. The container passes the remembered `state` and gets each new pick through `onChange` |
+| `survey-detail.js` | `surveyHeading`, `closingLine`, `surveyDescription`, `statusNotice`, `openCloseButton`, `sharePanel`, `publicResultsPanel`, `managePanel`, `resultsContent` | The parts of one survey's page (`resultsContent` without actions is the read-only public view; `answersView` carries the remembered answers view and the page `signal`). The state parts are rebuilt by `pages/detail.js` on each live update (through `slot`); the panels take their actions as callbacks |
 | `survey-cards.js` | `surveyCards` | The creator's surveys as cards (status badge, response count, closing text), or the empty state |
 
 **Charts** (`summaryCharts`, math in `charts.js`):

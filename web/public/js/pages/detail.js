@@ -5,6 +5,7 @@ import {
 } from '../components/survey-detail.js';
 import { h, slot } from '../dom.js';
 import { viewerTimeZone } from '../format.js';
+import { rememberedAnswersView } from '../storage.js';
 
 /** Briefly shows `text` on a button ("Copied!"), then restores its label. */
 function flashButton(btn, text) {
@@ -66,6 +67,8 @@ export async function detailPage(app, { params, signal }) {
     saveBlob(blob, name);
   });
   const resultsActions = {
+    // Table or "by question", kept for this survey in this browser and across live refreshes.
+    answersView: { ...rememberedAnswersView(`survey:${id}`), signal },
     // One CSV: delimiter=auto gives ";" only when some number answer has decimals, "," otherwise.
     // tz: times in the CSV match the ones on screen (the viewer's zone). The API names the file
     // after the survey; the fallback is only used if that header is missing.

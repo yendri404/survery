@@ -115,10 +115,6 @@ export function kpiTiles({ kpis }, i18n) {
     tile(t('detail.kpi.closing'), closing, closingText(kpis.closesOn, kpis.status, i18n)));
 }
 
-/**
- * Every answer: a table on wide screens, one card per response on phones (CSS). Without
- * `onDelete(response)` the table is read-only (public results): no delete buttons, no actions column.
- */
 /** A paragraph answer is "long" past 5 lines or about 5 lines of text in a table column. */
 const LONG_TEXT = { lines: 5, chars: 240 };
 export const isLongText = (text) => text.split('\n').length > LONG_TEXT.lines || text.length > LONG_TEXT.chars;
@@ -138,29 +134,93 @@ function clampedAnswer(text, t) {
   return button;
 }
 
-export function responsesTable(fields, responses, { t }, onDelete) {
-  if (!responses.length) return [emptyState(t(onDelete ? 'detail.noAnswers' : 'results.noAnswers'))];
-  const answerText = (field, value) => {
-    const text = Array.isArray(value) ? value.join(', ') : optionText(field.type, value ?? '', t);
-    if (!text) return h('span', { class: 'muted' }, '-');
-    // Only paragraph answers (textarea) are cut; short answers never get long enough to need it.
-    return field.type === 'textarea' && isLongText(text) ? clampedAnswer(text, t) : text;
+/**
+ * One answer as the results show it: choice lists joined, yes/no translated, a muted "-" when
+ * empty, and long paragraph answers (textarea) cut to 5 lines; short answers never need it.
+ */
+export function answerText(field, value, t) {
+  const text = Array.isArray(value) ? value.join(', ') : optionText(field.type, value ?? '', t);
+  if (!text) return h('span', { class: 'muted' }, '-');
+  return field.type === 'textarea' && isLongText(text) ? clampedAnswer(text, t) : text;
+}
+
+/** The respondent's name, or a muted "Anonymous". */
+export const respondentName = (response, t) => response.respondentName || h('span', { class: 'muted' }, t('detail.anonymous'));
+
+/** The creator's delete button for one response: `onDelete(response)` asks and deletes. */
+export const deleteResponseForm = (response, t, onDelete) => h('form', { onsubmit: (event) => { event.preventDefault(); onDelete(response); } },
+  h('button', { type: 'submit', class: 'icon-button danger', 'aria-label': t('detail.deleteResponseLabel', { number: response.number }), title: t('detail.deleteResponseTitle') }, icon('trash')));
+
+/**
+ * Calls `sync` when one of `nodes` changes size, starting when they are first shown, until `signal`
+ * aborts or they leave the page (a live update replaced them). No ResizeObserver (tests): nothing.
+ */
+function watchSize(nodes, sync, signal) {
+  if (typeof ResizeObserver !== 'function' || signal?.aborted) return;
+  let shown = false;
+  const observer = new ResizeObserver(() => {
+    if (nodes[0].isConnected) {
+      shown = true;
+      sync();
+    } else if (shown) {
+      observer.disconnect();
+    }
+  });
+  for (const node of nodes) observer.observe(node);
+  signal?.addEventListener('abort', () => observer.disconnect(), { once: true });
+}
+
+/**
+ * The table in its horizontal scroll box, with ◀ ▶ buttons above it that move it by most of a
+ * screen (smoothly unless reduced motion is asked for: CSS scroll-behavior). The bar sticks to the
+ * top of the window while the table is in view, hides when the table fits, and each button is
+ * disabled at its end. Phones show cards instead (CSS), which never scroll sideways.
+ */
+function scrollableTable(table, t, signal) {
+  const box = h('div', { class: 'table-wrap' }, table);
+  const scrollBy = (direction) => box.scrollBy({ left: direction * Math.round(box.clientWidth * 0.8) });
+  const left = h('button', { type: 'button', class: 'icon-button', 'aria-label': t('detail.scrollLeft'), title: t('detail.scrollLeft'), onclick: () => scrollBy(-1) }, icon('back'));
+  const right = h('button', { type: 'button', class: 'icon-button', 'aria-label': t('detail.scrollRight'), title: t('detail.scrollRight'), onclick: () => scrollBy(1) }, icon('forward'));
+  const toolbar = h('div', { class: 'table-toolbar', hidden: true }, left, right);
+  const sync = () => {
+    const end = box.scrollWidth - box.clientWidth;
+    toolbar.hidden = end <= 1;
+    const atStart = box.scrollLeft <= 1;
+    const atEnd = box.scrollLeft >= end - 1;
+    // A button that turns disabled under the keyboard passes the focus to the other one.
+    if (atStart && document.activeElement === left && !atEnd) right.focus();
+    if (atEnd && document.activeElement === right && !atStart) left.focus();
+    left.disabled = atStart;
+    right.disabled = atEnd;
   };
+  box.addEventListener('scroll', sync, { passive: true });
+  watchSize([box, table], sync, signal);
+  return h('div', { class: 'table-scroller' }, toolbar, box);
+}
+
+/**
+ * Every answer: a table on wide screens, one column per question, and one card per response on
+ * phones (CSS). #, Sent and Name stay at the left (and the delete column at the right) while the
+ * answers scroll sideways. Without `onDelete(response)` the table is read-only (public results): no
+ * delete buttons, no actions column. `signal` ends the scroll buttons' size watching.
+ */
+export function responsesTable(fields, responses, { t }, onDelete, { signal } = {}) {
+  if (!responses.length) return [emptyState(t(onDelete ? 'detail.noAnswers' : 'results.noAnswers'))];
   const rows = responses.map((r) => h('tr', {},
-    h('td', { 'data-label': t('detail.columnResponse') }, `#${r.number}`),
-    h('td', { 'data-label': t('detail.columnSent'), class: 'nowrap' }, formatTimestamp(r.submittedAt)),
-    h('td', { 'data-label': t('detail.columnName') }, r.respondentName ? r.respondentName : h('span', { class: 'muted' }, t('detail.anonymous'))),
-    fields.map((f) => h('td', { 'data-label': f.label }, answerText(f, r.answers[f.id]))),
-    onDelete && h('td', { class: 'row-actions' },
-      h('form', { onsubmit: (event) => { event.preventDefault(); onDelete(r); } },
-        h('button', { type: 'submit', class: 'icon-button danger', 'aria-label': t('detail.deleteResponseLabel', { number: r.number }), title: t('detail.deleteResponseTitle') }, icon('trash'))))));
+    h('td', { 'data-label': t('detail.columnResponse'), class: 'sticky-col col-number' }, `#${r.number}`),
+    h('td', { 'data-label': t('detail.columnSent'), class: 'sticky-col col-sent nowrap' }, formatTimestamp(r.submittedAt)),
+    h('td', { 'data-label': t('detail.columnName'), class: 'sticky-col col-name' }, respondentName(r, t)),
+    fields.map((f) => h('td', { 'data-label': f.label }, answerText(f, r.answers[f.id], t))),
+    onDelete && h('td', { class: 'row-actions' }, deleteResponseForm(r, t, onDelete))));
   return [
     h('h3', {}, t('detail.allAnswers')),
-    h('div', { class: 'table-wrap' }, h('table', { class: 'responsive' },
+    scrollableTable(h('table', { class: 'responsive responses-table' },
       h('thead', {}, h('tr', {},
-        h('th', {}, '#'), h('th', {}, t('detail.columnSent')), h('th', {}, t('detail.columnName')),
+        h('th', { class: 'sticky-col col-number' }, '#'),
+        h('th', { class: 'sticky-col col-sent' }, t('detail.columnSent')),
+        h('th', { class: 'sticky-col col-name' }, t('detail.columnName')),
         fields.map((f) => h('th', {}, f.label)),
-        onDelete && h('th', {}, h('span', { class: 'visually-hidden' }, t('detail.columnActions'))))),
-      h('tbody', {}, rows))),
+        onDelete && h('th', { class: 'row-actions' }, h('span', { class: 'visually-hidden' }, t('detail.columnActions'))))),
+      h('tbody', {}, rows)), t, signal),
   ];
 }

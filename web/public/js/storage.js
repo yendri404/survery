@@ -31,6 +31,32 @@ export function save(key, value) {
 }
 
 /**
+ * Keys of the answers view picked on one survey's results ('table' or 'byQuestion') and of the
+ * question shown in the "by question" view. `scope` is 'survey:<id>' on the creator's page and
+ * 'results:<token>' on public results, so each survey keeps its own choice.
+ */
+export const answersViewKeys = (scope) => ({ view: `sharevy-answers-view:${scope}`, question: `sharevy-answers-question:${scope}` });
+
+/**
+ * The remembered answers view of one survey, for a results page (container) to keep across live
+ * refreshes: `state` ({ view, question }, null when never picked) and `onChange(change)`, which
+ * updates and saves only the parts that changed. A view never picked keeps following the default.
+ */
+export function rememberedAnswersView(scope) {
+  const keys = answersViewKeys(scope);
+  const state = { view: load(keys.view), question: load(keys.question) };
+  return {
+    state,
+    onChange: (change) => {
+      for (const [part, value] of Object.entries(change)) {
+        state[part] = value;
+        save(keys[part], value);
+      }
+    },
+  };
+}
+
+/**
  * Respondent device id: 32 random bytes as base64url (43 characters), made once and kept, so a
  * device answers each survey once. Only its hash is stored by the API.
  */

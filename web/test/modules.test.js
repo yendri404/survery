@@ -349,7 +349,7 @@ describe('results table', () => {
     const [, wrap] = responsesTable(fields, responses, { t: tr }, (r) => deleted.push(r));
     const firstCells = findAll(wrap, (n) => n.tag === 'tr').slice(1).map((row) => row.children[0].textContent);
     assert.deepEqual(firstCells, ['#2', '#1']);
-    const labels = findAll(wrap, (n) => n.tag === 'button').map((b) => b.attrs['aria-label']);
+    const labels = findAll(wrap, (n) => n.tag === 'form').map((form) => findAll(form, (n) => n.tag === 'button')[0].attrs['aria-label']);
     assert.deepEqual(labels, ['Delete response #2', 'Delete response #1']);
   });
 
@@ -426,7 +426,8 @@ describe('public results (read-only views)', () => {
     const { responsesTable } = await import('../public/js/components/results.js');
     const i18n = createI18n('en', en, en);
     const [, wrap] = responsesTable(fields, responses, i18n);
-    assert.equal(findAll(wrap, (n) => n.tag === 'button' || n.tag === 'form').length, 0);
+    // Only the scroll buttons: no delete forms or buttons.
+    assert.equal(findAll(wrap, (n) => n.tag === 'form' || (n.tag === 'button' && !n.attrs['aria-label']?.startsWith('Scroll'))).length, 0);
     assert.deepEqual(findAll(wrap, (n) => n.tag === 'th').map((th) => th.textContent), ['#', 'Sent', 'Name', 'Q']);
     assert.deepEqual(findAll(wrap, (n) => n.tag === 'td').map((td) => td.textContent).slice(2), ['Ana', 'b']);
     // The read-only empty state does not ask the viewer to share a link.
@@ -440,7 +441,10 @@ describe('public results (read-only views)', () => {
     const i18n = createI18n('en', en, en);
     const summary = { kpis: { total: 1, named: 1, anonymous: 0, lastResponseAt: '2026-11-02T10:00:00Z', status: 'open', closesOn: '2026-12-01', daysLeft: 3 }, questions: [] };
     const nodes = resultsContent({ survey: { fields }, summary, responses }, i18n);
-    assert.equal(findAll(nodes, (n) => n.tag === 'button' || n.tag === 'form').length, 0);
+    // Buttons only to switch the view and scroll the table: no export, no delete forms.
+    const viewing = new Set(['Table', 'By question']);
+    assert.equal(findAll(nodes, (n) => n.tag === 'form' || (n.tag === 'button' && !n.attrs['aria-label']?.startsWith('Scroll') && !viewing.has(n.textContent.trim()))).length, 0);
+    assert.equal(findAll(nodes, (n) => n.attrs.role === 'group').length, 1, 'the view switch');
     assert.equal(findAll(nodes, (n) => n.attrs.class === 'kpis').length, 1);
     assert.equal(findAll(nodes, (n) => n.tag === 'table').length, 1);
   });
@@ -486,6 +490,220 @@ describe('public results (read-only views)', () => {
     assert.equal(en['results.notPublic'], 'These results are not public.');
     assert.equal(es['results.notPublic'], 'Estos resultados no son públicos.');
     assert.equal(matchRoute('/r/'), undefined);
+  });
+});
+
+describe('answers views (table or by question)', () => {
+  // Enough DOM for h()/s()/slot(): attributes, properties, children with parents, listeners, replaceWith.
+  class FakeNode {
+    constructor(tag) { this.tag = tag; this.attrs = {}; this.children = []; }
+    setAttribute(name, value) { this.attrs[name] = value; }
+    addEventListener(name, fn) { (this.listeners ??= {})[name] = fn; }
+    append(child) { if (child && typeof child === 'object') child.parent = this; this.children.push(child); }
+    replaceWith(node) {
+      const siblings = this.parent.children;
+      siblings[siblings.indexOf(this)] = node;
+      node.parent = this.parent;
+    }
+    isEqualNode() { return false; }
+    get textContent() { return this.children.map((c) => (c instanceof FakeNode ? c.textContent : c.text ?? '')).join(''); }
+  }
+  const findAll = (node, pred, out = []) => {
+    if (Array.isArray(node)) {
+      for (const n of node) findAll(n, pred, out);
+    } else if (node instanceof FakeNode) {
+      if (pred(node)) out.push(node);
+      for (const child of node.children) findAll(child, pred, out);
+    }
+    return out;
+  };
+  const useFakeDom = (t) => {
+    const saved = { Node: globalThis.Node, SVGElement: globalThis.SVGElement, document: globalThis.document };
+    Object.assign(globalThis, {
+      Node: FakeNode,
+      SVGElement: class extends FakeNode {},
+      document: {
+        createElement: (tag) => new FakeNode(tag),
+        createElementNS: (_ns, tag) => new FakeNode(tag),
+        createTextNode: (text) => ({ text }),
+        createComment: () => Object.assign(new FakeNode('#comment'), {}),
+      },
+    });
+    t.after(() => Object.assign(globalThis, saved));
+  };
+  const hasClass = (node, name) => (node.attrs.class ?? '').split(' ').includes(name);
+  const long = 'Detail. '.repeat(60);
+  const fields = [
+    { id: 'name', label: 'Team', type: 'text' },
+    { id: 'pick', label: 'Lunch', type: 'yesno' },
+    { id: 'notes', label: 'Notes', type: 'textarea' },
+  ];
+  // Newest first, as the API sends them.
+  const responses = [
+    { id: 30, number: 3, submittedAt: '2026-11-03T10:00:00Z', respondentName: null, answers: { name: 'Ops', pick: 'yes', notes: long } },
+    { id: 20, number: 2, submittedAt: '2026-11-02T10:00:00Z', respondentName: 'Ana', answers: { name: '', pick: 'no', notes: 'Short.' } },
+    { id: 10, number: 1, submittedAt: '2026-11-01T10:00:00Z', respondentName: 'Luis', answers: { pick: 'yes' } },
+  ];
+
+  test('default view: the table up to 5 questions, "by question" from 6', async () => {
+    const { defaultAnswersView } = await import('../public/js/components/answers-by-question.js');
+    assert.equal(defaultAnswersView(1), 'table');
+    assert.equal(defaultAnswersView(5), 'table');
+    assert.equal(defaultAnswersView(6), 'byQuestion');
+    assert.equal(defaultAnswersView(40), 'byQuestion');
+  });
+
+  test('answers to one question: only non-empty ones, in the order given, and how many left it empty', async () => {
+    const { answersForQuestion } = await import('../public/js/components/answers-by-question.js');
+    const team = answersForQuestion(fields[0], responses);
+    assert.deepEqual(team.answered.map((r) => r.number), [3]);
+    assert.equal(team.unanswered, 2);
+    const pick = answersForQuestion(fields[1], responses);
+    assert.deepEqual(pick.answered.map((r) => r.number), [3, 2, 1]);
+    assert.equal(pick.unanswered, 0);
+    const multi = answersForQuestion({ id: 'm', type: 'checkbox' }, [{ answers: { m: [] } }, { answers: { m: ['a'] } }, { answers: { m: '0' } }]);
+    assert.equal(multi.answered.length, 2, 'an empty choice list is no answer; "0" is one');
+    assert.equal(multi.unanswered, 1);
+  });
+
+  test('by question: each answer with its name or "Anonymous", #N and time, newest first, plus the unanswered count', async (t) => {
+    useFakeDom(t);
+    const { answersByQuestion } = await import('../public/js/components/answers-by-question.js');
+    const i18n = createI18n('en', en, en);
+    const view = answersByQuestion(fields, responses, i18n, { question: 'pick' });
+    const items = findAll(view, (n) => hasClass(n, 'answer-item'));
+    assert.equal(items.length, 3);
+    assert.match(items[0].textContent, /^Yes/);
+    assert.match(items[0].textContent, /Anonymous/);
+    assert.match(items[0].textContent, /#3/);
+    assert.match(items[0].textContent, new RegExp(formatTimestamp('2026-11-03T10:00:00Z')));
+    assert.match(items[1].textContent, /^No.*Ana.*#2/);
+    assert.match(items[2].textContent, /Luis.*#1/);
+    assert.equal(findAll(view, (n) => hasClass(n, 'unanswered')).length, 0, 'no line when everyone answered');
+    assert.equal(findAll(view, (n) => n.tag === 'form' || hasClass(n, 'danger')).length, 0, 'read-only without onDelete');
+
+    const team = answersByQuestion(fields, responses, i18n, { question: 'name' });
+    assert.equal(findAll(team, (n) => hasClass(n, 'answer-item')).length, 1);
+    const [line] = findAll(team, (n) => hasClass(n, 'unanswered'));
+    assert.equal(line.textContent, '2 people did not answer this question.');
+    assert.equal(createI18n('es', es, en).tn('detail.unanswered', 1), '1 persona no respondió esta pregunta.');
+    assert.equal(createI18n('es', es, en).tn('detail.unanswered', 4), '4 personas no respondieron esta pregunta.');
+  });
+
+  test('by question: long paragraph answers use the same 5-line clamp as the table', async (t) => {
+    useFakeDom(t);
+    const { answersByQuestion } = await import('../public/js/components/answers-by-question.js');
+    const view = answersByQuestion(fields, responses, createI18n('en', en, en), { question: 'notes' });
+    const clamps = findAll(view, (n) => n.attrs.class === 'answer-clamp');
+    assert.equal(clamps.length, 1, 'only the long answer is cut');
+    assert.equal(clamps[0].textContent, long);
+    clamps[0].listeners.click();
+    assert.equal(clamps[0].attrs['aria-expanded'], 'true');
+    assert.match(findAll(view, (n) => hasClass(n, 'answer-item'))[1].textContent, /^Short\./);
+  });
+
+  test('by question: a labeled picker of every question; previous/next change it and stop at the ends', async (t) => {
+    useFakeDom(t);
+    const { answersByQuestion } = await import('../public/js/components/answers-by-question.js');
+    const chosen = [];
+    const view = answersByQuestion(fields, responses, createI18n('en', en, en), { question: null, onQuestion: (id) => chosen.push(id) });
+    const [select] = findAll(view, (n) => n.tag === 'select');
+    const [label] = findAll(view, (n) => n.tag === 'label');
+    assert.equal(label.attrs.for, select.attrs.id);
+    assert.equal(label.textContent, 'Question');
+    assert.deepEqual(findAll(select, (n) => n.tag === 'option').map((o) => o.textContent), ['1. Team', '2. Lunch', '3. Notes']);
+    const [prev, next] = findAll(view, (n) => n.tag === 'button' && n.attrs['aria-label']);
+    assert.equal(prev.attrs['aria-label'], 'Previous question');
+    assert.equal(next.attrs['aria-label'], 'Next question');
+    // No saved question: the first one.
+    assert.equal(select.value, 'name');
+    assert.equal(prev.disabled, true);
+    assert.equal(next.disabled, false);
+    next.listeners.click();
+    assert.equal(select.value, 'pick');
+    assert.equal(findAll(view, (n) => hasClass(n, 'answer-item')).length, 3, 'the list follows the question');
+    assert.equal(prev.disabled, false);
+    next.listeners.click();
+    assert.equal(next.disabled, true);
+    prev.listeners.click();
+    select.listeners.change({ currentTarget: { value: 'notes' } });
+    assert.deepEqual(chosen, ['pick', 'notes', 'pick', 'notes']);
+    assert.equal(next.disabled, true);
+    // An unknown saved question (deleted meanwhile) falls back to the first one.
+    const [again] = findAll(answersByQuestion(fields, responses, createI18n('en', en, en), { question: 'gone' }), (n) => n.tag === 'select');
+    assert.equal(again.value, 'name');
+  });
+
+  test('by question: the creator gets the same delete button per response as in the table', async (t) => {
+    useFakeDom(t);
+    const { answersByQuestion } = await import('../public/js/components/answers-by-question.js');
+    const deleted = [];
+    const view = answersByQuestion(fields, responses, createI18n('en', en, en), { question: 'pick', onDelete: (r) => deleted.push(r.id) });
+    const forms = findAll(view, (n) => n.tag === 'form');
+    assert.deepEqual(findAll(forms, (n) => n.tag === 'button').map((b) => b.attrs['aria-label']), ['Delete response #3', 'Delete response #2', 'Delete response #1']);
+    forms[1].listeners.submit({ preventDefault() {} });
+    assert.deepEqual(deleted, [20]);
+  });
+
+  test('view switch: "Table" / "By question" with aria-pressed, defaulting by question count; a pick is reported', async (t) => {
+    useFakeDom(t);
+    const { answersSection } = await import('../public/js/components/answers-by-question.js');
+    const i18n = createI18n('en', en, en);
+    const many = Array.from({ length: 6 }, (_, i) => ({ id: `q${i}`, label: `Q${i}`, type: 'text' }));
+    const pressed = (nodes) => findAll(nodes, (n) => n.attrs['aria-pressed'] === 'true').map((b) => b.textContent.trim());
+    assert.deepEqual(pressed(answersSection(fields, responses, i18n, {})), ['Table']);
+    assert.deepEqual(pressed(answersSection(many, responses, i18n, {})), ['By question']);
+    assert.deepEqual(pressed(answersSection(many, responses, i18n, { state: { view: 'table' } })), ['Table'], 'a saved choice wins');
+    assert.deepEqual(pressed(answersSection(many, responses, i18n, { state: { view: 'bogus' } })), ['By question']);
+
+    const changes = [];
+    const nodes = answersSection(fields, responses, i18n, { state: { view: null, question: 'notes' }, onChange: (c) => changes.push(c) });
+    const [group] = findAll(nodes, (n) => n.attrs.role === 'group');
+    assert.equal(group.attrs['aria-label'], 'Answers view');
+    assert.equal(findAll(nodes, (n) => n.tag === 'table').length, 1);
+    const [tableButton, byQuestionButton] = findAll(group, (n) => n.tag === 'button');
+    byQuestionButton.listeners.click();
+    assert.deepEqual(changes, [{ view: 'byQuestion' }]);
+    assert.deepEqual(pressed(nodes), ['By question']);
+    assert.equal(findAll(nodes, (n) => n.tag === 'table').length, 0);
+    assert.equal(findAll(nodes, (n) => n.tag === 'select')[0].value, 'notes', 'the saved question is shown');
+    findAll(nodes, (n) => n.attrs['aria-label'] === 'Previous question')[0].listeners.click();
+    assert.deepEqual(changes.at(-1), { question: 'pick' });
+    byQuestionButton.listeners.click();
+    assert.equal(changes.length, 2, 'picking the current view changes nothing');
+    tableButton.listeners.click();
+    assert.deepEqual(changes.at(-1), { view: 'table' });
+    assert.equal(findAll(nodes, (n) => n.tag === 'table').length, 1);
+    // No answers yet: the empty state only, no switch.
+    const empty = answersSection(fields, [], i18n, {});
+    assert.equal(findAll(empty, (n) => n.attrs.role === 'group').length, 0);
+    assert.equal(findAll(empty, (n) => n.attrs.class === 'empty').length, 1);
+  });
+
+  test('table: left/right scroll buttons above it, hidden until the table overflows', async (t) => {
+    useFakeDom(t);
+    const { responsesTable } = await import('../public/js/components/results.js');
+    const [, wrap] = responsesTable(fields, responses, createI18n('en', en, en));
+    const [toolbar] = findAll(wrap, (n) => hasClass(n, 'table-toolbar'));
+    assert.equal(toolbar.hidden, true);
+    assert.deepEqual(findAll(toolbar, (n) => n.tag === 'button').map((b) => b.attrs['aria-label']), ['Scroll the table left', 'Scroll the table right']);
+    assert.equal(es['detail.scrollLeft'], 'Desplazar la tabla a la izquierda');
+    assert.equal(es['detail.scrollRight'], 'Desplazar la tabla a la derecha');
+    // #, Sent and Name stay at the left while the answers scroll.
+    const [headRow] = findAll(wrap, (n) => n.tag === 'tr');
+    assert.deepEqual(headRow.children.map((th) => hasClass(th, 'sticky-col')), [true, true, true, false, false, false]);
+  });
+
+  test('the remembered view and question are kept per survey (creator) or per results link (public)', async () => {
+    const { rememberedAnswersView, answersViewKeys } = await import('../public/js/storage.js');
+    assert.deepEqual(answersViewKeys('survey:7'), { view: 'sharevy-answers-view:survey:7', question: 'sharevy-answers-question:survey:7' });
+    const first = rememberedAnswersView('survey:7');
+    assert.deepEqual(first.state, { view: null, question: null });
+    first.onChange({ view: 'table' });
+    first.onChange({ question: 'q3' });
+    assert.deepEqual(first.state, { view: 'table', question: 'q3' });
+    assert.deepEqual(rememberedAnswersView('survey:7').state, { view: 'table', question: 'q3' }, 'read back later');
+    assert.deepEqual(rememberedAnswersView('results:abc').state, { view: null, question: null }, 'other surveys keep their own');
   });
 });
 

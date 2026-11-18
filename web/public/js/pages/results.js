@@ -1,5 +1,6 @@
 import { closingLine, resultsContent, surveyDescription, surveyHeading } from '../components/survey-detail.js';
 import { h, slot } from '../dom.js';
+import { rememberedAnswersView } from '../storage.js';
 
 /**
  * Container: a survey's public results (/r/<token>), read-only and without an account. It shows what
@@ -29,7 +30,9 @@ export async function publicResultsPage(app, { params, signal }) {
     app.setTone(toneOf(survey));
   };
 
-  const results = h('section', { id: 'responses' }, resultsContent(data, i18n));
+  // Table or "by question", kept for this results link in this browser and across live refreshes.
+  const view = { answersView: { ...rememberedAnswersView(`results:${params.token}`), signal } };
+  const results = h('section', { id: 'responses' }, resultsContent(data, i18n, view));
 
   return {
     title: data.survey.title,
@@ -46,7 +49,7 @@ export async function publicResultsPage(app, { params, signal }) {
           throw err;
         }
         if (!signal.aborted) showSurvey(fresh.survey);
-        return resultsContent(fresh, i18n);
+        return resultsContent(fresh, i18n, view);
       }, signal);
     },
   };

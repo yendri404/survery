@@ -1,7 +1,8 @@
 import { h, withParts } from '../dom.js';
+import { answersSection } from './answers-by-question.js';
 import { icon } from './icons.js';
 import { closingText, notice, statusBadge } from './layout.js';
-import { kpiTiles, responsesTable, summaryCharts } from './results.js';
+import { kpiTiles, summaryCharts } from './results.js';
 
 /*
  * Presentational parts of one survey's page: plain data and callbacks in, DOM out. The container
@@ -98,16 +99,17 @@ export function managePanel({ t, editHref, toggleNode, onToggle, onDelete }) {
 // ---------- Results ----------
 
 /**
- * Heading with the CSV export, key figures, charts and the responses table. `onExport()`: one CSV
- * (the API picks "," or ";" from the answers).
+ * Heading with the CSV export, key figures, charts and every answer (table or "by question").
+ * `onExport()`: one CSV (the API picks "," or ";" from the answers). `answersView`: the remembered
+ * view ({ state, onChange }, see storage.js) and the page's `signal`.
  * Without actions (public results) everything is read-only: no exports, no delete buttons.
  */
-export const resultsContent = ({ survey, summary, responses }, i18n, { onExport, onDeleteResponse } = {}) => [
+export const resultsContent = ({ survey, summary, responses }, i18n, { onExport, onDeleteResponse, answersView } = {}) => [
   h('div', { class: 'page-head' },
     h('h2', {}, i18n.t('detail.responses', { count: responses.length })),
     onExport && h('div', { class: 'button-row' },
       h('button', { type: 'button', class: 'secondary', onclick: () => onExport() }, icon('download'), ` ${i18n.t('detail.exportCsv')}`))),
   kpiTiles(summary, i18n),
   summaryCharts(summary, i18n),
-  responsesTable(survey.fields, responses, i18n, onDeleteResponse),
+  answersSection(survey.fields, responses, i18n, { ...answersView, onDelete: onDeleteResponse }),
 ];

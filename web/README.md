@@ -26,7 +26,7 @@ Every file is sent with `Cache-Control: no-cache` and an `ETag`. Module URLs nev
 | `pages/` | Containers: fetch data, handle actions, return DOM |
 | `components/` | Presentational: pure functions from data to DOM (same classes as before, so `style.css` applies) |
 | `api.js`, `errors.js` | Fetch wrapper (Bearer token, `X-Device-Id`) and API error code -> message key |
-| `storage.js`, `dom.js` | Saved values (token, device id, language, theme) and safe DOM builders (`h()`, `s()`, no `innerHTML`) |
+| `storage.js`, `dom.js` | Saved values (token, device id, language, theme, the answers view picked per survey) and safe DOM builders (`h()`, `s()`, no `innerHTML`) |
 | `i18n.js`, `format.js`, `validation.js`, `number-input.js`, `charts.js`, `sse.js` | Pure logic, tested in `test/modules.test.js` |
 
 ## Tradeoffs
