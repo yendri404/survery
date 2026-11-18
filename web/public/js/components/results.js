@@ -115,9 +115,12 @@ export function kpiTiles({ kpis }, i18n) {
     tile(t('detail.kpi.closing'), closing, closingText(kpis.closesOn, kpis.status, i18n)));
 }
 
-/** Every answer: a table on wide screens, one card per response on phones (CSS). */
+/**
+ * Every answer: a table on wide screens, one card per response on phones (CSS). Without
+ * `onDelete(response)` the table is read-only (public results): no delete buttons, no actions column.
+ */
 export function responsesTable(fields, responses, { t }, onDelete) {
-  if (!responses.length) return [emptyState(t('detail.noAnswers'))];
+  if (!responses.length) return [emptyState(t(onDelete ? 'detail.noAnswers' : 'results.noAnswers'))];
   const answerText = (field, value) => {
     const text = Array.isArray(value) ? value.join(', ') : optionText(field.type, value ?? '', t);
     return text || h('span', { class: 'muted' }, '-');
@@ -127,7 +130,7 @@ export function responsesTable(fields, responses, { t }, onDelete) {
     h('td', { 'data-label': t('detail.columnSent'), class: 'nowrap' }, formatTimestamp(r.submittedAt)),
     h('td', { 'data-label': t('detail.columnName') }, r.respondentName ? r.respondentName : h('span', { class: 'muted' }, t('detail.anonymous'))),
     fields.map((f) => h('td', { 'data-label': f.label }, answerText(f, r.answers[f.id]))),
-    h('td', { class: 'row-actions' },
+    onDelete && h('td', { class: 'row-actions' },
       h('form', { onsubmit: (event) => { event.preventDefault(); onDelete(r); } },
         h('button', { type: 'submit', class: 'icon-button danger', 'aria-label': t('detail.deleteResponseLabel', { number: r.number }), title: t('detail.deleteResponseTitle') }, icon('trash'))))));
   return [
@@ -136,7 +139,7 @@ export function responsesTable(fields, responses, { t }, onDelete) {
       h('thead', {}, h('tr', {},
         h('th', {}, '#'), h('th', {}, t('detail.columnSent')), h('th', {}, t('detail.columnName')),
         fields.map((f) => h('th', {}, f.label)),
-        h('th', {}, h('span', { class: 'visually-hidden' }, t('detail.columnActions'))))),
+        onDelete && h('th', {}, h('span', { class: 'visually-hidden' }, t('detail.columnActions'))))),
       h('tbody', {}, rows))),
   ];
 }

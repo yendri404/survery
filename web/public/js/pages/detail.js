@@ -1,7 +1,7 @@
 import { saveBlob } from '../api.js';
 import { backLink } from '../components/layout.js';
 import {
-  closingLine, managePanel, openCloseButton, resultsContent, sharePanel, statusNotice, surveyDescription, surveyHeading,
+  closingLine, managePanel, openCloseButton, publicResultsPanel, resultsContent, sharePanel, statusNotice, surveyDescription, surveyHeading,
 } from '../components/survey-detail.js';
 import { h, slot } from '../dom.js';
 import { viewerTimeZone } from '../format.js';
@@ -33,7 +33,7 @@ function copyLink(btn, input, t) {
 }
 
 
-/** Container: one survey's link, QR code, management actions and live results. */
+/** Container: one survey's link, QR code, public results link, management actions and live results. */
 export async function detailPage(app, { params, signal }) {
   const { t, i18n } = app;
   const { id } = params;
@@ -84,6 +84,13 @@ export async function detailPage(app, { params, signal }) {
       await app.navigate(`${path}?msg=${closing ? 'closed' : 'opened'}`);
     });
   };
+  /** Public results on or off: updated in place, keeping the focus on the switch. */
+  const setPublicResults = (on) => act(async () => {
+    const { survey } = await app.api.patch(path, { publicResults: on });
+    if (signal.aborted) return;
+    showSurvey(survey);
+    publicSlot.node.querySelector?.('input[type="checkbox"]')?.focus();
+  });
   const deleteSurvey = () => {
     if (!window.confirm(t('detail.deleteConfirm'))) return;
     act(async () => {
@@ -99,9 +106,10 @@ export async function detailPage(app, { params, signal }) {
     surveyDescription,
     (s) => statusNotice(s, i18n, editHref),
     (s) => openCloseButton(s, i18n),
+    (s) => publicResultsPanel({ t, survey: s, onToggle: setPublicResults, onCopy: (button, input) => copyLink(button, input, t) }),
   ];
   const slots = stateParts.map((build) => slot(build(current)));
-  const [headingSlot, closingSlot, descriptionSlot, noticeSlot, toggleSlot] = slots;
+  const [headingSlot, closingSlot, descriptionSlot, noticeSlot, toggleSlot, publicSlot] = slots;
   // Green while the survey accepts answers, blue once it is closed or expired (kept live).
   const toneOf = (survey) => (survey.status === 'open' ? 'open' : undefined);
   const showSurvey = (survey) => {
@@ -125,6 +133,7 @@ export async function detailPage(app, { params, signal }) {
       onShare: (url) => navigator.share({ title: current.title, url }).catch(() => {}),
       onDownloadQr: () => download(`${path}/qr.png`, `sharevy-survey-${id}-qr.png`),
     }),
+    publicSlot.node,
     managePanel({ t, editHref, toggleNode: toggleSlot.node, onToggle: toggleOpen, onDelete: deleteSurvey }));
 
   return {

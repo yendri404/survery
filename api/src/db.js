@@ -94,6 +94,15 @@ const MIGRATIONS = [
       db.exec('ALTER TABLE surveys ADD COLUMN require_name INTEGER NOT NULL DEFAULT 0');
     }
   },
+  // Public results link: the token anyone with the link uses to read the results (NULL = private,
+  // the default). Existing surveys stay private until their creator turns it on.
+  (db) => {
+    if (!hasColumn(db, 'surveys', 'results_token')) {
+      db.exec('ALTER TABLE surveys ADD COLUMN results_token TEXT');
+    }
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_surveys_results_token
+             ON surveys(results_token) WHERE results_token IS NOT NULL`);
+  },
 ];
 
 function migrate(db) {

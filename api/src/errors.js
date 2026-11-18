@@ -29,6 +29,7 @@ export const ERROR_CODES = {
   'validation.scaleOrder': 'scale_order',
   'validation.scaleTooWide': 'scale_too_wide',
   'validation.isOpenInvalid': 'is_open_invalid',
+  'validation.publicResultsInvalid': 'public_results_invalid',
   // Answers (validateAnswers, parseRespondentName)
   'validation.answersInvalid': 'answers_invalid',
   'validation.respondentNameRequired': 'respondent_name_required',
@@ -55,6 +56,8 @@ export const ERROR_CODES = {
   'respond.closed': 'survey_closed',
   'respond.closedOn': 'survey_expired',
   'respond.tooManyResponses': 'too_many_responses',
+  // Public results
+  'results.notFound': 'not_found',
   // Protocol
   'error.generic': 'internal_error',
   'error.notFound': 'not_found',

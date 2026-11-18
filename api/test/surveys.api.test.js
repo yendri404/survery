@@ -452,6 +452,7 @@ describe('existing database', () => {
       assert.equal((await c.login('old@corp.local')).status, 200);
       const [survey] = (await c.request('/surveys')).json.surveys;
       assert.deepEqual([survey.title, survey.responseCount, survey.closesOn, survey.publicToken], ['Old survey', 1, '2026-11-11', 'oldtoken']);
+      assert.deepEqual([survey.publicResults, survey.resultsUrl], [false, null], 'existing surveys stay private');
       const [response] = (await c.request(`/surveys/${survey.id}/responses`)).json.responses;
       assert.deepEqual([response.answers.q0000001, response.respondentName, response.submittedAt], ['old answer', null, '2026-11-02T09:30:00Z']);
       // Old responses have no device, so they never block a new device.

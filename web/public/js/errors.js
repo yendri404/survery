@@ -1,6 +1,6 @@
 /**
  * API error code -> message key in web/locales. The API sends stable codes (docs/API.md,
- * section 10); the client shows its own text for them, in the reader's language.
+ * section 11); the client shows its own text for them, in the reader's language.
  * `api_unavailable` comes from the web server's proxy; `network_error` from fetch itself.
  */
 export const ERROR_KEYS = {
@@ -27,6 +27,7 @@ export const ERROR_KEYS = {
   scale_order: 'validation.scaleOrder',
   scale_too_wide: 'validation.scaleTooWide',
   is_open_invalid: 'validation.isOpenInvalid',
+  public_results_invalid: 'validation.publicResultsInvalid',
   // Answers
   answers_invalid: 'validation.answersInvalid',
   respondent_name_required: 'validation.respondentNameRequired',

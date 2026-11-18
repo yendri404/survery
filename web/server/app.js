@@ -24,6 +24,7 @@ export const APP_ROUTES = [
   /^\/surveys\/\d+\/edit$/,
   /^\/s\/[A-Za-z0-9_-]+$/,
   /^\/s\/[A-Za-z0-9_-]+\/thanks$/,
+  /^\/r\/[A-Za-z0-9_-]+$/,
 ];
 
 /** URL prefix -> folder (inside WEB_ROOT) whose files it serves. */

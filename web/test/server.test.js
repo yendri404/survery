@@ -134,7 +134,7 @@ describe('web server', () => {
   });
 
   test('app routes answer the single page with a strict CSP and security headers', async () => {
-    for (const path of ['/', '/login', '/register', '/surveys', '/surveys/new', '/surveys/12', '/surveys/12/edit', '/s/AbC_-9', '/s/AbC_-9/thanks']) {
+    for (const path of ['/', '/login', '/register', '/surveys', '/surveys/new', '/surveys/12', '/surveys/12/edit', '/s/AbC_-9', '/s/AbC_-9/thanks', '/r/AbC_-9']) {
       const res = await fetch(base + path);
       assert.equal(res.status, 200, path);
       assert.match(res.headers.get('content-type'), /^text\/html/);
@@ -153,7 +153,7 @@ describe('web server', () => {
   });
 
   test('unknown pages get the single page (it shows "page not found") with status 404', async () => {
-    for (const path of ['/nope', '/surveys/abc', '/surveys/1/edit/x', '/s/']) {
+    for (const path of ['/nope', '/surveys/abc', '/surveys/1/edit/x', '/s/', '/r/', '/r/abc/x']) {
       const res = await fetch(base + path);
       assert.equal(res.status, 404, path);
       assert.match(await res.text(), /src="\/public\/js\/main\.js"/);

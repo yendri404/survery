@@ -18,7 +18,7 @@ A file-by-file tour of the code: what each module does, what it exports, and why
 5. [API, file by file](#5-api-file-by-file)
    - [Bootstrap](#bootstrap) — `server.js`, `config.js`, `db.js`
    - [HTTP core](#http-core) — `app.js`, `http.js`, `errors.js`
-   - [Routes](#routes) — `routes/meta.js`, `routes/auth.js`, `routes/surveys.js`, `routes/public.js`
+   - [Routes](#routes) — `routes/meta.js`, `routes/auth.js`, `routes/surveys.js`, `routes/public.js`, `routes/results.js`
    - [Domain](#domain) — `surveys.js`
    - [Infrastructure](#infrastructure) — `repo.js`, `auth.js`, `rate-limit.js`, `live.js`, `qr.js`, `i18n.js`
 6. [Web client, file by file](#6-web-client-file-by-file)
@@ -55,7 +55,8 @@ api/                         REST API, JSON only (port 3001)
 │       ├── meta.js          /health and /meta (the rules clients must not hard-code)
 │       ├── auth.js          Register, login, logout, /me
 │       ├── surveys.js       Creator endpoints: CRUD, results, summary, CSV, QR, event streams
-│       └── public.js        Respondents: read a survey by token, submit a response
+│       ├── public.js        Respondents: read a survey by token, submit a response
+│       └── results.js       Public results (read-only, no account): survey, summary, responses, event stream
 ├── locales/                 en.json, es.json (API-side texts only)
 ├── scripts/create-user.js   Create a creator account from the command line
 └── test/                    node:test suites (in-memory database)
@@ -81,7 +82,7 @@ web/                         Browser client (port 3000), no dependencies, no bui
 │   │   ├── number-input.js  Number question typing filter
 │   │   ├── charts.js        Donut, bar and histogram math
 │   │   ├── format.js        Timestamps, addDays, safeNext
-│   │   ├── pages/           Containers: home, auth, surveys, editor, detail, respond
+│   │   ├── pages/           Containers: home, auth, surveys, editor, detail, respond, results
 │   │   └── components/      Presentational: layout, icons, builder, answer-field, results, survey-cards, survey-detail
 │   ├── style.css, theme.js, logo.png, favicon.svg
 │   └── fonts/               IBM Plex Sans woff2 + license
@@ -261,6 +262,7 @@ erDiagram
         text closes_on "YYYY-MM-DD, last day that accepts answers"
         int require_name "1 = respondents must write their name"
         int response_seq "last response number handed out"
+        text results_token UK "public results link; NULL = private"
         text created_at "UTC"
         text updated_at "UTC"
     }
@@ -340,7 +342,7 @@ The database file (`data/surveys.db`) is the same one the single-server version 
 
 Pass `':memory:'` for a throwaway database (the tests do this).
 
-**Migrations:** after the base schema, `migrate()` runs the `MIGRATIONS` list inside one transaction: `respondent_name`, `closes_on` (existing surveys get creation date + 10 days, once), `device_hash` with the unique index `(survey_id, device_hash)`, and per-survey response numbers: `surveys.response_seq` plus `responses.number` with the unique index `(survey_id, number)` (existing responses are numbered 1..n per survey by `id`, once, and each counter set to its survey's highest number), and `surveys.require_name` (default 0: existing surveys keep the name optional). Each step checks the current shape first (`hasColumn`), so steps are idempotent and run on every boot. Add new steps at the end of the list; never edit a released step.
+**Migrations:** after the base schema, `migrate()` runs the `MIGRATIONS` list inside one transaction: `respondent_name`, `closes_on` (existing surveys get creation date + 10 days, once), `device_hash` with the unique index `(survey_id, device_hash)`, and per-survey response numbers: `surveys.response_seq` plus `responses.number` with the unique index `(survey_id, number)` (existing responses are numbered 1..n per survey by `id`, once, and each counter set to its survey's highest number), `surveys.require_name` (default 0: existing surveys keep the name optional), and `surveys.results_token` (NULL: existing surveys keep their results private) with a unique index on the non-NULL values. Each step checks the current shape first (`hasColumn`), so steps are idempotent and run on every boot. Add new steps at the end of the list; never edit a released step.
 
 ---
 
@@ -397,7 +399,7 @@ Pass `':memory:'` for a throwaway database (the tests do this).
 | `validationFailed({ fields?, errors? })` | `422 validation_failed`. `fields` = per-field problems (answers, registration); `errors` = an ordered list (survey definition) |
 | `tooManyRequests(key, retryAfterSeconds)` | `429` with `params.minutes` and a `Retry-After` header; used by the login and submission limits |
 
-The full list with statuses and English messages is in [docs/API.md, section 10](docs/API.md#10-error-code-reference). `api/test/i18n.test.js` checks that every message maps to a code and back.
+The full list with statuses and English messages is in [docs/API.md, section 11](docs/API.md#11-error-code-reference). `api/test/i18n.test.js` checks that every message maps to a code and back.
 
 ---
 
@@ -445,7 +447,7 @@ All routes need a Bearer token (`authed(...)` registers them with `{ auth: true 
 | POST | `/surveys` | Create → `201 { survey }` · 422 with ordered `errors` |
 | GET | `/surveys/:id` | `{ survey }` with fields, status, `shareUrl` |
 | PUT | `/surveys/:id` | Replace the definition (field ids are preserved) |
-| PATCH | `/surveys/:id` | `{ isOpen }`: open ↔ closed |
+| PATCH | `/surveys/:id` | `{ isOpen?, publicResults? }`: open ↔ closed, results public ↔ private (`isOpen` required when `publicResults` is left out) |
 | DELETE | `/surveys/:id` | Delete the survey and its responses → 204 |
 | GET | `/surveys/:id/events` | Live stream (SSE) for one survey |
 | GET | `/surveys/:id/responses` | Responses, newest first |
@@ -457,9 +459,11 @@ All routes need a Bearer token (`authed(...)` registers them with `{ auth: true 
 **Key internals:**
 
 - **`ownedSurvey(ctx)`** — the single ownership gate. It loads the survey by id **and** `owner_id = ctx.user.id`; otherwise 404. Returning 404 instead of 403 means another creator cannot even tell that the survey exists.
+- **`resultsUrl(ctx, survey)`** — same base + `/r/<resultsToken>` while the results are public, else `null`. `PATCH { publicResults: true }` keeps an existing token or makes one with `newSurveyToken()`; `false` sets it to NULL, so a revoked link never works again.
+- **Shared with `routes/results.js`:** `responseJson`, `summaryJson(survey, responses, today)`, `webUrl(config, ctx, path)` and `newSurveyToken()` are exported, so the public results reuse the same JSON shapes.
 - **`shareUrl(ctx, survey)`** — base + `/s/<publicToken>`: respondents open surveys in the **web client**, not the API. Base: `WEB_BASE_URL`; else, with `trustProxy`, `forwardedOrigin(req)` (`http.js`: `X-Forwarded-Proto` + a `hostname[:port]` `X-Forwarded-Host`); else `DEFAULT_WEB_BASE_URL`.
 - **`readDefinition`** — turns the JSON body into the shape `parseSurveyInput` expects and throws `validationFailed({ errors })` with coded problems.
-- **Public token** — `newToken(18)` gives 144 random bits, so links cannot be guessed or enumerated.
+- **Public token** — `newSurveyToken()` (`newToken(18)`) gives 144 random bits (results tokens too), so links cannot be guessed or enumerated.
 - **CSV BOM** — the `﻿` prefix makes Excel read accented characters correctly. The `;` variant exists for Excel with Spanish/European regional settings.
 - Every write calls `live.surveyChanged(survey)`.
 
@@ -596,14 +600,29 @@ The heart of the API. It has no database, no HTTP and no JSON output, which is w
 
 ---
 
+#### `routes/results.js` — public results (no account, read-only)
+
+A creator turns them on with `PATCH /surveys/:id { publicResults: true }`; the token in `resultsUrl` then opens:
+
+| Method | Path | Result |
+|--------|------|--------|
+| GET | `/public/results/:token` | Title, description, closing date, `status`, `requireName`, fields (never the answer token, `shareUrl` or the owner) |
+| GET | `/public/results/:token/summary` | Same JSON as `/surveys/:id/summary` (`summaryJson`) |
+| GET | `/public/results/:token/responses` | Same JSON as `/surveys/:id/responses` (`responseJson`), names included |
+| GET | `/public/results/:token/events` | Live stream (SSE) on the survey's `survey:<id>` channel |
+
+A private, revoked or unknown token is 404 `not_found` ("These results are not public."). No write route exists under `/public/results/`.
+
+---
+
 #### `live.js` — live updates
 
 **Exports:** `createLiveUpdates()` → `{ surveyChanged(survey), stream(req, res, channel) }`. `app.js` creates one instance and passes it to the routes as `live`.
 
 | Piece | Detail |
 |-------|--------|
-| Channels | `survey:<id>` (results page) and `owner:<userId>` (survey list) |
-| Publishers | A new response (`routes/public.js`); creating, editing, opening/closing, deleting a survey or a response (`routes/surveys.js`) |
+| Channels | `survey:<id>` (results page, creator's and public) and `owner:<userId>` (survey list) |
+| Publishers | A new response (`routes/public.js`); creating, editing, opening/closing, deleting a survey or a response, results made public or private (`routes/surveys.js`) |
 | `stream()` | `text/event-stream`: `retry: 3000` and `: connected` on open, `event: change` per change, `: ping` every 25 s, cleanup on disconnect. `X-Accel-Buffering: no` for buffering proxies |
 
 **Why events carry no data:** clients re-fetch the same JSON as a manual refresh, so a live update can never show something different from a reload. **Limits:** events live in memory in one process; several API processes would need a shared bus (for example Redis pub/sub).
@@ -749,7 +768,8 @@ A page is `async (app, { params, query, signal }) → { title, body, respondent?
 | `auth.js` | `loginPage`, `registerPage` | Forms; API errors in a box above the form (registration in field order); keep typed values (never the password); after login go to `safeNext(next)`; the submit button is disabled while sending |
 | `surveys.js` | `surveyListPage` (cards from `components/survey-cards.js`) | Cards with status badge, response count and closing text; live via `/surveys/events` |
 | `editor.js` | `editorPage` | New / edit. Reads `/meta` for limits, types, `today` and `defaultOpenDays` (default closing date, `min` of the date input). Title and closing date are checked with the questions by the builder; API `errors[]` are shown in order above the form. A "Name is required" checkbox (`.choice.switch`, from `survey.requireName`, unchecked for new surveys) is sent as `requireName`. Warns when editing a survey with responses |
-| `detail.js` | `detailPage` | Container for the parts in `components/survey-detail.js`: share link (copy button with a fallback for plain HTTP, native share sheet when supported), QR image (`qr.svg` fetched as a blob), PNG download, CSV downloads (`?lang=` = current interface language), open/close, delete (confirm), key figures, charts, responses table with delete; results live via `/surveys/:id/events`. Each live update also refreshes the survey state shown outside the results (title and status badge, closing date, description, closed/expired notice, open/close button), and open/close always uses that latest state |
+| `detail.js` | `detailPage` | Container for the parts in `components/survey-detail.js`: share link (copy button with a fallback for plain HTTP, native share sheet when supported), QR image (`qr.svg` fetched as a blob), PNG download, CSV downloads (`?lang=` = current interface language), open/close, delete (confirm), the public results switch (`publicResultsPanel`: `PATCH { publicResults }`, updated in place, link copied with the share link's copy helper), key figures, charts, responses table with delete; results live via `/surveys/:id/events`. Each live update also refreshes the survey state shown outside the results (title and status badge, closing date, description, closed/expired notice, open/close button, public results panel), and open/close always uses that latest state |
+| `results.js` | `publicResultsPage` | `/r/:token`, no account: the same heading, closing line, description, key figures, charts and responses table (names included) as `detail.js`, read-only (`resultsContent` without actions). Live via `/public/results/:token/events`; when the creator makes the results private, the next refresh gets a 404 and the page re-renders as the "These results are not public." panel |
 | `respond.js` | `respondPage`, `thanksPage` | Respondent form, closed / expired / already-answered panels, thanks page. Sends `X-Device-Id`, keeps a `deviceId` the API returns. Checks every answer in the browser first (`attachValidation`); API `fields` errors use the same markup |
 
 **Respondent form behavior (`respond.js` + `answer-field.js`):**
@@ -774,8 +794,8 @@ Pure functions from data (and callbacks) to DOM. They never fetch or navigate on
 | `icons.js` | `icon(name, extraClass)` | Stroke icons on a 24×24 grid, built with `s()`. Icon-only buttons always carry an `aria-label` and a `title` |
 | `builder.js` | `createBuilder({ fields, types, choiceTypes, scale, limits, t, basics })` → `{ element, validate(), value() }` | Question editor: add, move, duplicate, delete. Warns about repeated questions and options **while typing**; empty question text, missing options, title and closing date (`basics`) **after a submit attempt**. Same rule as the API: equal after trimming, ignoring case. Scale questions show "From" / "To" (prefilled from `/meta` `scale`), a live warning for a wrong range (`checkScaleRange`) and a slider preview. Keeps field ids so edits do not orphan answers |
 | `answer-field.js` | `answerField(field, index, i18n, limits)`, `respondentNameField(i18n, limits, { required })`, `fieldError` | One control per type (`yesno`: two large side-by-side radios, `.choices.yesno`; choices in a `fieldset` + `legend`); control id `fld_<question id>` |
-| `results.js` | `kpiTiles`, `summaryCharts`, `responsesTable` | Key figures (`<dl class="kpis">`), charts, and the table (one card per response on phones, via each cell's `data-label`). Yes/no shown translated |
-| `survey-detail.js` | `surveyHeading`, `closingLine`, `surveyDescription`, `statusNotice`, `openCloseButton`, `sharePanel`, `managePanel`, `resultsContent` | The parts of one survey's page. The state parts are rebuilt by `pages/detail.js` on each live update (through `slot`); the panels take their actions as callbacks |
+| `results.js` | `kpiTiles`, `summaryCharts`, `responsesTable` | Key figures (`<dl class="kpis">`), charts, and the table (one card per response on phones, via each cell's `data-label`). Yes/no shown translated. Without `onDelete` the table is read-only (no delete buttons, no actions column) |
+| `survey-detail.js` | `surveyHeading`, `closingLine`, `surveyDescription`, `statusNotice`, `openCloseButton`, `sharePanel`, `publicResultsPanel`, `managePanel`, `resultsContent` | The parts of one survey's page (`resultsContent` without actions is the read-only public view). The state parts are rebuilt by `pages/detail.js` on each live update (through `slot`); the panels take their actions as callbacks |
 | `survey-cards.js` | `surveyCards` | The creator's surveys as cards (status badge, response count, closing text), or the empty state |
 
 **Charts** (`summaryCharts`, math in `charts.js`):

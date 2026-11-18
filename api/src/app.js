@@ -7,6 +7,7 @@ import { createRepo } from './repo.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerMetaRoutes } from './routes/meta.js';
 import { registerPublicRoutes } from './routes/public.js';
+import { registerResultsRoutes } from './routes/results.js';
 import { registerSurveyRoutes } from './routes/surveys.js';
 import { localDateString } from './surveys.js';
 
@@ -65,6 +66,7 @@ export function createApp({ db, config }) {
   registerAuthRoutes(deps);
   registerSurveyRoutes(deps);
   registerPublicRoutes(deps);
+  registerResultsRoutes(deps);
 
   /** Bearer token -> hashed -> unexpired session row -> ctx.user. */
   function loadSession(ctx) {

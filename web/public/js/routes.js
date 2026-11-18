@@ -3,6 +3,7 @@ import { detailPage } from './pages/detail.js';
 import { editorPage } from './pages/editor.js';
 import { homePage } from './pages/home.js';
 import { respondPage, thanksPage } from './pages/respond.js';
+import { publicResultsPage } from './pages/results.js';
 import { surveyListPage } from './pages/surveys.js';
 
 /**
@@ -19,6 +20,8 @@ export const ROUTES = [
   { path: '/surveys/:id/edit', page: editorPage, auth: true, errorKeys: { not_found: 'error.surveyNotFound' } },
   { path: '/s/:token', page: respondPage, respondent: true, errorKeys: { not_found: 'respond.notFound' } },
   { path: '/s/:token/thanks', page: thanksPage, respondent: true, errorKeys: { not_found: 'respond.notFound' } },
+  // Public results: read-only, no account; any logged-in creator sees them the same way.
+  { path: '/r/:token', page: publicResultsPage, respondent: true, errorKeys: { not_found: 'results.notPublic' } },
 ];
 
 const PARAMS = { id: '(\\d+)', token: '([A-Za-z0-9_-]+)' };

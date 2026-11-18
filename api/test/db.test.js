@@ -131,3 +131,18 @@ test('openDatabase adds the name requirement setting; existing surveys keep the 
     again.close();
   });
 });
+
+test('openDatabase adds the results link column: existing surveys stay private, links are unique', () => {
+  withOldDatabase((path) => {
+    const db = openDatabase(path);
+    assert.ok(columns(db, 'surveys').includes('results_token'));
+    assert.equal(db.prepare('SELECT results_token FROM surveys').get().results_token, null);
+    db.prepare("INSERT INTO surveys (owner_id, public_token, title, fields_json) VALUES (1, 'tok2', 'Second', '[]')").run();
+    db.prepare("UPDATE surveys SET results_token = 'r1' WHERE id = 1").run();
+    assert.throws(() => db.prepare("UPDATE surveys SET results_token = 'r1' WHERE id = 2").run(), /UNIQUE/);
+    db.close();
+    const again = openDatabase(path); // a later boot keeps the link
+    assert.equal(again.prepare('SELECT results_token FROM surveys WHERE id = 1').get().results_token, 'r1');
+    again.close();
+  });
+});

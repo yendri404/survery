@@ -11,7 +11,49 @@ const QR_LABEL = 'QR code that opens this survey';
 
 const percent = (count, answered) => (answered ? Math.round((count / answered) * 100) : 0);
 
-const responseJson = (r) => ({ id: r.id, number: r.number, submittedAt: isoUtc(r.submittedAt), respondentName: r.respondentName, answers: r.answers });
+/** One response as the API sends it (creator and public results share this shape). */
+export const responseJson = (r) => ({ id: r.id, number: r.number, submittedAt: isoUtc(r.submittedAt), respondentName: r.respondentName, answers: r.answers });
+
+/** A new unguessable token for a survey link (answer link or public results link). */
+export const newSurveyToken = () => newToken(18);
+
+/**
+ * An address in the web client: WEB_BASE_URL when set, else the address the browser used (only
+ * through a trusted proxy). Share links, QR codes and results links all point there.
+ */
+export function webUrl(config, ctx, path) {
+  const base = config.webBaseUrl ?? (config.trustProxy ? forwardedOrigin(ctx.req) : undefined) ?? DEFAULT_WEB_BASE_URL;
+  return `${base}${path}`;
+}
+
+/** Key figures and chart data of a survey (`responses` newest first): the server counts, clients only draw. */
+export function summaryJson(survey, responses, today) {
+  const status = surveyStatus(survey, today);
+  const named = responses.filter((r) => r.respondentName).length;
+  return {
+    kpis: {
+      total: responses.length,
+      named,
+      anonymous: responses.length - named,
+      lastResponseAt: isoUtc(responses[0]?.submittedAt),
+      status,
+      closesOn: survey.closesOn,
+      // Whole days until the closing date while open (0 = last day); null when closed or expired.
+      daysLeft: status === 'open' ? daysBetween(today, survey.closesOn) : null,
+    },
+    questions: summarize(survey.fields, responses).map(({ field, answered, counts, scale }) => ({
+      fieldId: field.id,
+      label: field.label,
+      type: field.type,
+      // Checkbox answers can pick several options, so percentages may add up to more than 100.
+      multiple: field.type === 'checkbox',
+      answered,
+      counts: counts.map(({ option, count }) => ({ option, count, percent: percent(count, answered) })),
+      // Scale questions: { min, max, average, median, outOfRange }.
+      ...(scale ? { scale } : {}),
+    })),
+  };
+}
 
 /** Creator endpoints: every one needs a Bearer token and only sees the creator's own surveys. */
 export function registerSurveyRoutes({ route, repo, config, today, live }) {
@@ -25,14 +67,10 @@ export function registerSurveyRoutes({ route, repo, config, today, live }) {
     return survey;
   }
 
-  /**
-   * Respondents open surveys in the web client, so share links (and QR codes) point there:
-   * WEB_BASE_URL when set, else the address the browser used (only through a trusted proxy).
-   */
-  const shareUrl = (ctx, survey) => {
-    const base = config.webBaseUrl ?? (config.trustProxy ? forwardedOrigin(ctx.req) : undefined) ?? DEFAULT_WEB_BASE_URL;
-    return `${base}/s/${survey.publicToken}`;
-  };
+  /** Respondents open surveys in the web client, so share links (and QR codes) point there. */
+  const shareUrl = (ctx, survey) => webUrl(config, ctx, `/s/${survey.publicToken}`);
+  /** The public results page, or null while the results are private. */
+  const resultsUrl = (ctx, survey) => (survey.resultsToken ? webUrl(config, ctx, `/r/${survey.resultsToken}`) : null);
 
   function surveyJson(ctx, survey, { withFields = true } = {}) {
     return {
@@ -47,6 +85,8 @@ export function registerSurveyRoutes({ route, repo, config, today, live }) {
       responseCount: survey.responseCount ?? 0,
       publicToken: survey.publicToken,
       shareUrl: shareUrl(ctx, survey),
+      publicResults: Boolean(survey.resultsToken),
+      resultsUrl: resultsUrl(ctx, survey),
       createdAt: isoUtc(survey.createdAt),
       updatedAt: isoUtc(survey.updatedAt),
     };
@@ -83,7 +123,7 @@ export function registerSurveyRoutes({ route, repo, config, today, live }) {
 
   authed('POST', '/surveys', async (ctx) => {
     const value = await readDefinition(ctx);
-    const id = repo.createSurvey({ ownerId: ctx.user.id, publicToken: newToken(18), ...value });
+    const id = repo.createSurvey({ ownerId: ctx.user.id, publicToken: newSurveyToken(), ...value });
     live.surveyChanged({ id, ownerId: ctx.user.id });
     sendSurvey(ctx, 201, id);
   });
@@ -98,12 +138,23 @@ export function registerSurveyRoutes({ route, repo, config, today, live }) {
     sendSurvey(ctx, 200, survey.id);
   });
 
-  /** Opens or closes a survey: { "isOpen": true | false }. */
+  /**
+   * Changes a survey's state: { "isOpen"?: true | false, "publicResults"?: true | false }. A field left
+   * out keeps its value; isOpen is required when publicResults is left out (as before publicResults).
+   * publicResults: true keeps an existing results link or makes one; false deletes it for good, so
+   * turning it on again makes a new link.
+   */
   authed('PATCH', '/surveys/:id', async (ctx) => {
     const survey = ownedSurvey(ctx);
     const body = await readJson(ctx.req);
-    if (typeof body.isOpen !== 'boolean') throw validationFailed({ errors: [coded('validation.isOpenInvalid')] });
-    repo.setSurveyOpen(survey.id, ctx.user.id, body.isOpen);
+    const errors = [];
+    const setsOpen = body.isOpen !== undefined || body.publicResults === undefined;
+    if (setsOpen && typeof body.isOpen !== 'boolean') errors.push(coded('validation.isOpenInvalid'));
+    if (body.publicResults !== undefined && typeof body.publicResults !== 'boolean') errors.push(coded('validation.publicResultsInvalid'));
+    if (errors.length) throw validationFailed({ errors });
+    if (setsOpen) repo.setSurveyOpen(survey.id, ctx.user.id, body.isOpen);
+    if (body.publicResults === true && !survey.resultsToken) repo.setResultsToken(survey.id, ctx.user.id, newSurveyToken());
+    if (body.publicResults === false && survey.resultsToken) repo.setResultsToken(survey.id, ctx.user.id, null);
     live.surveyChanged(survey);
     sendSurvey(ctx, 200, survey.id);
   });
@@ -138,32 +189,7 @@ export function registerSurveyRoutes({ route, repo, config, today, live }) {
   /** Key figures and chart data: the server counts, clients only draw. */
   authed('GET', '/surveys/:id/summary', (ctx) => {
     const survey = ownedSurvey(ctx);
-    const responses = repo.listResponses(survey.id); // newest first
-    const status = surveyStatus(survey, today());
-    const named = responses.filter((r) => r.respondentName).length;
-    sendJson(ctx.res, 200, {
-      kpis: {
-        total: responses.length,
-        named,
-        anonymous: responses.length - named,
-        lastResponseAt: isoUtc(responses[0]?.submittedAt),
-        status,
-        closesOn: survey.closesOn,
-        // Whole days until the closing date while open (0 = last day); null when closed or expired.
-        daysLeft: status === 'open' ? daysBetween(today(), survey.closesOn) : null,
-      },
-      questions: summarize(survey.fields, responses).map(({ field, answered, counts, scale }) => ({
-        fieldId: field.id,
-        label: field.label,
-        type: field.type,
-        // Checkbox answers can pick several options, so percentages may add up to more than 100.
-        multiple: field.type === 'checkbox',
-        answered,
-        counts: counts.map(({ option, count }) => ({ option, count, percent: percent(count, answered) })),
-        // Scale questions: { min, max, average, median, outOfRange }.
-        ...(scale ? { scale } : {}),
-      })),
-    });
+    sendJson(ctx.res, 200, summaryJson(survey, repo.listResponses(survey.id), today()));
   });
 
   /** ?delimiter=comma|semicolon&lang=en|es (default: Accept-Language, then English). */

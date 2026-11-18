@@ -10,6 +10,7 @@ function hydrateSurvey(row) {
     isOpen: row.is_open === 1,
     closesOn: row.closes_on,
     requireName: row.require_name === 1,
+    resultsToken: row.results_token ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     responseCount: row.response_count ?? undefined,
@@ -79,6 +80,10 @@ export function createRepo(db) {
     getSurveyByToken(token) {
       return hydrateSurvey(q('SELECT * FROM surveys WHERE public_token = ?').get(token));
     },
+    /** The survey whose results are public under this results token; undefined when private or unknown. */
+    getSurveyByResultsToken(token) {
+      return hydrateSurvey(q('SELECT * FROM surveys WHERE results_token = ?').get(token));
+    },
     updateSurvey(id, ownerId, { title, description, closesOn, requireName = false, fields }) {
       q(`UPDATE surveys SET title = ?, description = ?, closes_on = ?, require_name = ?, fields_json = ?, updated_at = datetime('now')
          WHERE id = ? AND owner_id = ?`).run(title, description, closesOn, requireName ? 1 : 0, JSON.stringify(fields), id, ownerId);
@@ -86,6 +91,10 @@ export function createRepo(db) {
     setSurveyOpen(id, ownerId, isOpen) {
       q(`UPDATE surveys SET is_open = ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?`)
         .run(isOpen ? 1 : 0, id, ownerId);
+    },
+    /** Public results link: a token makes the results public, null makes them private again. */
+    setResultsToken(id, ownerId, token) {
+      q(`UPDATE surveys SET results_token = ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?`).run(token, id, ownerId);
     },
     deleteSurvey(id, ownerId) {
       q('DELETE FROM surveys WHERE id = ? AND owner_id = ?').run(id, ownerId);

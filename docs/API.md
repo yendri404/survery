@@ -20,8 +20,9 @@ The server lives in `api/` (`npm start` there, or `npm run start:api` at the rep
 6. [Results (creators)](#6-results-creators)
 7. [Live updates](#7-live-updates)
 8. [Answering (respondents)](#8-answering-respondents)
-9. [Configuration](#9-configuration)
-10. [Error code reference](#10-error-code-reference)
+9. [Public results](#9-public-results)
+10. [Configuration](#10-configuration)
+11. [Error code reference](#11-error-code-reference)
 
 ---
 
@@ -68,7 +69,7 @@ Every error has the same shape:
 | `fields` | 422 on register and on answers | One problem per input: register uses `name`, `email`, `password`, `confirm`; answers use the question id, plus `respondentName`. |
 | `errors` | 422 on survey definitions and other lists | Problems in the order the server found them. |
 
-Each entry of `fields` and `errors` is `{ code, params, message }`. The full list is in [section 10](#10-error-code-reference).
+Each entry of `fields` and `errors` is `{ code, params, message }`. The full list is in [section 11](#11-error-code-reference).
 
 ---
 
@@ -192,6 +193,8 @@ A creator only sees their own surveys: another creator's survey answers `404 not
   "responseCount": 3,
   "publicToken": "Xk2b9...",
   "shareUrl": "http://localhost:3000/s/Xk2b9...",
+  "publicResults": false,
+  "resultsUrl": null,
   "createdAt": "2026-11-17T10:00:00Z",
   "updatedAt": "2026-11-17T10:00:00Z"
 }
@@ -202,6 +205,8 @@ A creator only sees their own surveys: another creator's survey answers `404 not
 | `status` | `open` accepts answers; `closed` was closed by the creator; `expired` passed `closesOn`. A survey accepts answers during its whole closing day (server time). |
 | `requireName` | `true` when respondents must write their name to send an answer; `false` (the default) when the name is optional. |
 | `shareUrl` | Link for respondents, in the **web client**: `${WEB_BASE_URL}/s/<publicToken>`. Without `WEB_BASE_URL`, the base is the address the client used, from `X-Forwarded-Proto` + `X-Forwarded-Host` (only with `TRUST_PROXY`; the host must be `hostname[:port]`), else `http://localhost:3000`. |
+| `publicResults` | `true` while the results are public (see [Public results](#9-public-results)); `false` (the default) otherwise. |
+| `resultsUrl` | While `publicResults` is `true`: the public results page in the web client, `<base>/r/<resultsToken>`, with the same base as `shareUrl`. `null` while the results are private. |
 | `options` | Written by the creator for `select`, `radio`, `checkbox`; always `[]` for the others (`yesno` uses `yes` / `no`). |
 | `min`, `max` | Only on `scale` questions: the whole numbers at both ends of the slider (step 1). Other types never carry them. |
 
@@ -289,15 +294,23 @@ Questions without a (valid, unused) id get a new one.
 
 ### `PATCH /surveys/:id`
 
-Opens or closes the survey.
+Opens or closes the survey (`isOpen`), and/or makes its results public or private (`publicResults`,
+see [Public results](#9-public-results)). A field left out keeps its value; a body without
+`publicResults` must have `isOpen`. Both are booleans.
 
 ```json
 { "isOpen": false }
+{ "publicResults": true }
+{ "isOpen": true, "publicResults": false }
 ```
+
+`publicResults: true` keeps the current `resultsUrl`, or makes one; `false` deletes it for good (turning it on
+again makes a new link). Both notify the live streams of the survey.
 
 ```json
 200 { "survey": { "...": "status is now closed" } }
 422 { "error": { "code": "validation_failed", "message": "Some values are not valid.", "errors": [ { "code": "is_open_invalid", "params": {}, "message": "isOpen must be true or false." } ] } }
+422 { "error": { "code": "validation_failed", "message": "Some values are not valid.", "errors": [ { "code": "public_results_invalid", "params": {}, "message": "publicResults must be true or false." } ] } }
 ```
 
 ### `DELETE /surveys/:id`
@@ -419,6 +432,7 @@ Both need the Bearer header, so fetch them and show the result (for example as a
 |--------|------------|
 | `GET /surveys/events` | Any of the creator's surveys is created, edited, opened/closed, deleted, answered, or loses a response |
 | `GET /surveys/:id/events` | That survey changes in any of those ways |
+| `GET /public/results/:token/events` | The same as `GET /surveys/:id/events`, for a public results link (no token; see [Public results](#9-public-results)) |
 
 Server-Sent Events (`text/event-stream`). The token travels **only** in the `Authorization` header
 (a token in the URL is ignored), so read the stream with `fetch` and a body reader, not `EventSource`.
@@ -528,7 +542,53 @@ The server is the source of truth: clients may check the same rules first, but t
 
 ---
 
-## 9. Configuration
+## 9. Public results
+
+A creator can make a survey's results public: `PATCH /surveys/:id` with `{ "publicResults": true }` returns
+a `resultsUrl` (`<web base>/r/<resultsToken>`). Anyone with that link sees the same results as the creator,
+**including every answer and respondent names**, without an account. Results are private by default.
+`{ "publicResults": false }` deletes the token, so the old link answers 404 for good; turning it on again
+makes a new link. These endpoints are read-only: no other method exists under `/public/results/`.
+
+A private, revoked or unknown token answers:
+
+```json
+404 { "error": { "code": "not_found", "message": "These results are not public." } }
+```
+
+### `GET /public/results/:token`
+
+What a results page shows about the survey. Never the answer token, `shareUrl` or anything about the owner.
+
+```json
+200
+{ "survey": {
+  "title": "Team lunch", "description": "Internal", "closesOn": "2026-11-27", "status": "open", "requireName": false,
+  "fields": [ { "id": "3f9a0c1b2d4e", "label": "Department", "type": "radio", "required": true, "options": ["IT", "HR"] } ]
+} }
+```
+
+### `GET /public/results/:token/summary`
+
+Same body as [`GET /surveys/:id/summary`](#get-surveysidsummary).
+
+### `GET /public/results/:token/responses`
+
+Same body as [`GET /surveys/:id/responses`](#get-surveysidresponses), names included.
+
+```json
+200 { "responses": [ { "id": 12, "number": 3, "submittedAt": "2026-11-17T10:05:00Z", "respondentName": "Ana", "answers": { "3f9a0c1b2d4e": "IT" } } ] }
+```
+
+### `GET /public/results/:token/events`
+
+The same Server-Sent Events as `GET /surveys/:id/events` (see [Live updates](#7-live-updates)), without a token:
+`change` fires on new answers, edits, opening/closing, deleted responses, and when the creator makes the results
+private (re-fetching then answers 404).
+
+---
+
+## 10. Configuration
 
 Environment variables of the API process:
 
@@ -548,12 +608,12 @@ The database schema only grows (additive migrations run on every start), so data
 
 ---
 
-## 10. Error code reference
+## 11. Error code reference
 
 | Code | Status | Message (English) |
 |------|--------|-------------------|
 | `unauthorized` | 401 | Log in to continue. |
-| `not_found` | 404 | Not found. / Survey not found. / This survey does not exist. Check the link you received. |
+| `not_found` | 404 | Not found. / Survey not found. / This survey does not exist. Check the link you received. / These results are not public. |
 | `method_not_allowed` | 405 | Method not allowed. |
 | `malformed_url` | 400 | Malformed URL, or a request target that is not a plain path (absolute-form, `//host`, backslashes). |
 | `invalid_json` | 400 | The request body is not valid JSON. |
@@ -577,5 +637,5 @@ Validation codes (inside `fields` / `errors`): `name_invalid`, `email_invalid`, 
 `closing_date_invalid`, `closing_date_past`, `require_name_invalid`, `fields_invalid`, `fields_empty`, `fields_too_many`,
 `field_invalid`, `label_required`, `label_too_long`, `type_unknown`, `options_empty`, `options_too_many`,
 `option_too_long`, `option_duplicate`, `scale_bound_invalid`, `scale_order`, `scale_too_wide`,
-`label_duplicate`, `is_open_invalid`, `answers_invalid`, `respondent_name_required`, `respondent_name_too_long`, `required`, `invalid_option`,
+`label_duplicate`, `is_open_invalid`, `public_results_invalid`, `answers_invalid`, `respondent_name_required`, `respondent_name_too_long`, `required`, `invalid_option`,
 `too_long`, `invalid_number`, `invalid_email`, `invalid_date`, `invalid_scale_value`. Their English texts live in `api/locales/en.json`; the key-to-code table is `api/src/errors.js`.

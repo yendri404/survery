@@ -354,6 +354,104 @@ describe('results table', () => {
   });
 });
 
+describe('public results (read-only views)', () => {
+  // Just enough DOM for dom.js h()/s(): elements with attributes, properties, children and listeners.
+  class FakeNode {
+    constructor(tag) { this.tag = tag; this.attrs = {}; this.children = []; }
+    setAttribute(name, value) { this.attrs[name] = value; }
+    addEventListener(name, fn) { (this.listeners ??= {})[name] = fn; }
+    append(child) { this.children.push(child); }
+    get textContent() { return this.children.map((c) => (c instanceof FakeNode ? c.textContent : c.text ?? '')).join(''); }
+  }
+  const findAll = (node, pred, out = []) => {
+    if (Array.isArray(node)) {
+      for (const n of node) findAll(n, pred, out);
+    } else if (node instanceof FakeNode) {
+      if (pred(node)) out.push(node);
+      for (const child of node.children) findAll(child, pred, out);
+    }
+    return out;
+  };
+  const useFakeDom = (t) => {
+    const saved = { Node: globalThis.Node, SVGElement: globalThis.SVGElement, document: globalThis.document };
+    Object.assign(globalThis, {
+      Node: FakeNode,
+      SVGElement: class extends FakeNode {},
+      document: { createElement: (tag) => new FakeNode(tag), createElementNS: (_ns, tag) => new FakeNode(tag), createTextNode: (text) => ({ text }), createComment: () => ({ text: '' }) },
+    });
+    t.after(() => Object.assign(globalThis, saved));
+  };
+  const fields = [{ id: 'q1', label: 'Q', type: 'text' }];
+  const responses = [{ id: 41, number: 1, submittedAt: '2026-11-02T10:00:00Z', respondentName: 'Ana', answers: { q1: 'b' } }];
+
+  test('without a delete action the responses table has names but no delete buttons or actions column', async (t) => {
+    useFakeDom(t);
+    const { responsesTable } = await import('../public/js/components/results.js');
+    const i18n = createI18n('en', en, en);
+    const [, wrap] = responsesTable(fields, responses, i18n);
+    assert.equal(findAll(wrap, (n) => n.tag === 'button' || n.tag === 'form').length, 0);
+    assert.deepEqual(findAll(wrap, (n) => n.tag === 'th').map((th) => th.textContent), ['#', 'Sent', 'Name', 'Q']);
+    assert.deepEqual(findAll(wrap, (n) => n.tag === 'td').map((td) => td.textContent).slice(2), ['Ana', 'b']);
+    // The read-only empty state does not ask the viewer to share a link.
+    const [empty] = responsesTable(fields, [], i18n);
+    assert.equal(empty.textContent, en['results.noAnswers']);
+  });
+
+  test('read-only results content has figures, charts and answers but no export or delete controls', async (t) => {
+    useFakeDom(t);
+    const { resultsContent } = await import('../public/js/components/survey-detail.js');
+    const i18n = createI18n('en', en, en);
+    const summary = { kpis: { total: 1, named: 1, anonymous: 0, lastResponseAt: '2026-11-02T10:00:00Z', status: 'open', closesOn: '2026-12-01', daysLeft: 3 }, questions: [] };
+    const nodes = resultsContent({ survey: { fields }, summary, responses }, i18n);
+    assert.equal(findAll(nodes, (n) => n.tag === 'button' || n.tag === 'form').length, 0);
+    assert.equal(findAll(nodes, (n) => n.attrs.class === 'kpis').length, 1);
+    assert.equal(findAll(nodes, (n) => n.tag === 'table').length, 1);
+  });
+
+  test('public results panel: a switch, and the link with a copy button and a warning only while on', async (t) => {
+    useFakeDom(t);
+    const { publicResultsPanel } = await import('../public/js/components/survey-detail.js');
+    const toggled = [];
+    const copied = [];
+    const panel = (survey) => publicResultsPanel({ t: createI18n('en', en, en).t, survey, onToggle: (on) => toggled.push(on), onCopy: (_btn, input) => copied.push(input.value) });
+
+    const off = panel({ publicResults: false, resultsUrl: null });
+    const [offSwitch] = findAll(off, (n) => n.tag === 'input');
+    assert.equal(offSwitch.attrs.type, 'checkbox');
+    assert.ok(!offSwitch.checked);
+    assert.match(off.textContent, /Public results/);
+    assert.equal(findAll(off, (n) => n.tag === 'button').length, 0, 'no link to copy while off');
+    offSwitch.listeners.change({ currentTarget: { checked: true } });
+
+    const on = panel({ publicResults: true, resultsUrl: 'http://web.local/r/abc' });
+    const [onSwitch, link] = findAll(on, (n) => n.tag === 'input');
+    assert.equal(onSwitch.checked, true);
+    assert.equal(link.value, 'http://web.local/r/abc');
+    assert.equal(link.readOnly, true);
+    assert.match(on.textContent, /including every answer and the names/);
+    assert.match(on.textContent, /creates a new link/);
+    const [copy] = findAll(on, (n) => n.tag === 'button');
+    assert.equal(copy.textContent.trim(), 'Copy results link');
+    copy.listeners.click({ currentTarget: copy });
+    onSwitch.listeners.change({ currentTarget: { checked: false } });
+    assert.deepEqual(toggled, [true, false]);
+    assert.deepEqual(copied, ['http://web.local/r/abc']);
+  });
+
+  test('/r/<token> is a public route with its own not-found message', async (t) => {
+    useFakeDom(t);
+    const { matchRoute } = await import('../public/js/routes.js');
+    const match = matchRoute('/r/AbC_-9');
+    assert.equal(match.route.page.name, 'publicResultsPage');
+    assert.deepEqual(match.params, { token: 'AbC_-9' });
+    assert.ok(!match.route.auth);
+    assert.equal(match.route.errorKeys.not_found, 'results.notPublic');
+    assert.equal(en['results.notPublic'], 'These results are not public.');
+    assert.equal(es['results.notPublic'], 'Estos resultados no son públicos.');
+    assert.equal(matchRoute('/r/'), undefined);
+  });
+});
+
 describe('survey cards', () => {
   test('each card links to the survey and has Edit, Close or Reopen, and Delete for that survey', async (t) => {
     class Node {

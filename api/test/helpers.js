@@ -104,6 +104,23 @@ export async function openEvents(url, token) {
       received = '';
       return match;
     },
+    /** True when the server ends the stream within `ms` (whatever it still sends is collected). */
+    async ended(ms = 2000) {
+      const deadline = Date.now() + ms;
+      for (;;) {
+        const left = deadline - Date.now();
+        if (left <= 0) return false;
+        let timer;
+        const chunk = await Promise.race([
+          reader.read(),
+          new Promise((resolve) => { timer = setTimeout(() => resolve({ timeout: true }), left); }),
+        ]);
+        clearTimeout(timer);
+        if (chunk.timeout) return false;
+        if (chunk.done) return true;
+        received += decoder.decode(chunk.value, { stream: true });
+      }
+    },
     close: () => controller.abort(),
   };
 }

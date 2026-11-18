@@ -54,6 +54,31 @@ export function sharePanel({ t, shareUrl, statusNode, qrImage, canShare, onCopy,
         h('button', { type: 'button', class: 'secondary', onclick: onDownloadQr }, icon('download'), ` ${t('detail.qrDownload')}`))));
 }
 
+/**
+ * Public results switch. While on, the results link with a copy button and a warning: anyone with
+ * the link sees every answer and name. `onToggle(on)` gets the new state; `onCopy(button, input)`.
+ * `survey` is the creator's survey JSON ({ publicResults, resultsUrl }).
+ */
+export function publicResultsPanel({ t, survey, onToggle, onCopy }) {
+  const on = survey.publicResults && Boolean(survey.resultsUrl);
+  const toggle = h('input', { type: 'checkbox', checked: on, 'aria-describedby': 'public-results-warning', onchange: (e) => onToggle(e.currentTarget.checked) });
+  const linkInput = on ? h('input', { id: 'results-url', class: 'share-url', value: survey.resultsUrl, readOnly: true, 'aria-label': t('detail.resultsLinkLabel'), onfocus: (e) => e.currentTarget.select() }) : null;
+  const warning = t('detail.publicResultsWarning');
+  // data-on makes the two states differ for slot(), which compares attributes, not the checked property.
+  return h('section', { class: 'panel public-results', 'data-on': String(on) },
+    h('label', { class: 'choice switch' }, toggle,
+      h('span', {}, h('strong', {}, t('detail.publicResults')),
+        on ? null : h('span', { class: 'hint', id: 'public-results-warning' }, warning))),
+    on ? [
+      h('div', { id: 'public-results-warning' }, notice('alert', warning)),
+      linkInput,
+      h('div', { class: 'button-row' },
+        h('button', { type: 'button', 'data-copy': 'results-url', onclick: (e) => onCopy(e.currentTarget, linkInput) }, icon('copy'), ' ', h('span', {}, t('detail.copyResultsLink'))),
+        h('a', { class: 'button secondary', href: survey.resultsUrl, target: '_blank', rel: 'noopener' }, icon('open'), ` ${t('detail.openResults')}`)),
+      h('p', { class: 'hint' }, t('detail.publicResultsHint')),
+    ] : null);
+}
+
 /** Edit link, open/close (`toggleNode` is its current button) and delete. */
 export function managePanel({ t, editHref, toggleNode, onToggle, onDelete }) {
   const submitTo = (action) => (event) => {
@@ -72,11 +97,14 @@ export function managePanel({ t, editHref, toggleNode, onToggle, onDelete }) {
 
 // ---------- Results ----------
 
-/** Heading with the CSV exports, key figures, charts and the responses table. `onExport('semicolon' | 'comma')`. */
-export const resultsContent = ({ survey, summary, responses }, i18n, { onExport, onDeleteResponse }) => [
+/**
+ * Heading with the CSV exports, key figures, charts and the responses table. `onExport('semicolon' | 'comma')`.
+ * Without actions (public results) everything is read-only: no exports, no delete buttons.
+ */
+export const resultsContent = ({ survey, summary, responses }, i18n, { onExport, onDeleteResponse } = {}) => [
   h('div', { class: 'page-head' },
     h('h2', {}, i18n.t('detail.responses', { count: responses.length })),
-    h('div', { class: 'button-row' },
+    onExport && h('div', { class: 'button-row' },
       h('button', { type: 'button', class: 'secondary', onclick: () => onExport('semicolon') }, icon('download'), ` ${i18n.t('detail.exportExcel')}`),
       h('button', { type: 'button', class: 'secondary', onclick: () => onExport('comma') }, icon('download'), ` ${i18n.t('detail.exportCsv')}`))),
   kpiTiles(summary, i18n),

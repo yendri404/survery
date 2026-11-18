@@ -130,6 +130,7 @@ host: in Docker its port is not published, so only the web container can reach i
 - Every survey has a closing date (picked with a calendar; 10 days from creation by default). It accepts answers until the end of that day, server time.
 - Open/close a survey manually at any time.
 - Results update live while you watch: new answers appear without reloading the page.
+- Public results (off by default): the creator can turn on a results link so people without an account see the same results page, read-only, including every answer and respondent names. Turning it off makes the link stop working; turning it on again creates a new link.
 - Results page with key figures (responses, named vs anonymous, last response, days left), charts for choice questions (a donut for single choice, bars for multiple choice) and a histogram with the average and median for scale questions, the full results table, and deleting individual responses.
 - Phone-first layout; on wide screens (1100px and up) pages use two columns: results next to a sticky share panel, questions next to the survey settings.
 - Light and dark theme (follows the device setting until changed with the theme button).
@@ -198,7 +199,7 @@ api/                    REST API (package "sharevy-api", depends on qrcode)
     app.js              router, Bearer sessions, CORS, security headers, JSON errors
     config.js           environment variables -> config
     db.js               SQLite schema + additive migrations
-    routes/             meta, auth (creators), surveys (creator endpoints), public (respondents)
+    routes/             meta, auth (creators), surveys (creator endpoints), public (respondents), results (public results)
     surveys.js          domain rules: survey definition, answer validation, summary, CSV
     repo.js             SQLite queries
     errors.js           error codes and the JSON error shape
