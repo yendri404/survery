@@ -193,6 +193,36 @@ describe('admin: users and their surveys', () => {
     assert.equal((await a.request('/admin/users/999999', { method: 'DELETE' })).status, 404);
   });
 
+  test("editing a user's name and email: same rules as registration; they log in with the new email and stay logged in", async () => {
+    const user = await creator(app.base, 'rename@corp.local');
+    await creator(app.base, 'taken@corp.local');
+    const userId = (await user.request('/me')).json.user.id;
+    const edit = (body) => a.request(`/admin/users/${userId}`, { method: 'PATCH', body });
+
+    const both = await edit({ name: '  Ana María  ', email: 'ana.maria@corp.local' });
+    assert.equal(both.status, 200, both.text);
+    assert.deepEqual([both.json.user.name, both.json.user.email, both.json.user.surveyCount], ['Ana María', 'ana.maria@corp.local', 0]);
+    assert.equal((await user.request('/me')).json.user.email, 'ana.maria@corp.local', 'sessions stay open');
+    assert.equal((await new Client(app.base).login('ana.maria@corp.local')).status, 200);
+    assert.equal((await new Client(app.base).login('rename@corp.local')).status, 401);
+
+    // Only the field sent changes; their own address in other letter case is not "taken".
+    assert.equal((await edit({ name: 'Ana' })).json.user.email, 'ana.maria@corp.local');
+    assert.equal((await edit({ email: 'ANA.MARIA@corp.local' })).status, 200);
+
+    const taken = await edit({ email: 'Taken@corp.local' });
+    assert.equal(taken.status, 422);
+    assert.equal(taken.json.error.fields.email.code, 'email_taken');
+    const invalid = await edit({ name: ' ', email: 'not-an-email' });
+    assert.equal(invalid.status, 422);
+    assert.deepEqual([invalid.json.error.fields.name.code, invalid.json.error.fields.email.code], ['name_invalid', 'email_invalid']);
+    assert.equal((await edit({ name: 'x'.repeat(101) })).json.error.fields.name.code, 'name_invalid');
+    assert.equal((await user.request('/me')).json.user.name, 'Ana', 'nothing changes when something is invalid');
+
+    assert.equal((await a.request('/admin/users/999999', { method: 'PATCH', body: { name: 'Nobody' } })).status, 404);
+    assert.equal((await user.request(`/admin/users/${userId}`, { method: 'PATCH', body: { name: 'Me' } })).status, 401, 'creators cannot use it');
+  });
+
   test("setting a user's password ends their sessions and lets them log in with the new one", async () => {
     const user = await creator(app.base, 'forgot@corp.local');
     const userId = (await user.request('/me')).json.user.id;

@@ -49,6 +49,10 @@ export function createRepo(db) {
         FROM users u ORDER BY u.created_at DESC, u.id DESC
       `).all();
     },
+    /** New name and email (both given; the caller keeps the current one for a field left out). */
+    updateUser(id, { name, email }) {
+      q('UPDATE users SET name = ?, email = ? WHERE id = ?').run(name, email, id);
+    },
     /** Sets a new password and ends every session of that user. */
     setUserPassword(id, passwordHash) {
       q('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, id);

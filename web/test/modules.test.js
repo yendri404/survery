@@ -871,7 +871,7 @@ describe('admin panel (/..command/)', () => {
     assert.equal(en['admin.loginFun'], "You shouldn't be here, but if you know what you're doing...");
   });
 
-  test('user cards: name, email and survey count; the selected one is marked; delete and set password call back', async (t) => {
+  test('user cards: name, email and survey count; the selected one is marked; a drop-down edits name, email and password; delete calls back', async (t) => {
     useFakeDom(t);
     const { adminUserCards } = await import('../public/js/components/admin.js');
     const users = [
@@ -880,23 +880,38 @@ describe('admin panel (/..command/)', () => {
     ];
     const deleted = [];
     const passwords = [];
-    const list = adminUserCards(users, i18n, { selectedId: 9, onDelete: (u) => deleted.push(u.id), onSetPassword: (u, value) => passwords.push([u.id, value]) });
+    const saved = [];
+    const list = adminUserCards(users, i18n, {
+      selectedId: 9,
+      onDelete: (u) => deleted.push(u.id),
+      onSetPassword: (u, value) => passwords.push([u.id, value]),
+      onSaveUser: (u, values) => saved.push([u.id, values]),
+    });
     const links = findAll(list, (n) => n.tag === 'a');
     assert.deepEqual(links.map((a) => a.attrs.href), ['/..command/?user=7', '/..command/?user=9']);
     assert.deepEqual(links.map((a) => a.attrs['aria-current']), [undefined, 'true']);
     assert.match(links[0].textContent, /Ana.*ana@corp\.local.*2 surveys/);
     assert.match(links[1].textContent, /No surveys/);
     const deletes = findAll(list, (n) => n.tag === 'button' && /^Delete the user /.test(n.attrs['aria-label']));
-    assert.deepEqual(findAll(list, (n) => n.tag === 'summary').map((n) => n.attrs['aria-label']), ['Change the password of Ana', 'Change the password of Luis']);
     assert.equal(deletes.length, 2);
     deletes[0].listeners.click();
     assert.deepEqual(deleted, [7]);
-    const [form] = findAll(list, (n) => n.tag === 'form');
-    const [input] = findAll(form, (n) => n.tag === 'input');
-    assert.equal(input.attrs.type, 'password');
-    assert.equal(input.attrs.minlength, '8');
-    input.value = 'new-secret-1';
-    form.listeners.submit({ preventDefault() {}, currentTarget: form });
+
+    // One drop-down menu per card (an icon button), floating over the grid: name and email, then the password.
+    const menus = findAll(list, (n) => n.tag === 'details');
+    assert.deepEqual(menus.map((m) => m.attrs.class), ['admin-user-menu', 'admin-user-menu']);
+    assert.deepEqual(findAll(list, (n) => n.tag === 'summary').map((n) => n.attrs['aria-label']), ['Edit Ana', 'Edit Luis']);
+    const [profile, password] = findAll(menus[0], (n) => n.tag === 'form');
+    const [name, email] = findAll(profile, (n) => n.tag === 'input');
+    assert.deepEqual([name.value, email.value, email.attrs.type, name.attrs.maxlength], ['Ana', 'ana@corp.local', 'email', '100']);
+    name.value = 'Ana María';
+    email.value = 'ana.maria@corp.local';
+    profile.listeners.submit({ preventDefault() {}, currentTarget: profile });
+    assert.deepEqual(saved, [[7, { name: 'Ana María', email: 'ana.maria@corp.local' }]]);
+    const [secret] = findAll(password, (n) => n.tag === 'input');
+    assert.deepEqual([secret.attrs.type, secret.attrs.minlength], ['password', '8']);
+    secret.value = 'new-secret-1';
+    password.listeners.submit({ preventDefault() {}, currentTarget: password });
     assert.deepEqual(passwords, [[7, 'new-secret-1']]);
     assert.equal(adminUserCards([], i18n, {}).textContent, en['admin.noUsers']);
   });

@@ -8,24 +8,46 @@ export const adminLoginIntroKey = (status) => (status?.fun === true ? 'admin.log
 /** The admin page's address, optionally with a user selected (`?user=<id>`). */
 export const adminHref = (userId) => (userId ? `/..command/?user=${userId}` : '/..command/');
 
+/** A form that calls `onSubmit(form)` instead of sending itself. */
+const callbackForm = (attrs, onSubmit, ...children) => h('form', {
+  ...attrs,
+  onsubmit: (event) => {
+    event.preventDefault();
+    onSubmit(event.currentTarget);
+  },
+}, ...children);
+
+/**
+ * The drop-down of one user card: name and email (`onSaveUser(user, { name, email }, form)`), then a
+ * new password (`onSetPassword(user, password, form)`). It floats over the grid (CSS), so opening it
+ * never changes the size of the squares; the container shows API problems inside the form.
+ */
+function userMenu(user, t, { onSaveUser, onSetPassword }) {
+  const name = h('input', { name: 'name', value: user.name, required: true, maxlength: 100, autocomplete: 'off' });
+  const email = h('input', { type: 'email', name: 'email', value: user.email, required: true, maxlength: 254, autocomplete: 'off' });
+  const password = h('input', { type: 'password', name: 'password', required: true, minlength: 8, maxlength: 200, autocomplete: 'new-password' });
+  const label = t('admin.editUser', { name: user.name });
+  return h('details', { class: 'admin-user-menu' },
+    h('summary', { class: 'button icon-button', 'aria-label': label, title: label }, icon('edit')),
+    h('div', { class: 'admin-user-panel' },
+      callbackForm({ class: 'stack' }, (form) => onSaveUser?.(user, { name: name.value, email: email.value }, form),
+        h('label', {}, `${t('admin.name')} `, name),
+        h('label', {}, `${t('admin.email')} `, email),
+        h('button', { type: 'submit' }, t('admin.saveUser'))),
+      callbackForm({ class: 'stack' }, (form) => onSetPassword?.(user, password.value, form),
+        h('label', {}, `${t('admin.newPassword')} `, password),
+        h('button', { type: 'submit', class: 'secondary' }, t('admin.setPassword')))));
+}
+
 /**
  * Presentational: every user as a square card. The card opens that user's surveys in the second
- * column (`?user=<id>`, marked with aria-current); below it, Delete (`onDelete(user)`, the container
- * confirms) and a small form to set a new password (`onSetPassword(user, password, form)`).
+ * column (`?user=<id>`, marked with aria-current); below it, a drop-down to edit name, email and
+ * password (userMenu) and Delete (`onDelete(user)`, the container confirms).
  */
-export function adminUserCards(users, i18n, { selectedId, onDelete, onSetPassword } = {}) {
+export function adminUserCards(users, i18n, { selectedId, onDelete, onSetPassword, onSaveUser } = {}) {
   const { t, tn } = i18n;
   if (!users.length) return emptyState(t('admin.noUsers'));
   return h('ul', { class: 'admin-users' }, users.map((user) => {
-    const password = h('input', { type: 'password', name: 'password', required: true, minlength: 8, maxlength: 200, autocomplete: 'new-password', 'aria-label': t('admin.newPasswordFor', { name: user.name }) });
-    const passwordForm = h('form', {
-      class: 'admin-password',
-      onsubmit: (event) => {
-        event.preventDefault();
-        onSetPassword?.(user, password.value, event.currentTarget);
-      },
-    }, password, h('button', { type: 'submit', class: 'secondary' }, t('admin.setPassword')));
-    const changeLabel = t('admin.changePasswordOf', { name: user.name });
     const deleteLabel = t('admin.deleteUser', { name: user.name });
     // Icon buttons keep the square small; their names are in aria-label and in the tooltip.
     return h('li', {},
@@ -35,9 +57,7 @@ export function adminUserCards(users, i18n, { selectedId, onDelete, onSetPasswor
           h('span', { class: 'admin-email' }, user.email),
           h('span', { class: 'muted' }, user.surveyCount ? tn('admin.surveys', user.surveyCount) : t('admin.noSurveysShort'))),
         h('div', { class: 'admin-user-actions' },
-          h('details', { class: 'admin-user-tools' },
-            h('summary', { class: 'button icon-button', 'aria-label': changeLabel, title: changeLabel }, icon('key')),
-            passwordForm),
+          userMenu(user, t, { onSaveUser, onSetPassword }),
           h('button', { type: 'button', class: 'icon-button danger', 'aria-label': deleteLabel, title: deleteLabel, onclick: () => onDelete?.(user) },
             icon('trash')))));
   }));

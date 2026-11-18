@@ -18,6 +18,7 @@ const FLASH_MESSAGES = {
   deleted: 'flash.deleted',
   'user-deleted': 'admin.userDeleted',
   'password-set': 'admin.passwordSet',
+  'user-saved': 'admin.userSaved',
 };
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -183,13 +184,14 @@ export async function startApp() {
     }));
   }
 
-  // Language menu: close it on a click outside or on Escape, like other menus.
+  // Drop-down menus (language, admin user menus): close on a click outside or on Escape, like other menus.
+  const OPEN_MENUS = '[data-lang-menu][open], .admin-user-menu[open]';
   document.addEventListener('click', (event) => {
-    for (const menu of document.querySelectorAll('[data-lang-menu][open]')) if (!menu.contains(event.target)) menu.open = false;
+    for (const menu of document.querySelectorAll(OPEN_MENUS)) if (!menu.contains(event.target)) menu.open = false;
   });
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
-    for (const menu of document.querySelectorAll('[data-lang-menu][open]')) {
+    for (const menu of document.querySelectorAll(OPEN_MENUS)) {
       menu.open = false;
       menu.querySelector('summary').focus();
     }

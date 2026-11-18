@@ -123,7 +123,22 @@ export async function adminPage(app, { query, signal }) {
     if (!window.confirm(t('admin.deleteUserConfirm', { name: user.name, email: user.email }))) return;
     act(() => app.adminApi.del(`/admin/users/${user.id}`), withMsg(adminHref(user.id === selected?.id ? null : selected?.id), 'user-deleted'))();
   };
-  const onSetPassword = (user, password) => act(() => app.adminApi.put(`/admin/users/${user.id}/password`, { password }), withMsg(here, 'password-set'))();
+  /** Saves from a user's drop-down; API problems (email taken...) show inside that form, which stays open. */
+  const fromMenu = (form, action, msg) => async () => {
+    const submit = form.querySelector('[type="submit"]');
+    submit.disabled = true;
+    try {
+      await action();
+      await app.navigate(withMsg(here, msg), { replace: true });
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) return; // back to the login already
+      setErrorBox(form, errorList(problems(app, err)));
+    } finally {
+      submit.disabled = false;
+    }
+  };
+  const onSetPassword = (user, password, form) => fromMenu(form, () => app.adminApi.put(`/admin/users/${user.id}/password`, { password }), 'password-set')();
+  const onSaveUser = (user, values, form) => fromMenu(form, () => app.adminApi.patch(`/admin/users/${user.id}`, values), 'user-saved')();
   const onToggle = (survey) => act(() => app.adminApi.patch(`/admin/surveys/${survey.id}`, { isOpen: !survey.isOpen }), withMsg(here, survey.isOpen ? 'closed' : 'opened'))();
   const onDeleteSurvey = (survey) => {
     if (!window.confirm(t('list.deleteConfirm', { title: survey.title }))) return;
@@ -144,7 +159,7 @@ export async function adminPage(app, { query, signal }) {
       h('div', { class: 'admin-layout' },
         h('section', { class: 'admin-col', 'aria-labelledby': 'admin-users-heading' },
           h('h2', { id: 'admin-users-heading' }, icon('user'), ` ${t('admin.users')}`),
-          adminUserCards(users, app.i18n, { selectedId: selected?.id, onDelete: onDeleteUser, onSetPassword })),
+          adminUserCards(users, app.i18n, { selectedId: selected?.id, onDelete: onDeleteUser, onSetPassword, onSaveUser })),
         h('section', { class: 'admin-col', id: 'admin-surveys', 'aria-labelledby': 'admin-surveys-heading' },
           h('h2', { id: 'admin-surveys-heading' }, selected ? t('admin.surveysOf', { name: selected.name }) : t('admin.surveysHeading')),
           selected ? adminSurveyCards(surveys, app.i18n, { onToggle, onDelete: onDeleteSurvey }) : emptyState(t('admin.pickUser')))),

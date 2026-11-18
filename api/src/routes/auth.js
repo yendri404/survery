@@ -7,6 +7,11 @@ import { isEmail } from '../surveys.js';
 const text = (value) => (typeof value === 'string' ? value : '');
 const publicUser = (user) => ({ id: user.id, name: user.name, email: user.email });
 
+/** Account name rule (trimmed): 1 to 100 characters. The problem, or undefined. Shared with the admin panel. */
+export const nameProblem = (name) => (!name || name.length > 100 ? coded('register.nameInvalid') : undefined);
+/** Account email rule (trimmed): an address. The problem, or undefined. Shared with the admin panel. */
+export const emailProblem = (email) => (isEmail(email) ? undefined : coded('register.emailInvalid'));
+
 /** Creator accounts: register, log in and out with Bearer tokens, and who am I. */
 export function registerAuthRoutes({ route, repo, config }) {
   // Keyed by email+IP so an attacker cannot lock a colleague out from another machine.
@@ -46,8 +51,8 @@ export function registerAuthRoutes({ route, repo, config }) {
     const password = text(body.password);
     const fields = {};
 
-    if (!values.name || values.name.length > 100) fields.name = coded('register.nameInvalid');
-    if (!isEmail(values.email)) fields.email = coded('register.emailInvalid');
+    if (nameProblem(values.name)) fields.name = nameProblem(values.name);
+    if (emailProblem(values.email)) fields.email = emailProblem(values.email);
     if (password.length < 8 || password.length > 200) fields.password = coded('register.passwordLength');
     // The confirmation is optional for API clients; when sent, it must match.
     if (body.confirm !== undefined && password !== text(body.confirm)) fields.confirm = coded('register.passwordMismatch');

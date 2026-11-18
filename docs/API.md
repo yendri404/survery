@@ -630,6 +630,13 @@ Ends the admin token sent, if any. Always `204`.
 
 `200 { "users": [{ "id", "name", "email", "createdAt", "surveyCount" }] }`, newest first.
 
+### `PATCH /admin/users/:id`
+
+Body `{ "name"?: "...", "email"?: "..." }`: a field left out keeps its value → `200 { "user": { "id", "name", "email",
+"createdAt", "surveyCount" } }`. Same rules as `POST /auth/register` (trimmed): `422` with `fields.name` `name_invalid`
+(not 1 to 100 characters), `fields.email` `email_invalid` or `email_taken` (another account uses it, ignoring case).
+Nothing changes when something is invalid. The user's sessions stay open; they log in with the new email.
+
 ### `PUT /admin/users/:id/password`
 
 Body `{ "password": "..." }` (8 to 200 characters, like registration; else `422` with `fields.password`

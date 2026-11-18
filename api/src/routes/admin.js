@@ -2,6 +2,7 @@ import { DUMMY_HASH, hashPassword, hashToken, newToken, verifyPassword } from '.
 import { ApiError, coded, tooManyRequests, validationFailed } from '../errors.js';
 import { bearerToken, isoUtc, readJson, sendJson, sendNoContent } from '../http.js';
 import { clientIp, createRateLimiter } from '../rate-limit.js';
+import { emailProblem, nameProblem } from './auth.js';
 import { surveyTools } from './surveys.js';
 
 const text = (value) => (typeof value === 'string' ? value : '');
@@ -80,9 +81,37 @@ export function registerAdminRoutes({ route, repo, config, today, live }) {
     return user;
   }
 
-  guarded('GET', '/admin/users', (ctx) => {
-    const users = repo.listUsers().map((u) => ({ id: u.id, name: u.name, email: u.email, createdAt: isoUtc(u.created_at), surveyCount: u.survey_count }));
-    sendJson(ctx.res, 200, { users });
+  const userJson = (u) => ({ id: u.id, name: u.name, email: u.email, createdAt: isoUtc(u.created_at), surveyCount: u.survey_count });
+
+  guarded('GET', '/admin/users', (ctx) => sendJson(ctx.res, 200, { users: repo.listUsers().map(userJson) }));
+
+  /**
+   * Edits a user's name and/or email ({ name?, email? }; a field left out keeps its value) with the
+   * registration rules: name 1-100 characters, a valid email not used by another account. Their
+   * sessions stay open; they log in with the new email from now on.
+   */
+  guarded('PATCH', '/admin/users/:id', async (ctx) => {
+    const user = userParam(ctx);
+    const body = await readJson(ctx.req);
+    const values = {
+      name: body.name === undefined ? user.name : text(body.name).trim(),
+      email: body.email === undefined ? user.email : text(body.email).trim(),
+    };
+    const fields = {};
+    if (nameProblem(values.name)) fields.name = nameProblem(values.name);
+    if (emailProblem(values.email)) fields.email = emailProblem(values.email);
+    // The same address in other letter case is still theirs (emails compare without case).
+    const owner = fields.email ? undefined : repo.findUserByEmail(values.email);
+    if (owner && owner.id !== user.id) fields.email = coded('register.emailTaken');
+    if (Object.keys(fields).length) throw validationFailed({ fields });
+    try {
+      repo.updateUser(user.id, values);
+    } catch (err) {
+      // Another request took the address meanwhile (unique index): same answer as above.
+      if (/UNIQUE constraint failed: users\.email/.test(err.message)) throw validationFailed({ fields: { email: coded('register.emailTaken') } });
+      throw err;
+    }
+    sendJson(ctx.res, 200, { user: userJson(repo.listUsers().find((u) => u.id === user.id)) });
   });
 
   /** Sets a new password for a user (8 to 200 characters, like registration) and ends their sessions. */

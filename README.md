@@ -139,7 +139,7 @@ host: in Docker its port is not published, so only the web container can reach i
 - Short, sober animations (page fades, a light entrance for cards and charts, a check mark that draws itself after answering); turned off when the device asks for reduced motion.
 - English, Spanish and Portuguese (Brazil) interface, chosen from the language menu next to the theme button (see [Languages](#languages)).
 - QR code of the share link on every survey, downloadable as PNG to print or send.
-- Admin panel at `/..command/` (see [Admin panel](#admin-panel)): one master password per instance; manage every user (change password, delete) and their surveys (edit, close/reopen, delete).
+- Admin panel at `/..command/` (see [Admin panel](#admin-panel)): one master password per instance; manage every user (edit name and email, change password, delete) and their surveys (edit, close/reopen, delete).
 - CSV export: one button; the file is named after the survey and uses `;` only when some number answer has decimals (`,` otherwise). UTF-8 with BOM, headers in the creator's interface language, times in the viewer's time zone.
 
 ## Admin panel
@@ -147,7 +147,7 @@ host: in Docker its port is not published, so only the web container can reach i
 `/..command/` is the instance's admin panel. Nothing links to it: type the address.
 
 - **First visit:** the page asks to create the **master password** (12 to 200 characters). There is only one per instance, and **the first person to open the page creates it**. On a public server (Railway...), open it right after deploying.
-- **Then:** the page asks for that password. Inside, the left column shows every user as a small card (change their password, delete them with all their surveys); click one to see their surveys on the right (edit, open the form, close/reopen, delete).
+- **Then:** the page asks for that password. Inside, the left column shows every user as a small card (a drop-down menu edits their name, email and password; delete removes them with all their surveys); click one to see their surveys on the right (edit, open the form, close/reopen, delete).
 - **Admin sessions** last 8 hours and only for that browser tab. "Leave the panel" ends them.
 - **Changing or recovering the master password** is not possible from the web, on purpose. Delete it in the database; the next visit to `/..command/` creates a new one, and every open admin session ends:
 

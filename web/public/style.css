@@ -290,12 +290,19 @@ button:disabled { opacity: .35; cursor: not-allowed; }
 .admin-user.is-selected { border-color: var(--brand-text); border-top-color: var(--brand); background: var(--brand-soft); box-shadow: 0 0 0 1px var(--brand-text); }
 .admin-email { display: block; font-size: .8rem; overflow-wrap: anywhere; }
 .admin-user-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .4rem; margin-top: .6rem; padding-top: .6rem; border-top: 1px solid var(--border); }
-.admin-user-tools > summary { list-style: none; }
-.admin-user-tools > summary::-webkit-details-marker { display: none; }
-.admin-user-tools[open] { order: 1; flex-basis: 100%; }
-.admin-user-tools[open] > summary { background: var(--brand-soft); border-color: var(--brand-text); }
-.admin-password { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }
-.admin-password input, .admin-password button { flex: 1 1 100%; min-width: 0; }
+/* An open drop-down can make the page taller; reserving the scroll bar's room keeps the cards still. */
+html:has(.admin-layout) { scrollbar-gutter: stable; }
+/* The grid (not the card) holds the drop-down, so it is as wide as the users column. */
+.admin-users { position: relative; }
+.admin-user-menu > summary { list-style: none; }
+.admin-user-menu > summary::-webkit-details-marker { display: none; }
+.admin-user-menu[open] > summary { background: var(--brand-soft); border-color: var(--brand-text); }
+/* The drop-down floats right under its edit button (top: auto keeps that place), across the whole
+   users column and over the cards below, so the squares never change size. */
+.admin-user-panel { position: absolute; left: 0; right: 0; margin-top: .4rem; z-index: 5; display: grid; gap: .9rem; padding: .85rem; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: 0 4px 14px var(--shadow); }
+.admin-user-panel form + form { padding-top: .9rem; border-top: 1px solid var(--border); }
+.admin-user-panel label { font-size: .85rem; }
+.admin-user-panel input { min-width: 0; }
 @media (min-width: 800px) {
   .admin-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 }
