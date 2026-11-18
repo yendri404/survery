@@ -171,21 +171,25 @@ function watchSize(nodes, sync, signal) {
 }
 
 /**
- * Where the table's scroll bar goes (`top`, in the table box's coordinates): under the header
- * (`resting`) while that is in the window; once the header scrolls away, at the window's top edge
- * (`viewportTop`), so it follows the reader down; never below `last`, the end of the table.
+ * Margins that put the sticky scroll bar (`barHeight` tall) at the bottom of the table's header
+ * (`headHeight` tall, with room left for the bar), 1px above its bottom border, and pull the table
+ * back up so it keeps its place: `bar` above the bar, `box` above the table.
  */
-export const scrollbarTop = ({ resting, viewportTop, last }) => Math.min(Math.max(resting, viewportTop), last);
+export const scrollbarMargins = (headHeight, barHeight) => {
+  const bar = Math.max(0, Math.round(headHeight) - barHeight - 1);
+  return { bar, box: -(bar + barHeight) };
+};
 
 /**
  * The table in its horizontal scroll box. Its own scroll bar is hidden and replaced by an accent
- * bar under the header row that follows the reader down the table (scrollbarTop), plus a hint;
- * both only while the table overflows. Phones show cards instead (CSS), which never scroll sideways.
+ * bar at the bottom of the header row that follows the reader down the table (CSS sticky), plus a
+ * hint; both only while the table overflows. Phones show cards instead (CSS), which never scroll sideways.
  */
 function scrollableTable(table, t, signal) {
   // The table scrolls inside `box` (focusable, so arrow keys scroll it too). Its own scroll bar is
-  // hidden and replaced by `bar`: a thick accent-colored bar placed right under the header row, a
-  // copy that moves the table and follows it. Both appear only while the table overflows.
+  // hidden and replaced by `bar`: a thick accent-colored copy that moves the table and follows it.
+  // `bar` comes before `box` and is sticky, so the browser itself keeps it at the top of the window
+  // while the table passes under it (no scroll handler, no lag) and stops it at the table's end.
   const box = h('div', { class: 'table-wrap', tabindex: 0, role: 'region', 'aria-label': t('detail.allAnswers') }, table);
   const size = h('div', { class: 'table-scrollbar-size' });
   const bar = h('div', { class: 'table-scrollbar', hidden: true, 'aria-hidden': 'true' }, size);
@@ -195,20 +199,6 @@ function scrollableTable(table, t, signal) {
   const follow = (from, to) => { if (Math.abs(to.scrollLeft - from.scrollLeft) > 0.5) to.scrollLeft = from.scrollLeft; };
   bar.addEventListener('scroll', () => follow(bar, box), { passive: true });
   box.addEventListener('scroll', () => follow(box, bar), { passive: true });
-  // The bar is drawn 17px above its `top` (CSS margin) and is 16px tall.
-  const BAR_OFFSET = 17;
-  const place = () => {
-    if (bar.hidden) return;
-    const head = table.querySelector('thead');
-    const top = scrollbarTop({
-      resting: box.offsetTop + (head ? head.offsetHeight : 0),
-      viewportTop: BAR_OFFSET - scroller.getBoundingClientRect().top,
-      last: box.offsetTop + box.offsetHeight - 16 + BAR_OFFSET,
-    });
-    // CSSOM writes (not style attributes), which the strict CSP allows.
-    bar.style.top = `${Math.round(top)}px`;
-    bar.classList.toggle('is-floating', top > box.offsetTop + (head ? head.offsetHeight : 0));
-  };
   const sync = () => {
     const overflows = box.scrollWidth - box.clientWidth > 1;
     bar.hidden = !overflows;
@@ -216,31 +206,15 @@ function scrollableTable(table, t, signal) {
     scroller.classList.toggle('has-scrollbar', overflows);
     if (!overflows) return;
     size.style.width = `${box.scrollWidth}px`;
-    place();
+    // Resting place: the bottom of the header (its height changes with the window width).
+    // CSSOM writes (not style attributes), which the strict CSP allows.
+    const head = table.querySelector('thead');
+    const margins = scrollbarMargins(head ? head.offsetHeight : 0, bar.offsetHeight);
+    bar.style.marginTop = `${margins.bar}px`;
+    box.style.marginTop = `${margins.box}px`;
     follow(box, bar);
   };
   watchSize([box, table], sync, signal);
-  // Follow the page as it scrolls down (once per frame). The listener goes away when the page is
-  // left (its signal) or when a live refresh replaces this table (no longer in the document).
-  if (typeof window !== 'undefined' && !signal?.aborted) {
-    const listening = new AbortController();
-    signal?.addEventListener('abort', () => listening.abort(), { once: true });
-    let queued = false;
-    let shown = false;
-    window.addEventListener('scroll', () => {
-      if (queued) return;
-      queued = true;
-      requestAnimationFrame(() => {
-        queued = false;
-        if (!scroller.isConnected) {
-          if (shown) listening.abort();
-          return;
-        }
-        shown = true;
-        place();
-      });
-    }, { passive: true, signal: listening.signal });
-  }
   return scroller;
 }
 

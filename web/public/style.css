@@ -422,20 +422,23 @@ td { font-variant-numeric: tabular-nums; }
   .cards { grid-template-columns: repeat(2, 1fr); }
   .hbars li { grid-template-columns: minmax(8rem, 30%) 1fr auto; }
   .bar-label { grid-column: auto; }
-  .table-wrap { overflow-x: auto; }
+  /* Positioned so it also clips absolute children (the header's visually hidden "Actions" label),
+     which would otherwise stretch the whole page sideways. */
+  .table-wrap { overflow-x: auto; position: relative; }
   /* Answers table scroll bar: under the header row, thick and in the accent color so it is noticed
      at once (the table's own bar is hidden; wheel, touchpad and arrow keys keep working). */
-  .table-scroller { position: relative; }
-  .table-scroller.has-scrollbar .responses-table thead th { padding-bottom: calc(.55rem + 18px); }
+  /* Flex column: the margins JS sets on the bar and the table never collapse with the hint's. */
+  .table-scroller { display: flex; flex-direction: column; }
+  .table-scroller.has-scrollbar .responses-table thead th { padding-bottom: calc(.55rem + 24px); }
   .table-scroller.has-scrollbar .table-wrap { scrollbar-width: none; }
   .table-scroller.has-scrollbar .table-wrap::-webkit-scrollbar { display: none; }
   .table-scrollbar { display: block; }
   .table-scrollbar[hidden] { display: none; }
-  .table-scrollbar { position: absolute; left: 1px; right: 1px; z-index: 4; height: 16px; margin-top: -17px; overflow-x: auto; overflow-y: hidden; background: var(--surface-alt); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  /* Sticky: rests at the bottom of the header (margins set by JS), then stays at the top of the
+     window while the rows pass under it (the shadow separates them) and stops at the table's end. */
+  .table-scrollbar { position: sticky; top: 0; z-index: 4; flex: none; height: 22px; margin: 0 1px; overflow-x: auto; overflow-y: hidden; background: var(--surface-alt); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); box-shadow: 0 2px 6px var(--shadow); }
   .table-scrollbar-size { height: 1px; }
-  /* Following the reader down the table: a shadow separates it from the rows passing under it. */
-  .table-scrollbar.is-floating { box-shadow: 0 2px 6px var(--shadow); }
-  .table-scrollbar::-webkit-scrollbar { height: 14px; }
+  .table-scrollbar::-webkit-scrollbar { height: 20px; }
   .table-scrollbar::-webkit-scrollbar-track { background: var(--surface-alt); }
   .table-scrollbar::-webkit-scrollbar-thumb { background: var(--accent); border: 2px solid var(--surface-alt); }
   .table-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--accent-dark); }

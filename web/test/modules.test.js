@@ -680,12 +680,13 @@ describe('answers views (table or by question)', () => {
     assert.equal(findAll(empty, (n) => n.attrs.class === 'empty').length, 1);
   });
 
-  test('table scroll bar position: under the header, then following the window top, never past the table', async () => {
-    const { scrollbarTop } = await import('../public/js/components/results.js');
-    // resting: just under the header; viewportTop: where the window's top edge is (same coordinates); last: lowest allowed.
-    assert.equal(scrollbarTop({ resting: 120, viewportTop: -300, last: 900 }), 120); // table below the top of the window
-    assert.equal(scrollbarTop({ resting: 120, viewportTop: 400, last: 900 }), 400); // header scrolled away: follows
-    assert.equal(scrollbarTop({ resting: 120, viewportTop: 1500, last: 900 }), 900); // stops at the end of the table
+  test('table scroll bar margins: the sticky bar rests at the bottom of the header and the table keeps its place', async () => {
+    const { scrollbarMargins } = await import('../public/js/components/results.js');
+    // Header 80px tall, bar 22px: the bar starts 57px down (its bottom 1px above the header's bottom
+    // border) and the table is pulled back up by the bar's height plus that margin.
+    assert.deepEqual(scrollbarMargins(80, 22), { bar: 57, box: -79 });
+    // No header (or not measured yet): the bar never gets a negative margin.
+    assert.deepEqual(scrollbarMargins(0, 22), { bar: 0, box: -22 });
   });
 
   test('table: a scroll bar under the header and a hint, both hidden until the table overflows; no scroll buttons', async (t) => {
