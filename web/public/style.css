@@ -425,16 +425,10 @@ td { font-variant-numeric: tabular-nums; }
   .table-wrap { overflow-x: auto; }
   @media (prefers-reduced-motion: no-preference) { .table-wrap { scroll-behavior: smooth; } }
   .table-toolbar { display: flex; justify-content: flex-end; gap: .5rem; position: sticky; top: 0; z-index: 3; padding: .4rem 0; background: var(--bg); }
-  /* #, Sent and Name stay at the left (fixed widths, so each knows where the previous one ends)
-     and the delete column at the right; opaque, so the answers pass under them. */
-  .responses-table { --col-number: 4.5rem; --col-sent: 12rem; --col-name: 11rem; }
-  .responses-table .sticky-col, .responses-table .row-actions { position: sticky; z-index: 1; background: var(--surface); }
-  .responses-table th.sticky-col, .responses-table th.row-actions { z-index: 2; background: var(--surface-alt); }
-  .responses-table tbody tr:hover > .sticky-col, .responses-table tbody tr:hover > .row-actions { background: var(--surface-alt); }
-  .responses-table .col-number { left: 0; width: var(--col-number); min-width: var(--col-number); max-width: var(--col-number); }
-  .responses-table .col-sent { left: var(--col-number); width: var(--col-sent); min-width: var(--col-sent); max-width: var(--col-sent); }
-  .responses-table .col-name { left: calc(var(--col-number) + var(--col-sent)); width: var(--col-name); min-width: var(--col-name); max-width: var(--col-name); overflow-wrap: anywhere; box-shadow: inset -1px 0 0 var(--border-strong), 6px 0 6px -4px var(--shadow); }
-  .responses-table .row-actions { right: 0; box-shadow: inset 1px 0 0 var(--border), -6px 0 6px -4px var(--shadow); }
+  /* Accent color, so people notice at once that the table has more columns to the side. */
+  .table-toolbar .scroll-button { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .table-toolbar .scroll-button:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+  .table-toolbar .scroll-button:disabled, .table-toolbar .scroll-button:disabled:hover { background: var(--surface); border-color: var(--border); color: var(--muted); opacity: 1; }
   .hero h1 { font-size: 2.6rem; }
   .hero .button-row { justify-content: center; }
 }

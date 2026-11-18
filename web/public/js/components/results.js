@@ -179,8 +179,8 @@ function watchSize(nodes, sync, signal) {
 function scrollableTable(table, t, signal) {
   const box = h('div', { class: 'table-wrap' }, table);
   const scrollBy = (direction) => box.scrollBy({ left: direction * Math.round(box.clientWidth * 0.8) });
-  const left = h('button', { type: 'button', class: 'icon-button', 'aria-label': t('detail.scrollLeft'), title: t('detail.scrollLeft'), onclick: () => scrollBy(-1) }, icon('back'));
-  const right = h('button', { type: 'button', class: 'icon-button', 'aria-label': t('detail.scrollRight'), title: t('detail.scrollRight'), onclick: () => scrollBy(1) }, icon('forward'));
+  const left = h('button', { type: 'button', class: 'icon-button scroll-button', 'aria-label': t('detail.scrollLeft'), title: t('detail.scrollLeft'), onclick: () => scrollBy(-1) }, icon('back'));
+  const right = h('button', { type: 'button', class: 'icon-button scroll-button', 'aria-label': t('detail.scrollRight'), title: t('detail.scrollRight'), onclick: () => scrollBy(1) }, icon('forward'));
   const toolbar = h('div', { class: 'table-toolbar', hidden: true }, left, right);
   const sync = () => {
     const end = box.scrollWidth - box.clientWidth;
@@ -200,25 +200,25 @@ function scrollableTable(table, t, signal) {
 
 /**
  * Every answer: a table on wide screens, one column per question, and one card per response on
- * phones (CSS). #, Sent and Name stay at the left (and the delete column at the right) while the
- * answers scroll sideways. Without `onDelete(response)` the table is read-only (public results): no
+ * phones (CSS). The whole table scrolls sideways (accent ◀ ▶ buttons above it). Without
+ * `onDelete(response)` the table is read-only (public results): no
  * delete buttons, no actions column. `signal` ends the scroll buttons' size watching.
  */
 export function responsesTable(fields, responses, { t }, onDelete, { signal } = {}) {
   if (!responses.length) return [emptyState(t(onDelete ? 'detail.noAnswers' : 'results.noAnswers'))];
   const rows = responses.map((r) => h('tr', {},
-    h('td', { 'data-label': t('detail.columnResponse'), class: 'sticky-col col-number' }, `#${r.number}`),
-    h('td', { 'data-label': t('detail.columnSent'), class: 'sticky-col col-sent nowrap' }, formatTimestamp(r.submittedAt)),
-    h('td', { 'data-label': t('detail.columnName'), class: 'sticky-col col-name' }, respondentName(r, t)),
+    h('td', { 'data-label': t('detail.columnResponse') }, `#${r.number}`),
+    h('td', { 'data-label': t('detail.columnSent'), class: 'nowrap' }, formatTimestamp(r.submittedAt)),
+    h('td', { 'data-label': t('detail.columnName') }, respondentName(r, t)),
     fields.map((f) => h('td', { 'data-label': f.label }, answerText(f, r.answers[f.id], t))),
     onDelete && h('td', { class: 'row-actions' }, deleteResponseForm(r, t, onDelete))));
   return [
     h('h3', {}, t('detail.allAnswers')),
     scrollableTable(h('table', { class: 'responsive responses-table' },
       h('thead', {}, h('tr', {},
-        h('th', { class: 'sticky-col col-number' }, '#'),
-        h('th', { class: 'sticky-col col-sent' }, t('detail.columnSent')),
-        h('th', { class: 'sticky-col col-name' }, t('detail.columnName')),
+        h('th', { }, '#'),
+        h('th', {}, t('detail.columnSent')),
+        h('th', {}, t('detail.columnName')),
         fields.map((f) => h('th', {}, f.label)),
         onDelete && h('th', { class: 'row-actions' }, h('span', { class: 'visually-hidden' }, t('detail.columnActions'))))),
       h('tbody', {}, rows)), t, signal),

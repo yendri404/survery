@@ -689,9 +689,10 @@ describe('answers views (table or by question)', () => {
     assert.deepEqual(findAll(toolbar, (n) => n.tag === 'button').map((b) => b.attrs['aria-label']), ['Scroll the table left', 'Scroll the table right']);
     assert.equal(es['detail.scrollLeft'], 'Desplazar la tabla a la izquierda');
     assert.equal(es['detail.scrollRight'], 'Desplazar la tabla a la derecha');
-    // #, Sent and Name stay at the left while the answers scroll.
-    const [headRow] = findAll(wrap, (n) => n.tag === 'tr');
-    assert.deepEqual(headRow.children.map((th) => hasClass(th, 'sticky-col')), [true, true, true, false, false, false]);
+    // The whole table scrolls: no column stays fixed.
+    assert.equal(findAll(wrap, (n) => hasClass(n, 'sticky-col')).length, 0);
+    // The scroll buttons wear the accent color so people notice them at once.
+    assert.ok(findAll(toolbar, (n) => n.tag === 'button').every((b) => hasClass(b, 'scroll-button')));
   });
 
   test('the remembered view and question are kept per survey (creator) or per results link (public)', async () => {
