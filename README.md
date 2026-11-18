@@ -109,6 +109,7 @@ host: in Docker its port is not published, so only the web container can reach i
 | `TRUST_PROXY` | `true` on a loopback `HOST`, else `false` | `true` reads the client IP from `X-Forwarded-For`, which the web proxy always overwrites. An explicit value always wins; never set `true` on an API reachable directly (see [Security notes](#security-notes)). |
 | `LOGIN_MAX_FAILURES` | `10` | Failed logins allowed per email + IP every 15 minutes before answering 429. |
 | `SUBMISSION_LIMIT` | `60` | Responses accepted per survey + IP every 10 minutes (`0` disables). Raise it if many people answer from one shared PC. |
+| `TEMPLATE_SECRET` | unset | Key that signs exported survey templates. Unset: each database makes its own, so templates only import into the server that exported them. Set the same value on several servers (local and Railway...) to share templates between them. Changing it makes earlier exports unsupported. Set it on the API service. |
 | `FUN` | unset | `true`, `1`, `yes` or `on`: the admin panel's login (`/..command/`) greets with "You shouldn't be here, but if you know what you're doing..." (Spanish: "No deberías estar aquí, pero si sabes lo que haces...") instead of the plain line. Set it on the API service. |
 
 **Web client** (`web/server.js`)
@@ -140,7 +141,7 @@ host: in Docker its port is not published, so only the web container can reach i
 - English, Spanish and Portuguese (Brazil) interface, chosen from the language menu next to the theme button (see [Languages](#languages)).
 - QR code of the share link on every survey, downloadable as PNG to print or send.
 - Admin panel at `/..command/` (see [Admin panel](#admin-panel)): one master password per instance; manage every user (edit name and email, change password, delete) and their surveys (edit, close/reopen, delete).
-- Survey templates: "Export as template" on a survey saves its questions (title, description, questions, required name; no answers, links or dates) as `<title>.sharevy.json`. "Import template" on My surveys opens a new survey already filled with them, to review and choose the closing date before creating it.
+- Survey templates: "Export as template" on a survey saves its questions (title, description, questions, required name; no answers, links or dates) as `<title>.sharevy.json`, signed by the server. "Import template" on My surveys accepts only files this Sharevy exported, unchanged (anything else: "Unsupported file"), and opens a new survey already filled with them, to review and choose the closing date before creating it. To share templates between servers, give them the same `TEMPLATE_SECRET`.
 - CSV export: one button; the file is named after the survey and uses `;` only when some number answer has decimals (`,` otherwise). UTF-8 with BOM, headers in the creator's interface language, times in the viewer's time zone.
 
 ## Admin panel

@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
-import { hashToken } from './auth.js';
 import { ApiError } from './errors.js';
 import { bearerToken, sendJson } from './http.js';
+import { hashToken, newToken } from './auth.js';
 import { createLiveUpdates } from './live.js';
 import { createRepo } from './repo.js';
 import { registerAdminRoutes } from './routes/admin.js';
@@ -65,7 +65,9 @@ export function createApp({ db, config }) {
   const now = config.now ?? (() => new Date());
   const today = () => localDateString(now());
   const live = createLiveUpdates();
-  const deps = { route, repo, config, today, live };
+  // Signs exported survey templates (templates.js): TEMPLATE_SECRET, else this database's own key.
+  const templateKey = config.templateSecret ?? repo.secret('template_key', () => newToken(32));
+  const deps = { route, repo, config, today, live, templateKey };
   registerMetaRoutes(deps);
   registerAuthRoutes(deps);
   registerSurveyRoutes(deps);

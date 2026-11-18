@@ -322,11 +322,7 @@
   "admin.exists": "A senha mestra já existe. Para substituí-la, exclua-a no banco de dados.",
   "admin.notConfigured": "A senha mestra ainda não foi criada.",
   "admin.passwordLength": "A senha mestra deve ter entre 12 e 200 caracteres.",
-  "template.invalid": "Este arquivo não é um modelo válido (não é um JSON legível).",
-  "template.notSharevy": "Este arquivo não é um modelo de pesquisa do Sharevy.",
-  "template.newerVersion": "Este modelo foi feito com uma versão mais nova do Sharevy. Atualize este servidor para importá-lo.",
-  "template.noQuestions": "Este modelo não tem perguntas.",
-  "template.tooLarge": "O arquivo é grande demais para ser um modelo (no máximo 1 MB).",
+  "template.unsupported": "Arquivo não suportado. Só é possível importar modelos exportados por este Sharevy.",
   "detail.exportTemplate": "Exportar como modelo",
   "list.importTemplate": "Importar modelo",
   "editor.fromTemplate": "Carregado do modelo \"{file}\". Revise-o e escolha a data de encerramento antes de criar a pesquisa."

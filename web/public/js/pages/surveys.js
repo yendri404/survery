@@ -2,7 +2,8 @@ import { icon } from '../components/icons.js';
 import { errorList } from '../components/layout.js';
 import { surveyCards } from '../components/survey-cards.js';
 import { h } from '../dom.js';
-import { TEMPLATE_MAX_BYTES, parseTemplate } from '../template.js';
+import { ApiError } from '../api.js';
+import { readTemplateFile } from '../template.js';
 
 /** Container: loads the list, keeps it live (new answers, other tabs' changes), closes, reopens and deletes surveys. */
 export async function surveyListPage(app, { signal }) {
@@ -26,21 +27,26 @@ export async function surveyListPage(app, { signal }) {
       app.showError(err);
     }
   };
-  // Import a template: read the file here, then open the new-survey editor filled with it (nothing
-  // is saved until the creator reviews it and presses Create; the API checks it then).
+  // Import a template: read the file, let the API check it was exported by this Sharevy and not
+  // changed, then open the new-survey editor filled with it (nothing is saved until Create).
   const importProblem = h('div', { 'aria-live': 'polite' });
   const fileInput = h('input', { type: 'file', accept: '.json,application/json', hidden: true });
   fileInput.addEventListener('change', async () => {
     const [file] = fileInput.files;
     fileInput.value = ''; // the same file can be picked again after fixing it
     if (!file) return;
-    const parsed = file.size > TEMPLATE_MAX_BYTES ? { error: 'template.tooLarge' } : parseTemplate(await file.text());
-    if (parsed.error) {
-      importProblem.replaceChildren(errorList([t(parsed.error)]) ?? '');
-      return;
+    const refuse = (message) => importProblem.replaceChildren(errorList([message]) ?? '');
+    const data = await readTemplateFile(file);
+    if (!data) return refuse(t('template.unsupported'));
+    try {
+      const { template } = await app.api.post('/templates/check', data);
+      app.pendingTemplate = { template, fileName: file.name };
+      await app.navigate('/surveys/new');
+    } catch (err) {
+      // Any refusal of the file itself is "unsupported"; network or server trouble says so instead.
+      if (err instanceof ApiError && err.status === 401) return;
+      refuse(err instanceof ApiError && err.status >= 400 && err.status < 500 ? t('template.unsupported') : app.error(err));
     }
-    app.pendingTemplate = { template: parsed.template, fileName: file.name };
-    await app.navigate('/surveys/new');
   });
   const load = async () => surveyCards((await app.api.get('/surveys', { signal })).surveys, app.i18n, { onToggle, onDelete });
   const region = h('div', { id: 'survey-list' }, await load());

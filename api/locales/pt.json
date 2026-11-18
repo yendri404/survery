@@ -1,4 +1,5 @@
 {
+  "template.unsupported": "Arquivo não suportado. Só é possível importar modelos exportados por este Sharevy.",
   "login.tooManyAttempts": "Muitas tentativas de login sem sucesso. Tente novamente em {minutes} minuto(s).",
   "admin.exists": "A senha mestra já existe. Para substituí-la, exclua-a no banco de dados.",
   "admin.notConfigured": "A senha mestra ainda não foi criada.",
