@@ -30,6 +30,31 @@ export function save(key, value) {
   if (value === null || value === undefined) memory.delete(key);
 }
 
+const ADMIN_TOKEN = 'sharevy-admin-token';
+
+/**
+ * The admin panel's token, kept only for this tab (sessionStorage): closing the tab forgets it, and
+ * it never sits in localStorage next to the creator's token. Blocked storage: memory only.
+ */
+export function loadAdminToken() {
+  try {
+    return sessionStorage.getItem(ADMIN_TOKEN) ?? memory.get(ADMIN_TOKEN) ?? null;
+  } catch {
+    return memory.get(ADMIN_TOKEN) ?? null;
+  }
+}
+
+export function saveAdminToken(token) {
+  if (token) memory.set(ADMIN_TOKEN, token);
+  else memory.delete(ADMIN_TOKEN);
+  try {
+    if (token) sessionStorage.setItem(ADMIN_TOKEN, token);
+    else sessionStorage.removeItem(ADMIN_TOKEN);
+  } catch {
+    // Kept in memory only.
+  }
+}
+
 /**
  * Keys of the answers view picked on one survey's results ('table' or 'byQuestion') and of the
  * question shown in the "by question" view. `scope` is 'survey:<id>' on the creator's page and

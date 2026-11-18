@@ -1,3 +1,4 @@
+import { adminEditorPage, adminPage } from './pages/admin.js';
 import { loginPage, registerPage } from './pages/auth.js';
 import { detailPage } from './pages/detail.js';
 import { editorPage } from './pages/editor.js';
@@ -22,12 +23,17 @@ export const ROUTES = [
   { path: '/s/:token/thanks', page: thanksPage, respondent: true, errorKeys: { not_found: 'respond.notFound' } },
   // Public results: read-only, no account; any logged-in creator sees them the same way.
   { path: '/r/:token', page: publicResultsPage, respondent: true, errorKeys: { not_found: 'results.notPublic' } },
+  // Admin panel: no link to it anywhere; its own master password, not a creator account (pages/admin.js).
+  { path: '/..command', page: adminPage, respondent: true },
+  { path: '/..command/', page: adminPage, respondent: true },
+  { path: '/..command/surveys/:id/edit', page: adminEditorPage, respondent: true, errorKeys: { not_found: 'error.surveyNotFound' } },
 ];
 
 const PARAMS = { id: '(\\d+)', token: '([A-Za-z0-9_-]+)' };
 const compiled = ROUTES.map((route) => {
   const keys = [];
-  const source = route.path.replace(/:(\w+)/g, (_, key) => { keys.push(key); return PARAMS[key]; });
+  // Dots in a path are literal ("/..command"); ":name" is a parameter.
+  const source = route.path.replace(/\./g, '\\.').replace(/:(\w+)/g, (_, key) => { keys.push(key); return PARAMS[key]; });
   return { route, keys, pattern: new RegExp(`^${source}$`) };
 });
 

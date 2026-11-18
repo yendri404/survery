@@ -4,7 +4,7 @@ import { h } from './dom.js';
 import { errorMessage } from './errors.js';
 import { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, createI18n, pickLanguage } from './i18n.js';
 import { coalesce, followEvents } from './sse.js';
-import { KEYS, deviceId, load, save } from './storage.js';
+import { KEYS, deviceId, load, loadAdminToken, save, saveAdminToken } from './storage.js';
 import { matchRoute } from './routes.js';
 import { createVersionWatch } from './version.js';
 
@@ -16,6 +16,8 @@ const FLASH_MESSAGES = {
   opened: 'flash.opened',
   'response-deleted': 'flash.responseDeleted',
   deleted: 'flash.deleted',
+  'user-deleted': 'admin.userDeleted',
+  'password-set': 'admin.passwordSet',
 };
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -68,6 +70,22 @@ export async function startApp() {
       if (!booted) return; // during start-up the first render decides where to go
       const here = location.pathname + location.search;
       if (here !== '/login' && !here.startsWith('/login?')) navigate(`/login?next=${encodeURIComponent(here)}`, { replace: true });
+    },
+  });
+
+  // Admin panel (/..command/): its own token, separate from the creator's session (pages/admin.js).
+  app.adminToken = loadAdminToken();
+  app.setAdminToken = (token) => {
+    app.adminToken = token ?? null;
+    saveAdminToken(app.adminToken);
+  };
+  app.adminApi = createApi({
+    getToken: () => app.adminToken,
+    onVersion: (version) => versionWatch.see(version),
+    onUnauthorized: () => {
+      // Expired, logged out elsewhere or reset in the database: back to the panel's login.
+      app.setAdminToken(null);
+      if (booted) navigate('/..command/', { replace: true });
     },
   });
 

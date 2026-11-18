@@ -276,6 +276,30 @@ button:disabled { opacity: .35; cursor: not-allowed; }
 .card-title { display: block; font-weight: 600; font-size: 1.05rem; color: var(--brand-text); margin-bottom: .4rem; }
 .card .muted { display: block; margin-top: .4rem; font-size: .85rem; }
 
+/* Admin panel (/..command/): users as square cards, then the picked user's surveys. One column on
+   phones; two side by side on wider screens. The picked user wears the brand ring. */
+.admin-layout { display: grid; gap: 1.5rem; align-items: start; }
+.admin-col { min-width: 0; }
+.admin-col > h2 { margin-bottom: .75rem; }
+.admin-users { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: .75rem; }
+.admin-users > li { display: flex; min-width: 0; }
+/* Square while closed; the password form makes it taller when opened. */
+.admin-user { display: flex; flex-direction: column; flex: 1; min-width: 0; aspect-ratio: 1 / 1; padding: .85rem; border-top: 3px solid var(--border); }
+.admin-user .card-title { font-size: 1rem; overflow-wrap: anywhere; }
+.admin-user .card-main:hover .card-title { text-decoration: underline; }
+.admin-user.is-selected { border-color: var(--brand-text); border-top-color: var(--brand); background: var(--brand-soft); box-shadow: 0 0 0 1px var(--brand-text); }
+.admin-email { display: block; font-size: .8rem; overflow-wrap: anywhere; }
+.admin-user-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .4rem; margin-top: .6rem; padding-top: .6rem; border-top: 1px solid var(--border); }
+.admin-user-tools > summary { list-style: none; }
+.admin-user-tools > summary::-webkit-details-marker { display: none; }
+.admin-user-tools[open] { order: 1; flex-basis: 100%; }
+.admin-user-tools[open] > summary { background: var(--brand-soft); border-color: var(--brand-text); }
+.admin-password { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }
+.admin-password input, .admin-password button { flex: 1 1 100%; min-width: 0; }
+@media (min-width: 800px) {
+  .admin-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+
 /* ---------- Editor / question builder ---------- */
 .field-list { list-style: none; padding: 0; margin: 0 0 1rem; display: flex; flex-direction: column; gap: 1rem; }
 .field-item { display: flex; flex-direction: column; gap: .75rem; margin: 0; border-left: 3px solid var(--brand); }

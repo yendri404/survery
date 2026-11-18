@@ -48,6 +48,10 @@ export const ERROR_KEYS = {
   registration_disabled: 'register.disabled',
   invalid_credentials: 'login.invalid',
   too_many_login_attempts: 'login.tooManyAttempts',
+  // Admin panel
+  admin_exists: 'admin.exists',
+  admin_not_configured: 'admin.notConfigured',
+  admin_password_length: 'admin.passwordLength',
   // Respondents
   already_answered: 'respond.alreadyAnswered',
   survey_closed: 'respond.closed',

@@ -812,3 +812,100 @@ describe('new client version', () => {
     assert.deepEqual(seen, ['v1', 'v2']);
   });
 });
+
+describe('admin panel (/..command/)', () => {
+  class FakeNode {
+    constructor(tag) { this.tag = tag; this.attrs = {}; this.children = []; }
+    setAttribute(name, value) { this.attrs[name] = value; }
+    addEventListener(name, fn) { (this.listeners ??= {})[name] = fn; }
+    append(child) { if (child && typeof child === 'object') child.parent = this; this.children.push(child); }
+    get textContent() { return this.children.map((c) => (c instanceof FakeNode ? c.textContent : c.text ?? '')).join(''); }
+  }
+  const findAll = (node, pred, out = []) => {
+    if (Array.isArray(node)) {
+      for (const n of node) findAll(n, pred, out);
+    } else if (node instanceof FakeNode) {
+      if (pred(node)) out.push(node);
+      for (const child of node.children) findAll(child, pred, out);
+    }
+    return out;
+  };
+  const useFakeDom = (t) => {
+    const saved = { Node: globalThis.Node, SVGElement: globalThis.SVGElement, document: globalThis.document };
+    Object.assign(globalThis, {
+      Node: FakeNode,
+      SVGElement: class extends FakeNode {},
+      document: { createElement: (tag) => new FakeNode(tag), createElementNS: (_ns, tag) => new FakeNode(tag), createTextNode: (text) => ({ text }), createComment: () => new FakeNode('#comment') },
+    });
+    t.after(() => Object.assign(globalThis, saved));
+  };
+  const i18n = createI18n('en', en, en);
+
+  test('the admin page answers /..command and /..command/, and its editor /..command/surveys/:id/edit; dots are literal', async () => {
+    const { matchRoute } = await import('../public/js/routes.js');
+    for (const path of ['/..command', '/..command/']) {
+      const match = matchRoute(path);
+      assert.equal(match?.route.page.name, 'adminPage', path);
+      assert.ok(!match.route.auth, 'no creator account needed');
+      assert.ok(match.route.respondent, 'no creator account menu');
+    }
+    const edit = matchRoute('/..command/surveys/12/edit');
+    assert.equal(edit.route.page.name, 'adminEditorPage');
+    assert.deepEqual(edit.params, { id: '12' });
+    assert.equal(matchRoute('/xxcommand'), undefined);
+    assert.equal(matchRoute('/..command/surveys/abc/edit'), undefined);
+    assert.equal(matchRoute('/surveys/12').route.page.name, 'detailPage', 'other routes unchanged');
+  });
+
+  test('user cards: name, email and survey count; the selected one is marked; delete and set password call back', async (t) => {
+    useFakeDom(t);
+    const { adminUserCards } = await import('../public/js/components/admin.js');
+    const users = [
+      { id: 7, name: 'Ana', email: 'ana@corp.local', surveyCount: 2, createdAt: '2026-11-01T10:00:00Z' },
+      { id: 9, name: 'Luis', email: 'luis@corp.local', surveyCount: 0, createdAt: '2026-11-02T10:00:00Z' },
+    ];
+    const deleted = [];
+    const passwords = [];
+    const list = adminUserCards(users, i18n, { selectedId: 9, onDelete: (u) => deleted.push(u.id), onSetPassword: (u, value) => passwords.push([u.id, value]) });
+    const links = findAll(list, (n) => n.tag === 'a');
+    assert.deepEqual(links.map((a) => a.attrs.href), ['/..command/?user=7', '/..command/?user=9']);
+    assert.deepEqual(links.map((a) => a.attrs['aria-current']), [undefined, 'true']);
+    assert.match(links[0].textContent, /Ana.*ana@corp\.local.*2 surveys/);
+    assert.match(links[1].textContent, /No surveys/);
+    const deletes = findAll(list, (n) => n.tag === 'button' && /^Delete the user /.test(n.attrs['aria-label']));
+    assert.deepEqual(findAll(list, (n) => n.tag === 'summary').map((n) => n.attrs['aria-label']), ['Change the password of Ana', 'Change the password of Luis']);
+    assert.equal(deletes.length, 2);
+    deletes[0].listeners.click();
+    assert.deepEqual(deleted, [7]);
+    const [form] = findAll(list, (n) => n.tag === 'form');
+    const [input] = findAll(form, (n) => n.tag === 'input');
+    assert.equal(input.attrs.type, 'password');
+    assert.equal(input.attrs.minlength, '8');
+    input.value = 'new-secret-1';
+    form.listeners.submit({ preventDefault() {}, currentTarget: form });
+    assert.deepEqual(passwords, [[7, 'new-secret-1']]);
+    assert.equal(adminUserCards([], i18n, {}).textContent, en['admin.noUsers']);
+  });
+
+  test('survey cards: status, edit in the admin editor, open the form, close or reopen, delete', async (t) => {
+    useFakeDom(t);
+    const { adminSurveyCards } = await import('../public/js/components/admin.js');
+    const surveys = [
+      { id: 3, title: 'Lunch', status: 'open', isOpen: true, responseCount: 4, closesOn: '2026-12-01', shareUrl: 'http://web.local/s/abc', ownerId: 7 },
+      { id: 4, title: 'Old', status: 'closed', isOpen: false, responseCount: 0, closesOn: '2026-12-01', shareUrl: 'http://web.local/s/def', ownerId: 7 },
+    ];
+    const calls = [];
+    const list = adminSurveyCards(surveys, i18n, { onToggle: (s) => calls.push(['toggle', s.id]), onDelete: (s) => calls.push(['delete', s.id]) });
+    const hrefs = findAll(list, (n) => n.tag === 'a').map((a) => [a.attrs.href, a.attrs.target]);
+    assert.deepEqual(hrefs, [
+      ['/..command/surveys/3/edit', undefined], ['http://web.local/s/abc', '_blank'],
+      ['/..command/surveys/4/edit', undefined], ['http://web.local/s/def', '_blank'],
+    ]);
+    const buttons = findAll(list, (n) => n.tag === 'button');
+    assert.deepEqual(buttons.map((b) => b.textContent.trim()), ['Close', 'Delete', 'Reopen', 'Delete']);
+    for (const b of buttons) b.listeners.click();
+    assert.deepEqual(calls, [['toggle', 3], ['delete', 3], ['toggle', 4], ['delete', 4]]);
+    assert.match(list.textContent, /Lunch.*Open.*4 responses/);
+    assert.equal(adminSurveyCards([], i18n, {}).textContent, en['admin.noSurveys']);
+  });
+});

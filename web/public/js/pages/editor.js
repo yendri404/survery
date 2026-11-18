@@ -5,19 +5,25 @@ import { backLink, errorList, notice } from '../components/layout.js';
 import { h, setErrorBox } from '../dom.js';
 import { addDays } from '../format.js';
 
-/** Container: new survey (/surveys/new) or edit (/surveys/:id/edit). */
-export async function editorPage(app, { params, signal }) {
+/**
+ * Container: new survey (/surveys/new) or edit (/surveys/:id/edit). The admin panel reuses it to
+ * edit anyone's survey with `admin`: { api, cancelHref(survey), savedHref(survey), backText } (its
+ * own token and /admin/surveys endpoints); without it, the creator's own API and pages.
+ */
+export async function editorPage(app, { params, signal }, admin) {
   const { t } = app;
   const editing = Boolean(params.id);
+  const api = admin?.api ?? app.api;
+  const surveysPath = admin ? '/admin/surveys' : '/surveys';
   // Fresh rules and the server's date: closing dates are compared with the server's "today".
   const [meta, survey] = await Promise.all([
     app.api.get('/meta', { signal }),
-    editing ? app.api.get(`/surveys/${params.id}`, { signal }).then((r) => r.survey) : null,
+    editing ? api.get(`${surveysPath}/${params.id}`, { signal }).then((r) => r.survey) : null,
   ]);
   const { limits, today } = meta;
   // An expired survey keeps its past date valid until the creator changes it.
   const minDate = survey?.closesOn && survey.closesOn < today ? survey.closesOn : today;
-  const cancel = editing ? `/surveys/${survey.id}` : '/surveys';
+  const cancel = admin ? admin.cancelHref(survey) : editing ? `/surveys/${survey.id}` : '/surveys';
 
   const title = h('input', { name: 'title', value: survey?.title ?? '', required: true, maxlength: limits.title, placeholder: t('editor.titlePlaceholder') });
   const description = h('textarea', { name: 'description', rows: 3, maxlength: limits.description });
@@ -85,8 +91,8 @@ export async function editorPage(app, { params, signal }) {
     submit.disabled = true;
     try {
       const body = { title: title.value, description: description.value, closesOn: closesOn.value, requireName: requireName.checked, fields: builder.value() };
-      const saved = editing ? await app.api.put(`/surveys/${survey.id}`, body) : await app.api.post('/surveys', body);
-      await app.navigate(`/surveys/${saved.survey.id}?msg=${editing ? 'saved' : 'created'}`);
+      const saved = editing ? await api.put(`${surveysPath}/${survey.id}`, body) : await api.post(surveysPath, body);
+      await app.navigate(admin ? admin.savedHref(saved.survey) : `/surveys/${saved.survey.id}?msg=${editing ? 'saved' : 'created'}`);
     } catch (err) {
       const problems = err instanceof ApiError && err.errors?.length ? err.errors.map((p) => app.error(new ApiError(422, p))) : [app.error(err)];
       showErrors(problems);
@@ -98,7 +104,7 @@ export async function editorPage(app, { params, signal }) {
   return {
     title: editing ? t('editor.editTitle', { title: survey.title }) : t('editor.newTitle'),
     body: [
-      backLink(cancel, t('editor.back')),
+      backLink(cancel, admin?.backText ?? t('editor.back')),
       h('h1', {}, editing ? t('editor.editHeading') : t('editor.newTitle')),
       editing && survey.responseCount > 0 ? notice('alert', t('editor.hasAnswers', { count: survey.responseCount })) : null,
       form,

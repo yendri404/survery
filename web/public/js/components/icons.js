@@ -27,6 +27,8 @@ const ICONS = {
   down: [['path', { d: 'M12 5v14M19 12l-7 7-7-7' }]],
   refresh: [['path', { d: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7' }]],
   duplicate: [['path', { d: 'M9 9h11v11H9zM5 15H4V4h11v1' }]],
+  user: [['circle', { cx: 12, cy: 8, r: 4 }], ['path', { d: 'M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1' }]],
+  key: [['circle', { cx: 8, cy: 15, r: 4 }], ['path', { d: 'M11 12l9-9M16 7l3 3M18 5l2 2' }]],
 };
 
 /** Decorative icon (hidden from screen readers: the text next to it says what it is). */
