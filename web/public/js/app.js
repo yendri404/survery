@@ -46,6 +46,8 @@ export async function startApp() {
     token: load(KEYS.token),
     i18n: null,
     languages: {},
+    // A template read on the survey list, waiting for the new-survey editor (one use).
+    pendingTemplate: null,
   };
 
   async function useLanguage(lang) {

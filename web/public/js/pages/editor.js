@@ -13,6 +13,9 @@ import { addDays } from '../format.js';
 export async function editorPage(app, { params, signal }, admin) {
   const { t } = app;
   const editing = Boolean(params.id);
+  // A template picked on the survey list (pages/surveys.js) fills a new survey once.
+  const fromTemplate = editing ? null : app.pendingTemplate;
+  app.pendingTemplate = null;
   const api = admin?.api ?? app.api;
   const surveysPath = admin ? '/admin/surveys' : '/surveys';
   // Fresh rules and the server's date: closing dates are compared with the server's "today".
@@ -23,14 +26,16 @@ export async function editorPage(app, { params, signal }, admin) {
   const { limits, today } = meta;
   // An expired survey keeps its past date valid until the creator changes it.
   const minDate = survey?.closesOn && survey.closesOn < today ? survey.closesOn : today;
+  // What the form starts with: the survey being edited, a template, or nothing.
+  const start = survey ?? fromTemplate?.template;
   const cancel = admin ? admin.cancelHref(survey) : editing ? `/surveys/${survey.id}` : '/surveys';
 
-  const title = h('input', { name: 'title', value: survey?.title ?? '', required: true, maxlength: limits.title, placeholder: t('editor.titlePlaceholder') });
+  const title = h('input', { name: 'title', value: start?.title ?? '', required: true, maxlength: limits.title, placeholder: t('editor.titlePlaceholder') });
   const description = h('textarea', { name: 'description', rows: 3, maxlength: limits.description });
-  description.value = survey?.description ?? '';
+  description.value = start?.description ?? '';
   const closesOn = h('input', { type: 'date', name: 'closes_on', value: survey?.closesOn ?? addDays(today, meta.defaultOpenDays), min: minDate, required: true });
   // Unchecked for new surveys: the respondent name is optional unless the creator asks for it.
-  const requireName = h('input', { type: 'checkbox', name: 'require_name', checked: survey?.requireName === true });
+  const requireName = h('input', { type: 'checkbox', name: 'require_name', checked: start?.requireName === true });
 
   const basicsSection = h('section', { class: 'panel stack editor-basics' },
     h('h2', {}, t('editor.basics')),
@@ -45,7 +50,7 @@ export async function editorPage(app, { params, signal }, admin) {
 
   // Title and closing date are checked on submit like the questions, with the API's messages.
   const builder = createBuilder({
-    fields: survey?.fields ?? [],
+    fields: start?.fields ?? [],
     types: meta.fieldTypes.map((type) => [type, t(`fieldType.${type}`)]),
     choiceTypes: meta.choiceTypes,
     scale: meta.scale,
@@ -107,6 +112,7 @@ export async function editorPage(app, { params, signal }, admin) {
       backLink(cancel, admin?.backText ?? t('editor.back')),
       h('h1', {}, editing ? t('editor.editHeading') : t('editor.newTitle')),
       editing && survey.responseCount > 0 ? notice('alert', t('editor.hasAnswers', { count: survey.responseCount })) : null,
+      fromTemplate ? notice('download', t('editor.fromTemplate', { file: fromTemplate.fileName })) : null,
       form,
     ],
   };

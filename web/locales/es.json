@@ -321,5 +321,13 @@
   "admin.back": "Volver al panel de administración",
   "admin.exists": "La contraseña maestra ya existe. Para reemplazarla, bórrala en la base de datos.",
   "admin.notConfigured": "La contraseña maestra todavía no fue creada.",
-  "admin.passwordLength": "La contraseña maestra debe tener entre 12 y 200 caracteres."
+  "admin.passwordLength": "La contraseña maestra debe tener entre 12 y 200 caracteres.",
+  "template.invalid": "Este archivo no es una plantilla válida (no es un JSON legible).",
+  "template.notSharevy": "Este archivo no es una plantilla de encuesta de Sharevy.",
+  "template.newerVersion": "Esta plantilla se hizo con una versión más nueva de Sharevy. Actualiza este servidor para importarla.",
+  "template.noQuestions": "Esta plantilla no tiene preguntas.",
+  "template.tooLarge": "El archivo es demasiado grande para ser una plantilla (máximo 1 MB).",
+  "detail.exportTemplate": "Exportar como plantilla",
+  "list.importTemplate": "Importar plantilla",
+  "editor.fromTemplate": "Cargada desde la plantilla \"{file}\". Revísala y elige la fecha de cierre antes de crear la encuesta."
 }

@@ -11,6 +11,7 @@ const ICONS = {
   lock: [['rect', { x: 5, y: 11, width: 14, height: 10, rx: 2 }], ['path', { d: 'M8 11V7a4 4 0 0 1 8 0v4' }]],
   unlock: [['rect', { x: 5, y: 11, width: 14, height: 10, rx: 2 }], ['path', { d: 'M8 11V7a4 4 0 0 1 7.5-2' }]],
   download: [['path', { d: 'M12 4v12M6 10l6 6 6-6M4 20h16' }]],
+  upload: [['path', { d: 'M12 16V4M6 10l6-6 6 6M4 20h16' }]],
   logout: [['path', { d: 'M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10' }]],
   check: [['path', { d: 'M5 12l5 5 9-10' }]],
   back: [['path', { d: 'M15 6l-6 6 6 6' }]],

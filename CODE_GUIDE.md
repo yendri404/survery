@@ -27,7 +27,7 @@ A file-by-file tour of the code: what each module does, what it exports, and why
    - [Talking to the API](#talking-to-the-api) — `api.js`, `errors.js`, `sse.js`, `storage.js`
    - [Pages (containers)](#pages-containers) — `pages/*.js`
    - [Components (presentational)](#components-presentational) — `components/*.js`, `dom.js`
-   - [Pure logic](#pure-logic) — `i18n.js`, `validation.js`, `number-input.js`, `charts.js`, `format.js`
+   - [Pure logic](#pure-logic) — `i18n.js`, `validation.js`, `number-input.js`, `charts.js`, `format.js`, `template.js`
    - [Look and feel](#look-and-feel) — `style.css`, `theme.js`, design tokens, branding
 7. [Common changes: where to touch](#7-common-changes-where-to-touch)
 
@@ -83,6 +83,7 @@ web/                         Browser client (port 3000), no dependencies, no bui
 │   │   ├── number-input.js  Number question typing filter
 │   │   ├── charts.js        Donut, bar and histogram math
 │   │   ├── format.js        Timestamps, addDays, safeNext
+│   │   ├── template.js      Survey templates: export a survey's questions to a file, read one back
 │   │   ├── pages/           Containers: home, auth, surveys, editor, detail, respond, results, admin
 │   │   └── components/      Presentational: layout, icons, builder, answer-field, results, survey-cards, survey-detail, admin
 │   ├── style.css, theme.js, logo.png, favicon.svg
@@ -872,6 +873,7 @@ All tested in `web/test/modules.test.js` with `node --test`, no browser.
 | `validation.js` | `checkAnswer`, `checkRespondentName`, `checkScaleRange`, `isValidDate` | Mirror of `validateAnswers` / `parseRespondentName` and of the scale range rules of `parseSurveyInput`; returns `{ key, params }` or `undefined` |
 | `number-input.js` | `NUMBER_TEXT`, `normalizeNumberText`, `numberInsert`, `stepNumber` | Rules of the number filter |
 | `charts.js` | `MAX_DONUT_SLICES`, `percent`, `donutSlices`, `barWidth`, `columnHeight` | Donut dash arrays (circumference 100, small gap between slices, starts at 12 o'clock), bar widths and histogram column heights |
+| `template.js` | `surveyTemplate`, `parseTemplate`, `templateFileName`, `TEMPLATE_FORMAT`, `TEMPLATE_VERSION`, `TEMPLATE_MAX_BYTES` | A survey's definition as a file (`{ format: 'sharevy-survey-template', version: 1, title, description, requireName, fields }`; fields keep label, type, required, options when any, min/max for scales; never ids, answers, links, owner or dates). Made in the browser ("Export as template" on the survey page, `<title>.sharevy.json`). `parseTemplate` checks the shape only (JSON object, format tag, version not newer, at least one question) and keeps known keys; "Import template" on the survey list puts it in `app.pendingTemplate`, which `editorPage` uses once to fill a new survey. The editor and the API validate the content when it is created. No API endpoint involved |
 | `format.js` | `formatTimestamp`, `localDateTime`, `viewerTimeZone`, `addDays`, `safeNext` | ISO → `YYYY-MM-DD HH:MM:SS` in the viewer's time zone (the API stays UTC); `localDateTime` → local date + `HH:MM` (last-response figure); the zone sent as `tz` with CSV exports; calendar math; `safeNext` keeps only same-site paths (no `//x`, no `/\x`), preventing open redirects after login |
 
 **Locale file format** (`web/locales/<code>.json`, flat keys)

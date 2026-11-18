@@ -81,7 +81,7 @@ export function publicResultsPanel({ t, survey, onToggle, onCopy }) {
 }
 
 /** Edit link, open/close (`toggleNode` is its current button) and delete. */
-export function managePanel({ t, editHref, toggleNode, onToggle, onDelete }) {
+export function managePanel({ t, editHref, toggleNode, onToggle, onDelete, onExportTemplate }) {
   const submitTo = (action) => (event) => {
     event.preventDefault();
     action();
@@ -90,6 +90,8 @@ export function managePanel({ t, editHref, toggleNode, onToggle, onDelete }) {
     h('h2', {}, t('detail.manage')),
     h('div', { class: 'button-row' },
       h('a', { class: 'button secondary', href: editHref }, icon('edit'), ` ${t('detail.edit')}`),
+      // The questions as a file, to start other surveys from them (template.js).
+      onExportTemplate ? h('button', { type: 'button', class: 'secondary', onclick: onExportTemplate }, icon('download'), ` ${t('detail.exportTemplate')}`) : null,
       h('form', { class: 'inline', onsubmit: submitTo(onToggle) }, toggleNode),
       h('form', { class: 'inline', onsubmit: submitTo(onDelete) },
         h('button', { type: 'submit', class: 'danger' }, icon('trash'), ` ${t('detail.delete')}`))),

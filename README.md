@@ -140,6 +140,7 @@ host: in Docker its port is not published, so only the web container can reach i
 - English, Spanish and Portuguese (Brazil) interface, chosen from the language menu next to the theme button (see [Languages](#languages)).
 - QR code of the share link on every survey, downloadable as PNG to print or send.
 - Admin panel at `/..command/` (see [Admin panel](#admin-panel)): one master password per instance; manage every user (edit name and email, change password, delete) and their surveys (edit, close/reopen, delete).
+- Survey templates: "Export as template" on a survey saves its questions (title, description, questions, required name; no answers, links or dates) as `<title>.sharevy.json`. "Import template" on My surveys opens a new survey already filled with them, to review and choose the closing date before creating it.
 - CSV export: one button; the file is named after the survey and uses `;` only when some number answer has decimals (`,` otherwise). UTF-8 with BOM, headers in the creator's interface language, times in the viewer's time zone.
 
 ## Admin panel
