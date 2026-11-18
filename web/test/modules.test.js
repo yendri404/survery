@@ -680,19 +680,25 @@ describe('answers views (table or by question)', () => {
     assert.equal(findAll(empty, (n) => n.attrs.class === 'empty').length, 1);
   });
 
-  test('table: left/right scroll buttons above it, hidden until the table overflows', async (t) => {
+  test('table: a scroll bar under the header and a hint, both hidden until the table overflows; no scroll buttons', async (t) => {
     useFakeDom(t);
     const { responsesTable } = await import('../public/js/components/results.js');
     const [, wrap] = responsesTable(fields, responses, createI18n('en', en, en));
-    const [toolbar] = findAll(wrap, (n) => hasClass(n, 'table-toolbar'));
-    assert.equal(toolbar.hidden, true);
-    assert.deepEqual(findAll(toolbar, (n) => n.tag === 'button').map((b) => b.attrs['aria-label']), ['Scroll the table left', 'Scroll the table right']);
-    assert.equal(es['detail.scrollLeft'], 'Desplazar la tabla a la izquierda');
-    assert.equal(es['detail.scrollRight'], 'Desplazar la tabla a la derecha');
+    const [bar] = findAll(wrap, (n) => hasClass(n, 'table-scrollbar'));
+    assert.ok(bar, 'a scroll bar element exists');
+    assert.equal(bar.hidden, true);
+    const [hint] = findAll(wrap, (n) => hasClass(n, 'table-scroll-hint'));
+    assert.equal(hint.hidden, true);
+    assert.equal(hint.textContent.trim(), en['detail.scrollHint']);
+    assert.equal(es['detail.scrollHint'], 'Desliza la barra para ver todas las columnas.');
+    assert.equal(findAll(wrap, (n) => hasClass(n, 'table-toolbar') || hasClass(n, 'scroll-button')).length, 0);
+    // Keyboard users scroll the table itself (focusable region with a name).
+    const [box] = findAll(wrap, (n) => hasClass(n, 'table-wrap'));
+    assert.equal(String(box.attrs.tabindex), '0');
+    assert.equal(box.attrs.role, 'region');
+    assert.equal(box.attrs['aria-label'], en['detail.allAnswers']);
     // The whole table scrolls: no column stays fixed.
     assert.equal(findAll(wrap, (n) => hasClass(n, 'sticky-col')).length, 0);
-    // The scroll buttons wear the accent color so people notice them at once.
-    assert.ok(findAll(toolbar, (n) => n.tag === 'button').every((b) => hasClass(b, 'scroll-button')));
   });
 
   test('the remembered view and question are kept per survey (creator) or per results link (public)', async () => {

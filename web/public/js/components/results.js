@@ -177,25 +177,32 @@ function watchSize(nodes, sync, signal) {
  * disabled at its end. Phones show cards instead (CSS), which never scroll sideways.
  */
 function scrollableTable(table, t, signal) {
-  const box = h('div', { class: 'table-wrap' }, table);
-  const scrollBy = (direction) => box.scrollBy({ left: direction * Math.round(box.clientWidth * 0.8) });
-  const left = h('button', { type: 'button', class: 'icon-button scroll-button', 'aria-label': t('detail.scrollLeft'), title: t('detail.scrollLeft'), onclick: () => scrollBy(-1) }, icon('back'));
-  const right = h('button', { type: 'button', class: 'icon-button scroll-button', 'aria-label': t('detail.scrollRight'), title: t('detail.scrollRight'), onclick: () => scrollBy(1) }, icon('forward'));
-  const toolbar = h('div', { class: 'table-toolbar', hidden: true }, left, right);
+  // The table scrolls inside `box` (focusable, so arrow keys scroll it too). Its own scroll bar is
+  // hidden and replaced by `bar`: a thick accent-colored bar placed right under the header row, a
+  // copy that moves the table and follows it. Both appear only while the table overflows.
+  const box = h('div', { class: 'table-wrap', tabindex: 0, role: 'region', 'aria-label': t('detail.allAnswers') }, table);
+  const size = h('div', { class: 'table-scrollbar-size' });
+  const bar = h('div', { class: 'table-scrollbar', hidden: true, 'aria-hidden': 'true' }, size);
+  const hint = h('p', { class: 'table-scroll-hint', hidden: true }, icon('forward'), ` ${t('detail.scrollHint')}`);
+  const scroller = h('div', { class: 'table-scroller' }, hint, bar, box);
+  // Setting the same value fires no scroll event, so the two never loop.
+  const follow = (from, to) => { if (Math.abs(to.scrollLeft - from.scrollLeft) > 0.5) to.scrollLeft = from.scrollLeft; };
+  bar.addEventListener('scroll', () => follow(bar, box), { passive: true });
+  box.addEventListener('scroll', () => follow(box, bar), { passive: true });
   const sync = () => {
-    const end = box.scrollWidth - box.clientWidth;
-    toolbar.hidden = end <= 1;
-    const atStart = box.scrollLeft <= 1;
-    const atEnd = box.scrollLeft >= end - 1;
-    // A button that turns disabled under the keyboard passes the focus to the other one.
-    if (atStart && document.activeElement === left && !atEnd) right.focus();
-    if (atEnd && document.activeElement === right && !atStart) left.focus();
-    left.disabled = atStart;
-    right.disabled = atEnd;
+    const overflows = box.scrollWidth - box.clientWidth > 1;
+    bar.hidden = !overflows;
+    hint.hidden = !overflows;
+    scroller.classList.toggle('has-scrollbar', overflows);
+    if (!overflows) return;
+    // CSSOM writes (not style attributes), which the strict CSP allows.
+    size.style.width = `${box.scrollWidth}px`;
+    const head = table.querySelector('thead');
+    bar.style.top = `${box.offsetTop + (head ? head.offsetHeight : 0)}px`;
+    follow(box, bar);
   };
-  box.addEventListener('scroll', sync, { passive: true });
   watchSize([box, table], sync, signal);
-  return h('div', { class: 'table-scroller' }, toolbar, box);
+  return scroller;
 }
 
 /**
