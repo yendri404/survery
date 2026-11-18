@@ -171,10 +171,16 @@ function watchSize(nodes, sync, signal) {
 }
 
 /**
- * The table in its horizontal scroll box, with ◀ ▶ buttons above it that move it by most of a
- * screen (smoothly unless reduced motion is asked for: CSS scroll-behavior). The bar sticks to the
- * top of the window while the table is in view, hides when the table fits, and each button is
- * disabled at its end. Phones show cards instead (CSS), which never scroll sideways.
+ * Where the table's scroll bar goes (`top`, in the table box's coordinates): under the header
+ * (`resting`) while that is in the window; once the header scrolls away, at the window's top edge
+ * (`viewportTop`), so it follows the reader down; never below `last`, the end of the table.
+ */
+export const scrollbarTop = ({ resting, viewportTop, last }) => Math.min(Math.max(resting, viewportTop), last);
+
+/**
+ * The table in its horizontal scroll box. Its own scroll bar is hidden and replaced by an accent
+ * bar under the header row that follows the reader down the table (scrollbarTop), plus a hint;
+ * both only while the table overflows. Phones show cards instead (CSS), which never scroll sideways.
  */
 function scrollableTable(table, t, signal) {
   // The table scrolls inside `box` (focusable, so arrow keys scroll it too). Its own scroll bar is
@@ -189,25 +195,58 @@ function scrollableTable(table, t, signal) {
   const follow = (from, to) => { if (Math.abs(to.scrollLeft - from.scrollLeft) > 0.5) to.scrollLeft = from.scrollLeft; };
   bar.addEventListener('scroll', () => follow(bar, box), { passive: true });
   box.addEventListener('scroll', () => follow(box, bar), { passive: true });
+  // The bar is drawn 17px above its `top` (CSS margin) and is 16px tall.
+  const BAR_OFFSET = 17;
+  const place = () => {
+    if (bar.hidden) return;
+    const head = table.querySelector('thead');
+    const top = scrollbarTop({
+      resting: box.offsetTop + (head ? head.offsetHeight : 0),
+      viewportTop: BAR_OFFSET - scroller.getBoundingClientRect().top,
+      last: box.offsetTop + box.offsetHeight - 16 + BAR_OFFSET,
+    });
+    // CSSOM writes (not style attributes), which the strict CSP allows.
+    bar.style.top = `${Math.round(top)}px`;
+    bar.classList.toggle('is-floating', top > box.offsetTop + (head ? head.offsetHeight : 0));
+  };
   const sync = () => {
     const overflows = box.scrollWidth - box.clientWidth > 1;
     bar.hidden = !overflows;
     hint.hidden = !overflows;
     scroller.classList.toggle('has-scrollbar', overflows);
     if (!overflows) return;
-    // CSSOM writes (not style attributes), which the strict CSP allows.
     size.style.width = `${box.scrollWidth}px`;
-    const head = table.querySelector('thead');
-    bar.style.top = `${box.offsetTop + (head ? head.offsetHeight : 0)}px`;
+    place();
     follow(box, bar);
   };
   watchSize([box, table], sync, signal);
+  // Follow the page as it scrolls down (once per frame). The listener goes away when the page is
+  // left (its signal) or when a live refresh replaces this table (no longer in the document).
+  if (typeof window !== 'undefined' && !signal?.aborted) {
+    const listening = new AbortController();
+    signal?.addEventListener('abort', () => listening.abort(), { once: true });
+    let queued = false;
+    let shown = false;
+    window.addEventListener('scroll', () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        queued = false;
+        if (!scroller.isConnected) {
+          if (shown) listening.abort();
+          return;
+        }
+        shown = true;
+        place();
+      });
+    }, { passive: true, signal: listening.signal });
+  }
   return scroller;
 }
 
 /**
  * Every answer: a table on wide screens, one column per question, and one card per response on
- * phones (CSS). The whole table scrolls sideways (accent ◀ ▶ buttons above it). Without
+ * phones (CSS). The whole table scrolls sideways (accent scroll bar that follows the reader). Without
  * `onDelete(response)` the table is read-only (public results): no
  * delete buttons, no actions column. `signal` ends the scroll buttons' size watching.
  */
