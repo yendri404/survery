@@ -50,6 +50,11 @@ export const ERROR_CODES = {
   'register.disabled': 'registration_disabled',
   'login.invalid': 'invalid_credentials',
   'login.tooManyAttempts': 'too_many_login_attempts',
+  // Admin panel (master password)
+  'admin.exists': 'admin_exists',
+  'admin.notConfigured': 'admin_not_configured',
+  'admin.passwordLength': 'admin_password_length',
+  'error.userNotFound': 'not_found',
   // Respondents
   'respond.notFound': 'not_found',
   'respond.alreadyAnswered': 'already_answered',

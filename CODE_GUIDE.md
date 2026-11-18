@@ -399,7 +399,7 @@ Pass `':memory:'` for a throwaway database (the tests do this).
 | `validationFailed({ fields?, errors? })` | `422 validation_failed`. `fields` = per-field problems (answers, registration); `errors` = an ordered list (survey definition) |
 | `tooManyRequests(key, retryAfterSeconds)` | `429` with `params.minutes` and a `Retry-After` header; used by the login and submission limits |
 
-The full list with statuses and English messages is in [docs/API.md, section 11](docs/API.md#11-error-code-reference). `api/test/i18n.test.js` checks that every message maps to a code and back.
+The full list with statuses and English messages is in [docs/API.md, section 12](docs/API.md#12-error-code-reference). `api/test/i18n.test.js` checks that every message maps to a code and back.
 
 ---
 

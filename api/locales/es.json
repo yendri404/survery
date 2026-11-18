@@ -1,4 +1,8 @@
 {
+  "admin.exists": "La contraseña maestra ya existe. Para reemplazarla, bórrala en la base de datos.",
+  "admin.notConfigured": "La contraseña maestra todavía no fue creada.",
+  "admin.passwordLength": "La contraseña maestra debe tener entre 12 y 200 caracteres.",
+  "error.userNotFound": "Usuario no encontrado.",
   "answer.yes": "Sí",
   "answer.no": "No",
   "csv.responseNumber": "N.º de respuesta",

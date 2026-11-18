@@ -1,5 +1,9 @@
 {
   "login.tooManyAttempts": "Too many failed login attempts. Try again in {minutes} minute(s).",
+  "admin.exists": "The master password already exists. To replace it, delete it in the database.",
+  "admin.notConfigured": "The master password has not been created yet.",
+  "admin.passwordLength": "The master password must be between 12 and 200 characters.",
+  "error.userNotFound": "User not found.",
   "login.invalid": "Invalid email or password.",
   "register.disabled": "Registration is disabled. Ask an administrator for an account.",
   "register.nameInvalid": "Name is required (max. 100 characters).",

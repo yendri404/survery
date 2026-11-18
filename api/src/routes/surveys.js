@@ -55,18 +55,12 @@ export function summaryJson(survey, responses, today) {
   };
 }
 
-/** Creator endpoints: every one needs a Bearer token and only sees the creator's own surveys. */
-export function registerSurveyRoutes({ route, repo, config, today, live }) {
-  const authed = (method, path, handler) => route(method, path, handler, { auth: true });
-
-  /** The survey `:id` of the logged-in creator; another creator's survey is "not found", like a missing one. */
-  function ownedSurvey(ctx) {
-    const id = Number(ctx.params.id);
-    const survey = Number.isSafeInteger(id) ? repo.getOwnedSurvey(id, ctx.user.id) : undefined;
-    if (!survey) throw new ApiError(404, 'error.surveyNotFound');
-    return survey;
-  }
-
+/**
+ * The survey tools shared by the creator endpoints and the admin panel: the survey's JSON, the
+ * validated definition of a request body, and the state change of a PATCH body. Callers decide who
+ * may touch which survey; these never check ownership.
+ */
+export function surveyTools({ repo, config, today }) {
   /** Respondents open surveys in the web client, so share links (and QR codes) point there. */
   const shareUrl = (ctx, survey) => webUrl(config, ctx, `/s/${survey.publicToken}`);
   /** The public results page, or null while the results are private. */
@@ -92,8 +86,6 @@ export function registerSurveyRoutes({ route, repo, config, today, live }) {
     };
   }
 
-  const sendSurvey = (ctx, status, id) => sendJson(ctx.res, status, { survey: surveyJson(ctx, repo.getOwnedSurvey(id, ctx.user.id)) });
-
   /**
    * Validates a survey definition body ({ title, description, closesOn, requireName, fields }) with the
    * domain rules. `current` is the stored survey when editing: a body without requireName keeps its value.
@@ -113,6 +105,42 @@ export function registerSurveyRoutes({ route, repo, config, today, live }) {
     if (errors.length) throw validationFailed({ errors });
     return value;
   }
+
+  /**
+   * Changes a survey's state: { "isOpen"?: true | false, "publicResults"?: true | false }. A field left
+   * out keeps its value; isOpen is required when publicResults is left out (as before publicResults).
+   * publicResults: true keeps an existing results link or makes one; false deletes it for good, so
+   * turning it on again makes a new link.
+   */
+  async function changeState(ctx, survey) {
+    const body = await readJson(ctx.req);
+    const errors = [];
+    const setsOpen = body.isOpen !== undefined || body.publicResults === undefined;
+    if (setsOpen && typeof body.isOpen !== 'boolean') errors.push(coded('validation.isOpenInvalid'));
+    if (body.publicResults !== undefined && typeof body.publicResults !== 'boolean') errors.push(coded('validation.publicResultsInvalid'));
+    if (errors.length) throw validationFailed({ errors });
+    if (setsOpen) repo.setSurveyOpen(survey.id, survey.ownerId, body.isOpen);
+    if (body.publicResults === true && !survey.resultsToken) repo.setResultsToken(survey.id, survey.ownerId, newSurveyToken());
+    if (body.publicResults === false && survey.resultsToken) repo.setResultsToken(survey.id, survey.ownerId, null);
+  }
+
+  return { shareUrl, surveyJson, readDefinition, changeState };
+}
+
+/** Creator endpoints: every one needs a Bearer token and only sees the creator's own surveys. */
+export function registerSurveyRoutes({ route, repo, config, today, live }) {
+  const authed = (method, path, handler) => route(method, path, handler, { auth: true });
+  const { shareUrl, surveyJson, readDefinition, changeState } = surveyTools({ repo, config, today });
+
+  /** The survey `:id` of the logged-in creator; another creator's survey is "not found", like a missing one. */
+  function ownedSurvey(ctx) {
+    const id = Number(ctx.params.id);
+    const survey = Number.isSafeInteger(id) ? repo.getOwnedSurvey(id, ctx.user.id) : undefined;
+    if (!survey) throw new ApiError(404, 'error.surveyNotFound');
+    return survey;
+  }
+
+  const sendSurvey = (ctx, status, id) => sendJson(ctx.res, status, { survey: surveyJson(ctx, repo.getOwnedSurvey(id, ctx.user.id)) });
 
   authed('GET', '/surveys', (ctx) => {
     sendJson(ctx.res, 200, { surveys: repo.listSurveys(ctx.user.id).map((s) => surveyJson(ctx, s, { withFields: false })) });
@@ -138,23 +166,10 @@ export function registerSurveyRoutes({ route, repo, config, today, live }) {
     sendSurvey(ctx, 200, survey.id);
   });
 
-  /**
-   * Changes a survey's state: { "isOpen"?: true | false, "publicResults"?: true | false }. A field left
-   * out keeps its value; isOpen is required when publicResults is left out (as before publicResults).
-   * publicResults: true keeps an existing results link or makes one; false deletes it for good, so
-   * turning it on again makes a new link.
-   */
+  /** State change (open/closed, public results): see changeState. */
   authed('PATCH', '/surveys/:id', async (ctx) => {
     const survey = ownedSurvey(ctx);
-    const body = await readJson(ctx.req);
-    const errors = [];
-    const setsOpen = body.isOpen !== undefined || body.publicResults === undefined;
-    if (setsOpen && typeof body.isOpen !== 'boolean') errors.push(coded('validation.isOpenInvalid'));
-    if (body.publicResults !== undefined && typeof body.publicResults !== 'boolean') errors.push(coded('validation.publicResultsInvalid'));
-    if (errors.length) throw validationFailed({ errors });
-    if (setsOpen) repo.setSurveyOpen(survey.id, ctx.user.id, body.isOpen);
-    if (body.publicResults === true && !survey.resultsToken) repo.setResultsToken(survey.id, ctx.user.id, newSurveyToken());
-    if (body.publicResults === false && survey.resultsToken) repo.setResultsToken(survey.id, ctx.user.id, null);
+    await changeState(ctx, survey);
     live.surveyChanged(survey);
     sendSurvey(ctx, 200, survey.id);
   });

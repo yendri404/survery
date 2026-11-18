@@ -36,6 +36,8 @@ export function loadConfig(env = process.env) {
     // Failed logins allowed per email+IP within the window before returning 429.
     loginMaxFailures: Number(env.LOGIN_MAX_FAILURES ?? 10),
     loginWindowMs: 15 * 60 * 1000,
+    // Admin panel sessions are short: the master password opens every account.
+    adminSessionTtlMs: 8 * 60 * 60 * 1000,
     // Responses accepted per survey+IP within the window (0 disables the limit).
     submissionLimit: Number(env.SUBMISSION_LIMIT ?? 60),
     submissionWindowMs: 10 * 60 * 1000,

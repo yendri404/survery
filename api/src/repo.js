@@ -42,6 +42,47 @@ export function createRepo(db) {
     findUserById(id) {
       return q('SELECT * FROM users WHERE id = ?').get(id);
     },
+    /** Every user (admin panel), newest first, with how many surveys each one has. */
+    listUsers() {
+      return q(`
+        SELECT u.id, u.name, u.email, u.created_at, (SELECT COUNT(*) FROM surveys s WHERE s.owner_id = u.id) AS survey_count
+        FROM users u ORDER BY u.created_at DESC, u.id DESC
+      `).all();
+    },
+    /** Sets a new password and ends every session of that user. */
+    setUserPassword(id, passwordHash) {
+      q('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, id);
+      q('DELETE FROM sessions WHERE user_id = ?').run(id);
+    },
+    /** Deletes a user; their sessions, surveys and answers go with them (ON DELETE CASCADE). */
+    deleteUser(id) {
+      q('DELETE FROM sessions WHERE user_id = ?').run(id);
+      q('DELETE FROM users WHERE id = ?').run(id);
+    },
+
+    // Admin (master password, single row)
+    getAdmin() {
+      return q('SELECT * FROM admin WHERE id = 1').get();
+    },
+    /** Creates the admin row. False when one already exists (only the first of concurrent setups wins). */
+    createAdmin({ passwordHash, sessionKey }) {
+      return q('INSERT INTO admin (id, password_hash, session_key) VALUES (1, ?, ?) ON CONFLICT(id) DO NOTHING').run(passwordHash, sessionKey).changes === 1;
+    },
+    createAdminSession({ id, sessionKey, expiresAt }) {
+      q('INSERT INTO admin_sessions (id, session_key, expires_at) VALUES (?, ?, ?)').run(id, sessionKey, expiresAt);
+    },
+    /** An unexpired admin session that belongs to the current admin row; undefined otherwise. */
+    getAdminSession(id) {
+      return q(`SELECT s.* FROM admin_sessions s JOIN admin a ON a.id = 1 AND a.session_key = s.session_key
+                WHERE s.id = ? AND s.expires_at > ?`).get(id, Date.now());
+    },
+    deleteAdminSession(id) {
+      q('DELETE FROM admin_sessions WHERE id = ?').run(id);
+    },
+    /** Expired sessions and sessions of an admin row that no longer exists. */
+    deleteStaleAdminSessions() {
+      q(`DELETE FROM admin_sessions WHERE expires_at <= ? OR session_key NOT IN (SELECT session_key FROM admin)`).run(Date.now());
+    },
 
     // Sessions
     /** `id` is the hash of the Bearer token. csrf_token is a legacy column (cookie sessions): always ''. */
@@ -76,6 +117,13 @@ export function createRepo(db) {
         SELECT s.*, (SELECT COUNT(*) FROM responses r WHERE r.survey_id = s.id) AS response_count
         FROM surveys s WHERE s.id = ? AND s.owner_id = ?
       `).get(id, ownerId));
+    },
+    /** Any survey by id, whoever owns it (admin panel). */
+    getSurvey(id) {
+      return hydrateSurvey(q(`
+        SELECT s.*, (SELECT COUNT(*) FROM responses r WHERE r.survey_id = s.id) AS response_count
+        FROM surveys s WHERE s.id = ?
+      `).get(id));
     },
     getSurveyByToken(token) {
       return hydrateSurvey(q('SELECT * FROM surveys WHERE public_token = ?').get(token));

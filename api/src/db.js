@@ -37,6 +37,23 @@ CREATE TABLE IF NOT EXISTS responses (
   submitted_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- The instance's single admin (master password). id is always 1, so there can only be one row.
+-- Reset: delete the row (DELETE FROM admin); the next visit to the admin page creates a new one.
+-- session_key is random per admin: sessions made for an older admin row never match a newer one,
+-- even when the row is deleted without foreign keys enforced (plain sqlite3 shell).
+CREATE TABLE IF NOT EXISTS admin (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  password_hash TEXT NOT NULL,
+  session_key TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS admin_sessions (
+  id TEXT PRIMARY KEY, -- hash of the admin's Bearer token
+  session_key TEXT NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_surveys_owner ON surveys(owner_id);
 CREATE INDEX IF NOT EXISTS idx_responses_survey ON responses(survey_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);

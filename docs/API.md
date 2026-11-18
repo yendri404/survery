@@ -21,8 +21,9 @@ The server lives in `api/` (`npm start` there, or `npm run start:api` at the rep
 7. [Live updates](#7-live-updates)
 8. [Answering (respondents)](#8-answering-respondents)
 9. [Public results](#9-public-results)
-10. [Configuration](#10-configuration)
-11. [Error code reference](#11-error-code-reference)
+10. [Admin panel](#10-admin-panel)
+11. [Configuration](#11-configuration)
+12. [Error code reference](#12-error-code-reference)
 
 ---
 
@@ -69,7 +70,7 @@ Every error has the same shape:
 | `fields` | 422 on register and on answers | One problem per input: register uses `name`, `email`, `password`, `confirm`; answers use the question id, plus `respondentName`. |
 | `errors` | 422 on survey definitions and other lists | Problems in the order the server found them. |
 
-Each entry of `fields` and `errors` is `{ code, params, message }`. The full list is in [section 11](#11-error-code-reference).
+Each entry of `fields` and `errors` is `{ code, params, message }`. The full list is in [section 12](#12-error-code-reference).
 
 ---
 
@@ -588,7 +589,68 @@ private (re-fetching then answers 404).
 
 ---
 
-## 10. Configuration
+## 10. Admin panel
+
+One **master password** per instance opens the admin panel (the web client's `/..command/` page), which manages every
+user and every survey. It is stored hashed in the single row of the `admin` table (`id` is always `1`).
+
+- **Creating it:** `POST /admin/setup` works only while no master password exists. The first request wins; every later
+  one is `409 admin_exists`. On a public instance, create it before anyone else finds the page.
+- **Replacing or recovering it:** there is no endpoint for that, on purpose. Delete the row in the database
+  (`DELETE FROM admin;`), and the next setup creates a new one. Every admin token made before ends at once.
+- **Admin tokens** are separate from creator tokens: an admin token never opens creator endpoints (`/surveys`,
+  `/me`...), and a creator token never opens `/admin/*`. They last 8 hours. Without a valid admin token, every
+  endpoint below except status, setup, login and logout answers `401 unauthorized`.
+
+### `GET /admin/status`
+
+`200 { "configured": false }` while no master password exists (the web page then offers to create it), `true` after.
+
+### `POST /admin/setup`
+
+Body `{ "password": "...", "confirm"?: "..." }` → `201 { "token": "<admin token>" }`.
+
+| Code | When |
+|------|------|
+| `admin_exists` (409) | A master password already exists (also the losers of simultaneous setups) |
+| `admin_password_length` (422, field `password`) | Not 12 to 200 characters |
+| `password_mismatch` (422, field `confirm`) | `confirm` sent and different |
+
+### `POST /admin/login`
+
+Body `{ "password": "..." }` → `200 { "token": "<admin token>" }`. Wrong password: `401 invalid_credentials`; no
+master password yet: `409 admin_not_configured`. After `LOGIN_MAX_FAILURES` failures from one IP within 15 minutes:
+`429 too_many_login_attempts` with `Retry-After`.
+
+### `POST /admin/logout`
+
+Ends the admin token sent, if any. Always `204`.
+
+### `GET /admin/users`
+
+`200 { "users": [{ "id", "name", "email", "createdAt", "surveyCount" }] }`, newest first.
+
+### `PUT /admin/users/:id/password`
+
+Body `{ "password": "..." }` (8 to 200 characters, like registration; else `422` with `fields.password`
+`password_length`) → `204`. Every session of that user ends.
+
+### `DELETE /admin/users/:id`
+
+Deletes the user with all their surveys and answers, and ends their sessions → `204`. Unknown user: `404 not_found`.
+
+### `GET /admin/users/:id/surveys`
+
+`200 { "surveys": [...] }`: the user's surveys as in `GET /surveys` (without `fields`), plus `ownerId`.
+
+### `GET`, `PUT`, `PATCH`, `DELETE /admin/surveys/:id`
+
+Any survey, whoever owns it, with the same bodies, rules and answers as the owner's `GET`, `PUT`, `PATCH` and `DELETE
+/surveys/:id`; survey objects also carry `ownerId`. The owner's open pages refresh (live updates) after a change.
+
+---
+
+## 11. Configuration
 
 Environment variables of the API process:
 
@@ -608,12 +670,12 @@ The database schema only grows (additive migrations run on every start), so data
 
 ---
 
-## 11. Error code reference
+## 12. Error code reference
 
 | Code | Status | Message (English) |
 |------|--------|-------------------|
 | `unauthorized` | 401 | Log in to continue. |
-| `not_found` | 404 | Not found. / Survey not found. / This survey does not exist. Check the link you received. / These results are not public. |
+| `not_found` | 404 | Not found. / Survey not found. / User not found. / This survey does not exist. Check the link you received. / These results are not public. |
 | `method_not_allowed` | 405 | Method not allowed. |
 | `malformed_url` | 400 | Malformed URL, or a request target that is not a plain path (absolute-form, `//host`, backslashes). |
 | `invalid_json` | 400 | The request body is not valid JSON. |
@@ -626,6 +688,9 @@ The database schema only grows (additive migrations run on every start), so data
 | `registration_disabled` | 404 | Registration is disabled. Ask an administrator for an account. |
 | `invalid_credentials` | 401 | Invalid email or password. |
 | `too_many_login_attempts` | 429 | Too many failed login attempts. Try again in {minutes} minute(s). |
+| `admin_exists` | 409 | The master password already exists. To replace it, delete it in the database. |
+| `admin_not_configured` | 409 | The master password has not been created yet. |
+| `admin_password_length` | 422 | The master password must be between 12 and 200 characters. (in `fields.password`) |
 | `survey_closed` | 403 | This survey is closed and no longer accepts answers. |
 | `survey_expired` | 403 | This survey closed on {date} and no longer accepts answers. |
 | `already_answered` | 409 | You already answered this survey from this device. Thank you! |
