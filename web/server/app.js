@@ -6,6 +6,7 @@ import { request as httpsRequest } from 'node:https';
 import { extname, join, relative as relativePath, resolve, sep } from 'node:path';
 import { pipeline } from 'node:stream';
 import { fileURLToPath } from 'node:url';
+import { normalizeBaseUrl, pagePreview, requestOrigin, withPreview } from './preview.js';
 
 /** The web/ folder: index.html, public/ (served at /public/) and locales/ (served at /locales/). */
 export const WEB_ROOT = fileURLToPath(new URL('../', import.meta.url));
@@ -28,6 +29,12 @@ export const APP_ROUTES = [
   /^\/\.\.command\/?$/,
   /^\/\.\.command\/surveys\/\d+\/edit$/,
 ];
+
+/** A share link (the survey form): its preview shows the survey's own title. */
+const SHARE_PAGE = /^\/s\/([A-Za-z0-9_-]+)$/;
+
+/** How long a page waits for the survey of its preview before using the generic one. */
+const PREVIEW_TIMEOUT_MS = 2000;
 
 /** URL prefix -> folder (inside WEB_ROOT) whose files it serves. */
 const STATIC_DIRS = { '/public/': 'public', '/locales/': 'locales' };
@@ -113,7 +120,9 @@ export function closeServer(server) {
  * - `/api/*` is forwarded to `apiUrl` as is (method, body, status, headers, streamed event
  *   streams), so the page and the API share one origin: no CORS, and LAN links keep working.
  * - `/public/*` and `/locales/*` serve files from those folders only.
- * - App routes (APP_ROUTES) serve index.html; the client renders every page from JSON.
+ * - App routes (APP_ROUTES) serve index.html; the client renders every page from JSON. Its <title>
+ *   becomes the link preview tags (preview.js): a share link's survey title, else the generic one.
+ *   URLs in them use `baseUrl` (WEB_BASE_URL), else the address the browser used.
  *
  * Without a build step, module URLs never change, so every file is served with
  * `Cache-Control: no-cache` and an ETag: the browser revalidates (a cheap 304) and never runs a
@@ -121,8 +130,9 @@ export function closeServer(server) {
  * A tab that was open before an update still holds the old modules in memory: `X-Sharevy-Version`
  * (clientVersion) lets it notice and reload.
  */
-export function createWebServer({ apiUrl = 'http://127.0.0.1:3001', root = WEB_ROOT } = {}) {
+export function createWebServer({ apiUrl = 'http://127.0.0.1:3001', root = WEB_ROOT, baseUrl } = {}) {
   const api = new URL(apiUrl);
+  const fixedOrigin = normalizeBaseUrl(baseUrl);
   const sendRequest = api.protocol === 'https:' ? httpsRequest : httpRequest;
   const fileCache = new Map(); // absolute path -> { mtimeMs, size, body, etag }
   const version = clientVersion(root);
@@ -155,6 +165,17 @@ export function createWebServer({ apiUrl = 'http://127.0.0.1:3001', root = WEB_R
     return full.startsWith(dir + sep) ? full : undefined;
   }
 
+  /** Sends a body with ETag revalidation (304 when the browser already holds this exact body). */
+  function sendBody(req, res, { status, type, cache, body, etag }) {
+    const headers = { 'Content-Type': type, 'Cache-Control': cache, ETag: etag, ...SECURITY_HEADERS };
+    if (status === 200 && req.headers['if-none-match'] === etag) {
+      res.writeHead(304, headers);
+      return res.end();
+    }
+    res.writeHead(status, { ...headers, 'Content-Length': body.length });
+    return res.end(req.method === 'HEAD' ? undefined : body);
+  }
+
   async function serveFile(req, res, path, status = 200) {
     let file;
     try {
@@ -165,13 +186,42 @@ export function createWebServer({ apiUrl = 'http://127.0.0.1:3001', root = WEB_R
     if (!file) return sendText(res, 404, 'Not found.');
     const type = CONTENT_TYPES[extname(path)] ?? 'application/octet-stream';
     const cache = type === 'font/woff2' ? 'public, max-age=31536000, immutable' : 'no-cache';
-    const headers = { 'Content-Type': type, 'Cache-Control': cache, ETag: file.etag, ...SECURITY_HEADERS };
-    if (status === 200 && req.headers['if-none-match'] === file.etag) {
-      res.writeHead(304, headers);
-      return res.end();
+    return sendBody(req, res, { status, type, cache, body: file.body, etag: file.etag });
+  }
+
+  /**
+   * The survey behind a share link token, for its preview: asked to the API with no header from the
+   * browser (no token, no device id). Undefined when it does not exist or the API is slow or down.
+   */
+  async function previewSurvey(token) {
+    try {
+      const res = await fetch(`${api.origin}/api/v1/public/surveys/${token}`, {
+        headers: { accept: 'application/json' },
+        signal: AbortSignal.timeout(PREVIEW_TIMEOUT_MS),
+      });
+      if (res.status !== 200) return undefined;
+      const { survey } = await res.json();
+      return survey && typeof survey.title === 'string' ? survey : undefined;
+    } catch {
+      return undefined;
     }
-    res.writeHead(status, { ...headers, 'Content-Length': file.body.length });
-    return res.end(req.method === 'HEAD' ? undefined : file.body);
+  }
+
+  /** index.html with the page's link preview tags; its ETag follows the final body. */
+  async function servePage(req, res, pathname, status) {
+    let file;
+    try {
+      file = await loadFile(resolve(root, 'index.html'));
+    } catch {
+      file = undefined;
+    }
+    if (!file) return sendText(res, 404, 'Not found.');
+    const token = status === 200 ? SHARE_PAGE.exec(pathname)?.[1] : undefined;
+    const survey = token ? await previewSurvey(token) : undefined;
+    const origin = requestOrigin(req.headers, fixedOrigin);
+    const body = Buffer.from(withPreview(file.body.toString('utf8'), pagePreview({ survey, origin, pathname })));
+    const etag = `"${createHash('sha256').update(body).digest('base64url').slice(0, 27)}"`;
+    return sendBody(req, res, { status, type: CONTENT_TYPES['.html'], cache: 'no-cache', body, etag });
   }
 
   /** Forwards one request to the API and streams the answer back (event streams included). */
@@ -230,6 +280,6 @@ export function createWebServer({ apiUrl = 'http://127.0.0.1:3001', root = WEB_R
       return path ? serveFile(req, res, path) : sendText(res, 404, 'Not found.');
     }
     const known = APP_ROUTES.some((pattern) => pattern.test(pathname));
-    return serveFile(req, res, resolve(root, 'index.html'), known ? 200 : 404);
+    return servePage(req, res, pathname, known ? 200 : 404);
   });
 }

@@ -118,6 +118,7 @@ host: in Docker its port is not published, so only the web container can reach i
 | `PORT` | `3000` | HTTP port people open. |
 | `HOST` | `0.0.0.0` | Interface to bind (all interfaces, so the LAN can reach it). |
 | `API_URL` | `http://127.0.0.1:3001` | Where the API runs; `/api/*` is forwarded there (`http` or `https`). |
+| `WEB_BASE_URL` | unset | Public address of the app, for the absolute URLs in link previews (`og:url`, `og:image`). Unset: the address each visitor used (`Host`, with `https` when `X-Forwarded-Proto` says so). `BASE_URL` is read as a fallback. Same name and meaning as on the API, so one value can serve both. |
 
 ## Features
 
@@ -139,6 +140,7 @@ host: in Docker its port is not published, so only the web container can reach i
 - Short, sober animations (page fades, a light entrance for cards and charts, a check mark that draws itself after answering); turned off when the device asks for reduced motion.
 - English, Spanish and Portuguese (Brazil) interface, chosen from the language menu next to the theme button (see [Languages](#languages)).
 - QR code of the share link on every survey, downloadable as PNG to print or send.
+- Link previews: pasting a link in WhatsApp, Telegram, Slack, Discord and similar apps shows a card with the Sharevy logo. A share link's card shows that survey's title and description; every other page shows a generic one.
 - Admin panel at `/..command/` (see [Admin panel](#admin-panel)): one master password per instance; manage every user (edit name and email, change password, delete) and their surveys (edit, close/reopen, delete).
 - Survey templates: "Export as template" on a survey saves its questions (title, description, questions, required name; no answers, links or dates) as `<title>.sharevy.json`. "Import template" on My surveys opens a new survey already filled with them, to review and choose the closing date before creating it.
 - CSV export: one button; the file is named after the survey and uses `;` only when some number answer has decimals (`,` otherwise). UTF-8 with BOM, headers in the creator's interface language, times in the viewer's time zone.

@@ -65,6 +65,7 @@ api/                         REST API, JSON only (port 3001)
 web/                         Browser client (port 3000), no dependencies, no build
 ├── server.js                Entry point: PORT, HOST, API_URL
 ├── server/app.js            Static files, single-page fallback, /api proxy, CSP, ETags
+├── server/preview.js        Link preview tags (Open Graph) for the single page
 ├── index.html               The one HTML page (top bar + <main>)
 ├── locales/                 en.json, es.json: every interface text
 ├── public/
@@ -699,18 +700,18 @@ The API speaks English in error messages; clients translate the codes. Other lan
 
 #### `server.js` — entry point
 
-Reads `PORT` (3000), `HOST` (`0.0.0.0`) and `API_URL` (`http://127.0.0.1:3001`), starts `createWebServer({ apiUrl })`, and on `SIGINT` / `SIGTERM` stops with `closeServer`, which also ends open proxied event streams (otherwise they would keep the process alive).
+Reads `PORT` (3000), `HOST` (`0.0.0.0`), `API_URL` (`http://127.0.0.1:3001`) and `WEB_BASE_URL` (fallback `BASE_URL`; unset by default), starts `createWebServer({ apiUrl, baseUrl })`, and on `SIGINT` / `SIGTERM` stops with `closeServer`, which also ends open proxied event streams (otherwise they would keep the process alive).
 
 #### `server/app.js` — static files and API proxy
 
-**Exports:** `createWebServer({ apiUrl, root })`, `closeServer(server)` (close + `closeAllConnections`, resolves when closed), `APP_ROUTES`, `WEB_ROOT`.
+**Exports:** `createWebServer({ apiUrl, root, baseUrl })`, `closeServer(server)` (close + `closeAllConnections`, resolves when closed), `APP_ROUTES`, `WEB_ROOT`.
 
 | Path | Answer |
 |------|--------|
 | `/api`, `/api/*` | **Proxied** to `apiUrl`: method, headers (minus hop-by-hop), body, status and streamed answer, so event streams flow through. `X-Forwarded-For` is set to the real client address and `X-Forwarded-Host` to the `Host` the browser sent (client-sent values are never kept). API down → `502 { error: { code: 'api_unavailable' } }`. A closed tab ends the upstream request too |
 | `/public/*`, `/locales/*` | Files from those folders only. Decoded `..`, `.`, backslashes and NUL are refused before touching the disk |
-| `APP_ROUTES` (`/`, `/login`, `/register`, `/surveys`, `/surveys/new`, `/surveys/<n>`, `/surveys/<n>/edit`, `/s/<token>`, `/s/<token>/thanks`) | `index.html`, status 200 |
-| Anything else | `index.html` with status 404 (the router shows "page not found") |
+| `APP_ROUTES` (`/`, `/login`, `/register`, `/surveys`, `/surveys/new`, `/surveys/<n>`, `/surveys/<n>/edit`, `/s/<token>`, `/s/<token>/thanks`, `/r/<token>`, `/..command/`...) | `index.html` with the page's link preview (below), status 200 |
+| Anything else | `index.html` with the generic preview, status 404 (the router shows "page not found") |
 | Non-GET/HEAD outside `/api` | 405 |
 
 | Header | Why |
@@ -719,6 +720,14 @@ Reads `PORT` (3000), `HOST` (`0.0.0.0`) and `API_URL` (`http://127.0.0.1:3001`),
 | `Cache-Control: no-cache` + `ETag` | Without a build step, module URLs never change, so the browser revalidates every file (a cheap 304) and never runs a stale module |
 | `X-Sharevy-Version` on every answer | A tab opened before an update keeps the old modules in memory. The server sends a fingerprint of the client files (`clientVersion`, computed at start-up); `version.js` notices a new one, shows a banner, and the next page change is a full load of the new client |
 | Fonts: `immutable`, 1 year | A new font version gets a new file name |
+
+**Link previews** (`server/preview.js`, pure functions). Chat and social apps draw a card for a pasted link from Open Graph tags, and their bots do not run JavaScript, so `servePage` puts the tags in the HTML: `withPreview` replaces the `<title>` of `index.html` with `<title>` + `og:site_name`, `og:type`, `og:title`, `og:description`, `og:url`, `og:image` (`/public/logo.png`; PNG, since several apps refuse SVG), `twitter:card` and `description`.
+
+- **Share link** (`/s/<token>`, status 200): `GET /api/v1/public/surveys/<token>` to the API with no header from the browser (no token, device id or cookie) and a 2 s timeout. Its title (`<title> · Sharevy` in `<title>`) and description, cut to 200 characters (`clip`), else "Answer this survey on Sharevy.".
+- **Every other page**, an unknown token, or the API slow or down: the generic preview ("Sharevy" + a one-line description). The page itself is never held back by the preview.
+- **Absolute URLs**: `baseUrl` (`WEB_BASE_URL`) when set; else the request's `Host` (only `hostname[:port]` or a bracketed IPv6 address) with `https` when `X-Forwarded-Proto` says so; a malformed `Host` leaves `og:url` and `og:image` out.
+- **Escaping**: every value goes through `escapeHtml` (`& < > " '`), and the replacement uses a function, so a title like `$&` or `<script>` stays text.
+- **ETag** follows the final body, so each survey's page revalidates on its own.
 
 **Why a proxy instead of CORS?** The browser sees one origin, so no CORS preflights, the API can stay on localhost, and share links on the LAN keep the old address. See [web/README.md](web/README.md).
 

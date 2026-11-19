@@ -3,7 +3,7 @@
 The browser app of Sharevy. Plain JavaScript ES modules with no framework and no build step. It talks to the REST API (`../api`, contract in `../docs/API.md`) only through JSON.
 
 ```
-npm start   # PORT=3000, HOST=0.0.0.0, API_URL=http://127.0.0.1:3001
+npm start   # PORT=3000, HOST=0.0.0.0, API_URL=http://127.0.0.1:3001, WEB_BASE_URL unset
 npm test    # web server + pure modules (node:test)
 ```
 
@@ -14,6 +14,7 @@ npm test    # web server + pure modules (node:test)
 - `/api/*` is forwarded to `API_URL`, including event streams, status codes and headers. The browser therefore uses one origin and needs no CORS. The proxy sets `X-Forwarded-For` to the address it really sees and `X-Forwarded-Host` to the `Host` the browser sent (the API builds share links from it when `WEB_BASE_URL` is unset), overwriting any value the browser sent. The API's defaults (`HOST=127.0.0.1`, which turns `TRUST_PROXY` on) keep it unexposed and make its rate limits count each person rather than the proxy.
 - `/public/*` and `/locales/*` serve files from `public/` and `locales/`.
 - App pages (`/`, `/login`, `/surveys/...`, `/s/<token>`, `/r/<token>`, ...) answer `index.html`, and the client router (`public/js/routes.js`) draws the page. Unknown paths answer `index.html` with status 404.
+- Every page carries link preview tags (Open Graph, `server/preview.js`), because chat apps do not run JavaScript: a share link `/s/<token>` shows its survey's title and description (asked to the API with no browser header, 2 s at most), every other page a generic card. Their absolute URLs use `WEB_BASE_URL`, else the address the browser used.
 
 Every file is sent with `Cache-Control: no-cache` and an `ETag`. Module URLs never change without a build step, so the browser revalidates them (a cheap 304) and never runs stale code. Fonts are cached as immutable. Every answer, proxied API calls included, also carries `X-Sharevy-Version`, a fingerprint of the client files taken at start-up: a tab that was open before an update notices the new value, shows a "new version" banner, and loads the new client on the next page change instead of mixing old code with the updated API. Every page gets a strict CSP: only this origin's scripts and styles, nothing inline.
 

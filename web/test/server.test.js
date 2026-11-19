@@ -10,6 +10,15 @@ import { closeServer, createWebServer } from '../server/app.js';
 const listen = (server) => new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${server.address().port}`)));
 const close = (server) => new Promise((resolve) => { server.closeAllConnections?.(); server.close(() => resolve()); });
 
+/** A GET with hand-written headers (fetch cannot set Host); resolves the whole raw answer. */
+const rawGet = (port, path, headers) => new Promise((resolve, reject) => {
+  const socket = connect(Number(port), '127.0.0.1', () => socket.write(`GET ${path} HTTP/1.1\r\n${headers}\r\nConnection: close\r\n\r\n`));
+  let data = '';
+  socket.on('data', (chunk) => { data += chunk; });
+  socket.on('end', () => resolve(data));
+  socket.on('error', reject);
+});
+
 /** A fake API: records each request and answers according to its path. */
 function stubApi() {
   const seen = [];
@@ -32,6 +41,18 @@ function stubApi() {
         res.write('retry: 3000\n: connected\n\n');
         streams.push(res);
         return undefined;
+      }
+      if (req.url === '/api/v1/public/surveys/LunchToken') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ survey: { title: 'Lunch <script>alert(1)</script> & "more"', description: `Pick a day. ${'x'.repeat(400)}`, status: 'open', fields: [] } }));
+      }
+      if (req.url === '/api/v1/public/surveys/NoDescription') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ survey: { title: 'Team poll', description: '', status: 'closed', fields: [] } }));
+      }
+      if (req.url.startsWith('/api/v1/public/surveys/')) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        return res.end('{"error":{"code":"not_found","message":"x"}}');
       }
       if (req.url === '/api/v1/surveys/9/events') {
         // The API drops the stream after one event (restart, crash): the socket goes away mid-body.
@@ -272,6 +293,106 @@ describe('web server', () => {
     ]);
     clearTimeout(timer);
     assert.equal(outcome, 'closed');
+  });
+
+  describe('link previews (Open Graph)', () => {
+    const meta = (html, property) => html.match(new RegExp(`<meta (?:property|name)="${property}" content="([^"]*)">`))?.[1];
+
+    test('every page carries the generic preview, with absolute URLs built from the address used', async () => {
+      const res = await fetch(`${base}/login`);
+      const html = await res.text();
+      assert.equal(meta(html, 'og:title'), 'Sharevy');
+      assert.equal(meta(html, 'og:site_name'), 'Sharevy');
+      assert.equal(meta(html, 'og:type'), 'website');
+      assert.ok(meta(html, 'og:description'));
+      assert.equal(meta(html, 'og:url'), `${base}/login`);
+      assert.equal(meta(html, 'og:image'), `${base}/public/logo.png`);
+      assert.equal(meta(html, 'twitter:card'), 'summary');
+      assert.match(html, /<title>Sharevy<\/title>/);
+    });
+
+    test('a share link shows its survey title and description, escaped, never as markup', async () => {
+      const res = await fetch(`${base}/s/LunchToken`);
+      assert.equal(res.status, 200);
+      const html = await res.text();
+      assert.equal(meta(html, 'og:title'), 'Lunch &lt;script&gt;alert(1)&lt;/script&gt; &amp; &quot;more&quot;');
+      assert.match(html, /<title>Lunch &lt;script&gt;alert\(1\)&lt;\/script&gt; &amp; &quot;more&quot; · Sharevy<\/title>/);
+      assert.doesNotMatch(html, /<script>alert/);
+      const description = meta(html, 'og:description');
+      assert.ok(description.startsWith('Pick a day. xxx'));
+      assert.ok(description.length <= 200, `description has ${description.length} characters`);
+      assert.equal(meta(html, 'og:url'), `${base}/s/LunchToken`);
+      assert.equal(meta(html, 'og:image'), `${base}/public/logo.png`);
+      assert.match(html, /<script type="module" src="\/public\/js\/main\.js"><\/script>/);
+    });
+
+    test('a survey without a description gets a default line', async () => {
+      const html = await (await fetch(`${base}/s/NoDescription`)).text();
+      assert.equal(meta(html, 'og:title'), 'Team poll');
+      assert.ok(meta(html, 'og:description'));
+    });
+
+    test('the API is asked only for the survey, without the browser\'s headers', async () => {
+      await fetch(`${base}/s/NoDescription`, { headers: { Authorization: 'Bearer secret', 'X-Device-Id': 'd'.repeat(30), Cookie: 'a=b' } });
+      const asked = api.seen.filter((r) => r.url === '/api/v1/public/surveys/NoDescription').at(-1);
+      assert.equal(asked.method, 'GET');
+      assert.equal(asked.headers.authorization, undefined);
+      assert.equal(asked.headers['x-device-id'], undefined);
+      assert.equal(asked.headers.cookie, undefined);
+    });
+
+    test('an unknown survey, the thanks page and other pages keep the generic preview', async () => {
+      for (const path of ['/s/Missing', '/s/LunchToken/thanks', '/r/LunchToken']) {
+        const res = await fetch(base + path);
+        assert.equal(res.status, 200, path);
+        assert.equal(meta(await res.text(), 'og:title'), 'Sharevy', path);
+      }
+    });
+
+    test('an unreachable API still answers the page, with the generic preview', async () => {
+      const down = createWebServer({ apiUrl: 'http://127.0.0.1:9' });
+      const downBase = await listen(down);
+      try {
+        const res = await fetch(`${downBase}/s/LunchToken`);
+        assert.equal(res.status, 200);
+        assert.equal(meta(await res.text(), 'og:title'), 'Sharevy');
+      } finally {
+        await close(down);
+      }
+    });
+
+    test('behind an HTTPS proxy the URLs use https; a malformed Host leaves them out', async () => {
+      const port = new URL(base).port;
+      const viaProxy = await rawGet(port, '/', 'Host: sharevy.example.com\r\nX-Forwarded-Proto: https');
+      assert.equal(meta(viaProxy, 'og:image'), 'https://sharevy.example.com/public/logo.png');
+      assert.equal(meta(viaProxy, 'og:url'), 'https://sharevy.example.com/');
+      const odd = await rawGet(port, '/', 'Host: evil.com"><script>x</script>');
+      assert.equal(meta(odd, 'og:image'), undefined);
+      assert.equal(meta(odd, 'og:url'), undefined);
+      assert.doesNotMatch(odd, /<script>x/);
+    });
+
+    test('a configured base URL wins over the request', async () => {
+      const fixed = createWebServer({ apiUrl: 'http://127.0.0.1:9', baseUrl: 'https://surveys.example.org/' });
+      const fixedBase = await listen(fixed);
+      try {
+        const html = await (await fetch(`${fixedBase}/surveys`)).text();
+        assert.equal(meta(html, 'og:image'), 'https://surveys.example.org/public/logo.png');
+        assert.equal(meta(html, 'og:url'), 'https://surveys.example.org/surveys');
+      } finally {
+        await close(fixed);
+      }
+    });
+
+    test('pages are revalidated with ETag (304)', async () => {
+      const first = await fetch(`${base}/s/NoDescription`);
+      const etag = first.headers.get('etag');
+      assert.ok(etag);
+      const again = await fetch(`${base}/s/NoDescription`, { headers: { 'If-None-Match': etag } });
+      assert.equal(again.status, 304);
+      const other = await fetch(`${base}/s/LunchToken`);
+      assert.notEqual(other.headers.get('etag'), etag);
+    });
   });
 
   test('an unreachable API answers 502 with a JSON error the client can translate', async () => {

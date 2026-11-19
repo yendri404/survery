@@ -46,6 +46,8 @@ services:
       HOST: 0.0.0.0
       PORT: "3000"
       API_URL: http://api:3001
+      # Same address as on the API: the absolute URLs of link previews. Empty: the address the browser opened.
+      WEB_BASE_URL: ${WEB_BASE_URL:-}
     ports:
       - "${SHAREVY_PORT:-3000}:3000"
     depends_on:
