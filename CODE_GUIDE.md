@@ -766,7 +766,7 @@ Reads `PORT` (3000), `HOST` (`0.0.0.0`), `API_URL` (`http://127.0.0.1:3001`) and
 
 #### `routes.js` — path → page
 
-`ROUTES` lists each path with its page and flags: `auth` (needs a creator), `respondent` (minimal top bar, no account menu), `errorKeys` (clearer messages, e.g. `not_found` on a share link → "this survey does not exist"). `matchRoute(pathname)` returns the route and params (`:id` digits, `:token` base64url). **Keep it in sync with `APP_ROUTES` in `server/app.js`**, or a reload on the new page answers 404.
+`ROUTES` lists each path with its page and flags: `auth` (needs a creator), `respondent` (minimal top bar: the brand, which links home like everywhere, and no account menu), `errorKeys` (clearer messages, e.g. `not_found` on a share link → "this survey does not exist"). `matchRoute(pathname)` returns the route and params (`:id` digits, `:token` base64url). **Keep it in sync with `APP_ROUTES` in `server/app.js`**, or a reload on the new page answers 404.
 
 ---
 

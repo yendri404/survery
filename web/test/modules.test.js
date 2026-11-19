@@ -331,6 +331,30 @@ describe('results table', () => {
     return out;
   };
 
+  test('the brand in the top bar always links home, respondent pages included; respondents still get no account menu', async (t) => {
+    const saved = { Node: globalThis.Node, SVGElement: globalThis.SVGElement, document: globalThis.document };
+    Object.assign(globalThis, {
+      Node: FakeNode,
+      SVGElement: FakeSvg,
+      document: {
+        createElement: (tag) => new FakeNode(tag),
+        createElementNS: (_ns, tag) => new FakeSvg(tag),
+        createTextNode: (text) => ({ text }),
+      },
+    });
+    t.after(() => Object.assign(globalThis, saved));
+    const { topbar } = await import('../public/js/components/layout.js');
+    const { t: tr } = createI18n('en', en, en);
+    for (const [respondent, user] of [[true, null], [false, null], [false, { name: 'Ana' }]]) {
+      const bar = topbar({ t: tr, user, respondent, languageMenuNode: null, themeToggleNode: null, onLogout: () => {} });
+      const brand = findAll(bar, (n) => n.attrs?.class === 'brand');
+      assert.equal(brand.length, 1);
+      assert.equal(brand[0].tag, 'a', `respondent: ${respondent}`);
+      assert.equal(brand[0].attrs.href, '/');
+      assert.equal(findAll(bar, (n) => n.tag === 'nav').length, respondent ? 0 : 1);
+    }
+  });
+
   test('rows show the per-survey number, not the app-wide id', async (t) => {
     const saved = { Node: globalThis.Node, SVGElement: globalThis.SVGElement, document: globalThis.document };
     Object.assign(globalThis, {

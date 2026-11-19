@@ -30,10 +30,10 @@ export function languageMenu({ t, lang, languages, href, onPick }) {
     h('ul', { class: 'lang-list' }, links));
 }
 
-/** Top bar. Respondents see the brand only (no link, no account menu): they never need an account. */
+/** Top bar. The brand always links home; respondents get no account menu: they never need an account. */
 export function topbar({ t, user, respondent, languageMenuNode, themeToggleNode, onLogout }) {
   const logo = h('img', { class: 'brand-logo', src: '/public/logo.png', alt: '', width: 32, height: 32 });
-  const brand = respondent ? h('span', { class: 'brand' }, logo, APP_NAME) : h('a', { href: '/', class: 'brand' }, logo, APP_NAME);
+  const brand = h('a', { href: '/', class: 'brand' }, logo, APP_NAME);
   let nav = null;
   if (!respondent) {
     nav = user
